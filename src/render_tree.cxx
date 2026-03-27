@@ -216,7 +216,259 @@ SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
     return nullptr;
 }
 
+// ===========================================================================
+// Layout — file-scope helpers (not part of the public RenderTree API)
+//
+// flexLayout  — FlexRow / FlexColumn container layout (CSS flex subset).
+// blockLayout — vertical stack with gap (CSS block layout subset).
+//
+// Both functions:
+//   • Read layout_props from the CONTAINER node (n) for gap / justify / align.
+//   • Read layout_props from each CHILD node for sizing / grow hints.
+//   • Write x, y, w, h on each direct child.
+//   • Mark each child dirty_layout + dirty_render so the preorder traversal
+//     in update() cascades layout to their own children on the same frame.
+//
+// Called from RenderTree::resolveLayout() when n.dirty_layout is true.
+// The slot_map is structurally stable for the duration of the traversal
+// (no alloc/free happens inside update callbacks), so RenderNode* pointers
+// obtained via tree.node() remain valid for the entire layout pass.
+// ===========================================================================
 
+namespace {
+
+// ---------------------------------------------------------------------------
+// collectChildren — arena-backed flat array of a node's direct children.
+//
+// Two-pass: count first, then fill.  Uses the frame_arena so there is no
+// heap allocation; the span is valid until the next arena_.reset().
+// ---------------------------------------------------------------------------
+
+std::span<RenderNode*> collectChildren(RenderNode& n, RenderTree& tree,
+                                        core::frame_arena& arena)
+{
+    std::size_t count = 0;
+    for (NodeHandle c = n.child; c.valid(); ) {
+        RenderNode* cn = tree.node(c);
+        if (!cn) break;
+        ++count;
+        c = cn->sibling;
+    }
+
+    auto children = arena.allocSpan<RenderNode*>(count);
+
+    std::size_t i = 0;
+    for (NodeHandle c = n.child; c.valid(); ) {
+        RenderNode* cn = tree.node(c);
+        if (!cn) break;
+        children[i++] = cn;
+        c = cn->sibling;
+    }
+
+    return children;
+}
+
+// ---------------------------------------------------------------------------
+// flexLayout — FlexRow and FlexColumn layout.
+//
+//   is_column = false → FlexRow    main=X cross=Y
+//   is_column = true  → FlexColumn main=Y cross=X
+//
+// Three-pass algorithm
+// --------------------
+//   Pass 1 — base sizes
+//     For each child:
+//       basis = flex_basis  (if ≥ 0)
+//             → width / height  (if ≥ 0, axis-dependent)
+//             → intrinsic (keep existing w / h)
+//     Accumulate total_fixed and total_grow.
+//
+//   Pass 2 — flex-grow distribution
+//     remaining = container_main − total_fixed − total_gap
+//     Distribute remaining proportionally to flex_grow (grow only, no shrink).
+//
+//   Pass 3 — justify + align, then position
+//     Recompute free_space after grow.
+//     Apply justify-content to derive start_offset and extra_gap.
+//     Apply align-items to set cross-axis position (and optionally stretch).
+//     Mark each child dirty so its subtree re-layouts next.
+// ---------------------------------------------------------------------------
+
+void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
+                bool is_column)
+{
+    auto children = collectChildren(n, tree, arena);
+    if (children.empty()) return;
+
+    const float container_main  = is_column ? n.h : n.w;
+    const float container_cross = is_column ? n.w : n.h;
+    const float gap             = n.layout_props.gap;
+    const std::size_t nc        = children.size();
+
+    // ── Pass 1: base sizes ────────────────────────────────────────────────
+    //
+    // Priority chain: flex_basis → width/height → intrinsic (keep as-is).
+    // Sentinel -1 means "not specified; try next fallback".
+
+    float total_fixed = 0.f;
+    float total_grow  = 0.f;
+
+    for (RenderNode* child : children) {
+        const LayoutProps& lp = child->layout_props;
+
+        float basis = lp.flex_basis;
+        if (basis < 0.f)
+            basis = is_column ? lp.height : lp.width;
+
+        if (basis >= 0.f) {
+            if (is_column) child->h = basis;
+            else           child->w = basis;
+        }
+        // If still auto (-1): keep the child's current w/h (intrinsic size
+        // set by a previous draw callback or parent layout on an earlier frame).
+
+        total_fixed += is_column ? child->h : child->w;
+        total_grow  += lp.flex_grow;
+    }
+
+    // ── Pass 2: flex-grow distribution ────────────────────────────────────
+
+    const float total_gap_px = (nc > 1) ? float(nc - 1) * gap : 0.f;
+    const float remaining    = container_main - total_fixed - total_gap_px;
+
+    if (remaining > 0.f && total_grow > 0.f) {
+        for (RenderNode* child : children) {
+            const float grow = child->layout_props.flex_grow;
+            if (grow > 0.f) {
+                const float extra = remaining * (grow / total_grow);
+                if (is_column) child->h += extra;
+                else           child->w += extra;
+            }
+        }
+    }
+
+    // ── Pass 3: justify-content ───────────────────────────────────────────
+    //
+    // Re-sum content after grow; derive start_offset and per-gap extra.
+    // free_space is clamped to ≥ 0 so overflow containers don't produce
+    // negative offsets (shrink behaviour is a future Phase 2 addition).
+
+    float total_content = 0.f;
+    for (RenderNode* child : children)
+        total_content += is_column ? child->h : child->w;
+
+    const float free_space =
+        std::max(0.f, container_main - total_content - total_gap_px);
+
+    float start_offset = 0.f;
+    float extra_gap    = 0.f;   // additional spacing between items beyond `gap`
+
+    using J = LayoutProps::Justify;
+    switch (n.layout_props.justify) {
+        case J::Start:
+            start_offset = 0.f;
+            break;
+        case J::Center:
+            start_offset = free_space * 0.5f;
+            break;
+        case J::End:
+            start_offset = free_space;
+            break;
+        case J::SpaceBetween:
+            start_offset = 0.f;
+            extra_gap    = (nc > 1) ? free_space / float(nc - 1) : 0.f;
+            break;
+        case J::SpaceAround: {
+            const float per = free_space / float(nc);
+            start_offset    = per * 0.5f;
+            extra_gap       = per;
+            break;
+        }
+    }
+
+    // ── Pass 3 cont.: position + cross-axis align ─────────────────────────
+
+    float main_offset = start_offset;
+
+    using A = LayoutProps::Align;
+    for (RenderNode* child : children) {
+        const float child_main = is_column ? child->h : child->w;
+
+        // Main-axis position.
+        if (is_column) child->y = main_offset;
+        else           child->x = main_offset;
+        main_offset += child_main + gap + extra_gap;
+
+        // Cross-axis position (align-items).
+        switch (n.layout_props.align) {
+            case A::Start:
+                if (is_column) child->x = 0.f;
+                else           child->y = 0.f;
+                break;
+            case A::Center:
+                if (is_column)
+                    child->x = (container_cross - child->w) * 0.5f;
+                else
+                    child->y = (container_cross - child->h) * 0.5f;
+                break;
+            case A::End:
+                if (is_column) child->x = container_cross - child->w;
+                else           child->y = container_cross - child->h;
+                break;
+            case A::Stretch:
+                // Only override the size when the child declared it as auto.
+                if (is_column) {
+                    child->x = 0.f;
+                    if (child->layout_props.width < 0.f)
+                        child->w = container_cross;
+                } else {
+                    child->y = 0.f;
+                    if (child->layout_props.height < 0.f)
+                        child->h = container_cross;
+                }
+                break;
+        }
+
+        // The child's geometry changed — cascade layout to its subtree.
+        child->dirty_layout = true;
+        child->dirty_render = true;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// blockLayout — vertical stack with optional gap (CSS block layout).
+//
+// Children are placed top-to-bottom in document order.
+// A child with layout_props.width == -1 (auto) inherits the container width.
+// Child heights are taken as-is (intrinsic, set by draw callback or prior
+// layout pass).
+// ---------------------------------------------------------------------------
+
+void blockLayout(RenderNode& n, RenderTree& tree)
+{
+    const float gap = n.layout_props.gap;
+    float y_offset  = 0.f;
+
+    for (NodeHandle c = n.child; c.valid(); ) {
+        RenderNode* child = tree.node(c);
+        if (!child) break;
+
+        // Auto-width: fill the container.
+        if (child->layout_props.width < 0.f)
+            child->w = n.w;
+
+        child->x = 0.f;
+        child->y = y_offset;
+        y_offset += child->h + gap;
+
+        child->dirty_layout = true;
+        child->dirty_render = true;
+
+        c = child->sibling;
+    }
+}
+
+} // anonymous namespace
 
 // ===========================================================================
 // RenderTree
@@ -473,9 +725,60 @@ void RenderTree::update(NodeHandle root)
     const NodeHandle start = root.valid() ? root : root_;
     if (!start.valid()) return;
 
-    traverse(start, [](NodeHandle, RenderNode& n) {
+    // Preorder traversal: parent is always visited before its children.
+    //
+    // For each node:
+    //   1. resolveLayout — if dirty_layout, run the container's layout
+    //      algorithm to position direct children and mark them dirty.
+    //      Because traversal is preorder, those children will then run their
+    //      own layouts when visited, cascading geometry down the tree in one
+    //      pass without a separate fixpoint loop.
+    //   2. update callback — widget-specific per-frame state update.
+    //      May set dirty_render = true to trigger a redraw this frame.
+    //      May call markLayoutDirty() to request a layout on the next frame.
+
+    traverse(start, [this](NodeHandle h, RenderNode& n) {
+        if (n.dirty_layout) {
+            resolveLayout(h, n);
+            n.dirty_layout = false;
+        }
         if (n.update) n.update();
     });
+}
+
+// ---------------------------------------------------------------------------
+// RenderTree::resolveLayout
+//
+// Dispatch to the correct layout algorithm based on n.layout_kind.
+//
+// LayoutKind::None  — no-op: absolute positioning, caller manages children.
+// LayoutKind::Block — blockLayout: vertical stack, auto-width children.
+// LayoutKind::FlexRow    — flexLayout (is_column=false): CSS flex row.
+// LayoutKind::FlexColumn — flexLayout (is_column=true):  CSS flex column.
+// LayoutKind::Grid  — reserved for Phase 3.
+//
+// Every layout function writes x/y/w/h on direct children and sets their
+// dirty_layout + dirty_render flags.  The traversal then visits those
+// children and cascades layout to their subtrees on the same frame.
+// ---------------------------------------------------------------------------
+
+void RenderTree::resolveLayout(NodeHandle /*h*/, RenderNode& n)
+{
+    switch (n.layout_kind) {
+        case LayoutKind::FlexRow:
+            flexLayout(n, *this, arena_, false);
+            break;
+        case LayoutKind::FlexColumn:
+            flexLayout(n, *this, arena_, true);
+            break;
+        case LayoutKind::Block:
+            blockLayout(n, *this);
+            break;
+        case LayoutKind::None:
+        case LayoutKind::Grid:
+            // Absolute / caller-managed.  Grid reserved for Phase 3.
+            break;
+    }
 }
 
 void RenderTree::render(NodeHandle root, RenderContext& ctx)

@@ -105,6 +105,76 @@ enum class GPUBackend : uint8_t {
 };
 
 // ---------------------------------------------------------------------------
+// LayoutKind — selects the built-in layout algorithm for a container node.
+//
+// Set on the CONTAINER whose children need to be arranged.
+// LayoutKind::None means the node does not participate in automatic layout;
+// its children's x/y/w/h must be set manually (absolute positioning) or by a
+// parent that has its own non-None layout kind.
+//
+// LayoutKind determines which path resolveLayout() dispatches to.  Custom
+// layout can always be implemented in a node's update() callback instead.
+// ---------------------------------------------------------------------------
+
+enum class LayoutKind : uint8_t {
+    None,       // absolute / caller-managed positions (default)
+    Block,      // vertical stack with optional gap between children
+    FlexRow,    // flex container, main axis = horizontal (X)
+    FlexColumn, // flex container, main axis = vertical   (Y)
+    Grid,       // reserved — Phase 3
+};
+
+// ---------------------------------------------------------------------------
+// LayoutProps — per-node layout hints consumed by resolveLayout().
+//
+// Container properties (gap, justify, align) are read from the PARENT node
+// when laying out its children.  Item properties (width, height, flex_*)
+// are read from the CHILD node to determine its size within the parent.
+//
+// Sentinel value -1.f means "auto":
+//   width / height   -1 → use intrinsic size (child->w / child->h as-is)
+//                        or stretch to fill the cross axis when align=Stretch
+//   flex_basis       -1 → fall back to width / height as the flex base size
+//
+// All sizes are in pixel space (matching x, y, w, h on RenderNode).
+// ---------------------------------------------------------------------------
+
+struct LayoutProps {
+
+    // ---- Sizing (item, read by parent) -----------------------------------
+
+    float width   = -1.f;   // -1 = auto
+    float height  = -1.f;   // -1 = auto
+
+    // ---- Flex item properties (read by a FlexRow/FlexColumn parent) ------
+
+    float flex_grow   = 0.f;   // 0 = do not grow beyond basis
+    float flex_shrink = 1.f;   // 1 = may shrink when container is too small
+    float flex_basis  = -1.f;  // -1 = use width / height as the base size
+
+    // ---- Container properties (read when THIS node is the container) -----
+
+    float gap = 0.f;   // pixel spacing between children on the main axis
+
+    // Justify: how children are packed along the main axis.
+    enum class Justify : uint8_t {
+        Start,        // pack at main-axis start  (default)
+        Center,       // centre all children as a group
+        End,          // pack at main-axis end
+        SpaceBetween, // first at start, last at end, equal gaps between
+        SpaceAround,  // equal space around each child (half-gaps at edges)
+    } justify = Justify::Start;
+
+    // Align: how children are aligned on the cross axis.
+    enum class Align : uint8_t {
+        Start,    // cross-axis start
+        Center,   // cross-axis centre
+        End,      // cross-axis end
+        Stretch,  // fill available cross-axis space when size is auto (default)
+    } align = Align::Stretch;
+};
+
+// ---------------------------------------------------------------------------
 // RenderContext — frame-scoped GPU state threaded through every draw callback.
 //
 // Constructed once per frame just before SDL_BeginGPURenderPass and passed
@@ -217,6 +287,22 @@ struct RenderNode {
 
     bool dirty_layout : 1 = true;   // geometry needs recompute
     bool dirty_render : 1 = true;   // GPU draw calls must be re-issued
+
+    // ---- Layout ----------------------------------------------------------
+    //
+    // layout_kind — selects the built-in layout algorithm this node runs as a
+    //               CONTAINER (positions its direct children).
+    //               LayoutKind::None = no automatic layout (default).
+    //
+    // layout_props — sizing and alignment hints.
+    //   As an ITEM   : width, height, flex_grow, flex_shrink, flex_basis.
+    //   As a CONTAINER: gap, justify, align.
+    //
+    // Changing either field should be followed by markLayoutDirty(handle)
+    // so the change is picked up on the next update() pass.
+
+    LayoutKind  layout_kind  = LayoutKind::None;
+    LayoutProps layout_props;
 
     // ---- Per-frame callbacks ---------------------------------------------
     //
@@ -401,6 +487,13 @@ private:
     // Constraint: fn must not call alloc() or free() during traversal.
     template<std::invocable<NodeHandle, RenderNode&> Fn>
     void traverse(NodeHandle start, Fn&& fn);
+
+    // Dispatch to the appropriate layout algorithm for node `n`.
+    // Called from update() when n.dirty_layout is true.
+    // Reads n.layout_kind and n.layout_props; writes x/y/w/h of n's direct
+    // children and sets their dirty_layout / dirty_render flags so the
+    // subsequent preorder traversal propagates layout to their subtrees.
+    void resolveLayout(NodeHandle h, RenderNode& n);
 
     core::slot_map<RenderNode> nodes_;
     core::frame_arena          arena_;
