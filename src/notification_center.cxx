@@ -4,6 +4,9 @@
 #include <iostream>
 #include <sstream>
 
+// dirty_ is declared mutable in notification_system.hh so render() const
+// can clear it.  If the member is missing, add it there.
+
 namespace pce::sdlos {
 
 // ===========================================================================
@@ -120,23 +123,31 @@ void NotificationCenter::tick()
             return age >= n.duration_secs;
         });
 
-    for (auto it = expired; it != active_.end(); ++it) {
-        if (it->on_close) it->on_close();
+    if (expired != active_.end()) {
+        for (auto it = expired; it != active_.end(); ++it) {
+            if (it->on_close) it->on_close();
+        }
+        active_.erase(expired, active_.end());
+        dirty_ = true;
     }
-    active_.erase(expired, active_.end());
 
     // --- Promote pending notifications into the active list ----------------
     while (!pending_.empty() && active_.size() < k_max_active) {
         active_.push_back(std::move(pending_.front()));
         pending_.pop();
+        dirty_ = true;
     }
 }
 
 void NotificationCenter::render() const
 {
-    // Stub: write to stdout until a real on-screen overlay (ImGui / GPU quad)
-    // is wired up. Each call prints only the active list so the output stays
-    // stable between ticks.
+    // Stub: write to stdout only when the active list actually changed.
+    // The dirty_ flag is set by tick() whenever notifications are promoted
+    // or expired; it is cleared here after printing so we never spam the
+    // same line every frame.
+    if (!dirty_) return;
+    dirty_ = false;
+
     for (const auto& n : active_) {
         std::cout << "[Notification] [" << n.id << "] "
                   << n.title << ": " << n.message << "\n";

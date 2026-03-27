@@ -4,7 +4,7 @@
 #include <vector>
 
 
-namespace sdlos::core {
+namespace pce::sdlos::core {
 
 template<typename K, typename V, size_t N = 8, typename Compare = std::less<K>>
 class small_flat_map {
@@ -51,11 +51,11 @@ public:
             return {it, false};
         }
 
-        size_t index = it - begin_ptr();
+        auto index = static_cast<std::ptrdiff_t>(it - begin_ptr());
 
         if (sz < N) {
             std::move_backward(begin_ptr() + index, end_ptr(), end_ptr() + 1);
-            stack_data[index] = std::move(v);
+            stack_data[static_cast<std::size_t>(index)] = std::move(v);
         } else {
             if (sz == N) {
                 heap_data.assign(stack_data.begin(), stack_data.begin() + N);
@@ -77,4 +77,4 @@ public:
     }
 };
 
-} // namespace sdlos::core
+} // namespace pce::sdlos::core

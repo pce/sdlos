@@ -1,5 +1,3 @@
-// AppCatalog.cxx — AppCatalog implementation.
-
 #include "app_catalog.hh"
 
 #include <iostream>

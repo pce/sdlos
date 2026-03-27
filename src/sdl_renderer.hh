@@ -1,49 +1,61 @@
 #pragma once
 
-// SDLRenderer.h
-// SDL3 GPU-based renderer wrapper for pce::sdlos.
+// sdl_renderer.hh — SDL3 GPU renderer for one Window.
 //
 // Process-isolation model
 // -----------------------
-// Each SDLRenderer instance creates and owns its own SDL_GPUDevice. This means
-// every Window gets an independent GPU context: tearing down one Window releases
-// its device, shaders and pipeline without touching any other Window. The owned
-// device is exposed via GetDevice() so that application-level draw code can
-// submit into the same context without requiring a second device.
+// Each SDLRenderer instance creates and owns its own SDL_GPUDevice.  Every
+// Window gets an independent GPU context; tearing one down releases its device,
+// shaders, and pipeline without touching any other Window.
 //
 // Cross-platform shader backend
 // -----------------------------
-// SDL_GPU supports multiple shader formats at runtime:
-//   SDL_GPU_SHADERFORMAT_SPIRV  → Vulkan  (Linux, Windows, cross-platform)
-//   SDL_GPU_SHADERFORMAT_MSL    → Metal   (macOS / iOS)
-//   SDL_GPU_SHADERFORMAT_DXIL   → D3D12   (Windows)
+//   SDL_GPU_SHADERFORMAT_MSL   → Metal  (macOS / iOS)  — inline source
+//   SDL_GPU_SHADERFORMAT_SPIRV → Vulkan (Linux, Windows) — pre-compiled .spv
+//   SDL_GPU_SHADERFORMAT_DXIL  → D3D12  (Windows, future)
 //
-// CreateDeviceForWindow() tries SPIRV/Vulkan first (widest portability), then
-// falls back to MSL/Metal on Apple platforms. The selected format is stored in
-// shader_format_ so that CreatePipeline() can compile the right variant.
-// For SPIRV shaders, compile GLSL → .spv with glslang/shaderc offline and place
-// them alongside the MSL sources; the loader will pick the correct file.
+// CreateDeviceForWindow() probes available drivers and stores the selected
+// format in shader_format_ so every subsequent pipeline creation stays
+// format-agnostic from the caller's perspective.
 //
-// Usage summary:
-//  - Call `Initialize(window)` once per Window to create the device, claim the
-//    window, compile shaders and build the graphics pipeline.
-//  - Call `Render(timeSeconds)` each frame.
-//  - Call `ReloadShader(path)` to hot-reload the fragment shader from disk.
-//  - Call `Shutdown()` to release all GPU resources (also called by destructor).
-//  - Call `GetDevice()` to share the device with application draw code.
+// Frame pipeline (two GPU passes in one command buffer)
+// ------------------------------------------------------
+//   1. Copy pass  — flushes any pending text-glyph texture uploads from
+//                   TextRenderer::flushUploads().  Skipped when nothing is
+//                   pending.
+//   2. Render pass
+//       a. Wallpaper pipeline  — fullscreen FBM triangle, time uniform.
+//       b. UI pipeline (opt.)  — if SetScene() was called, traverses the
+//                                RenderTree and issues rect/text draw calls
+//                                using the "rect" and "text" pipelines
+//                                registered in RenderContext::pipelines.
 //
-// Notes:
-//  - The renderer does NOT take ownership of the SDL_Window* passed to Initialize().
-//  - Hot-reload is file-mtime based; wire up a filesystem watcher for live updates.
+// Usage
+// -----
+//   Initialize(window)              — create device, build all pipelines.
+//   SetScene(tree, root)            — attach a RenderTree for UI rendering.
+//   Render(timeSeconds)             — submit one full frame.
+//   ReloadShader(path)              — hot-reload the wallpaper fragment shader.
+//   Shutdown()                      — release all GPU resources (dtor calls this).
+//   GetDevice()                     — access the owned device.
+//   GetTextRenderer()               — access the TextRenderer for font queries.
+//
+// No try/catch.  SDL GPU calls never throw; filesystem errors are handled
+// via std::error_code.  Assert on programmer bugs; return false on runtime
+// failures so callers can decide how to proceed.
+
+#include "render_tree.hh"      // RenderTree, NodeHandle, k_null_handle
+#include "text_renderer.hh"    // TextRenderer
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
-#include <string>
-#include <vector>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace pce::sdlos {
 
@@ -52,85 +64,140 @@ public:
     SDLRenderer() = default;
     ~SDLRenderer();
 
-    // Initialize the renderer for the given SDL_Window.
-    // Returns true on success (device + pipeline created), false on failure.
-    // The renderer does not take ownership of the window pointer.
+    // Non-copyable / non-movable: owns a GPU device tied to a specific window.
+    SDLRenderer(const SDLRenderer&)            = delete;
+    SDLRenderer& operator=(const SDLRenderer&) = delete;
+    SDLRenderer(SDLRenderer&&)                 = delete;
+    SDLRenderer& operator=(SDLRenderer&&)      = delete;
+
+    // ---- Lifecycle -------------------------------------------------------
+
+    /// Create the GPU device, claim the window, build all pipelines
+    /// (wallpaper + ui_rect + ui_text) and initialise TextRenderer.
+    /// Returns false on any unrecoverable failure.
     bool Initialize(SDL_Window* window);
 
-    // Shutdown and free GPU resources. Safe to call multiple times.
-    void Shutdown();
+    /// Release all GPU resources (pipelines, shaders, device, sampler).
+    /// Safe to call multiple times; called automatically by the destructor.
+    void Shutdown() noexcept;
 
-    // Render a frame. `timeSeconds` is pushed to the fragment shader (as .x of a vec4).
-    // This is non-blocking and submits the command buffer for presentation.
+    // ---- Per-frame -------------------------------------------------------
+
+    /// Submit one complete frame:
+    ///   copy pass  — flush pending glyph texture uploads (skipped if none).
+    ///   render pass — wallpaper shader, then UI scene tree (if set).
+    /// `timeSeconds` is forwarded to the wallpaper fragment shader uniform.
     void Render(double timeSeconds);
 
-    // Reload the fragment shader from disk and rebuild the pipeline.
-    // Assumes a vertex shader is present in the assets (or built-in fallback).
-    // Returns true on success.
+    // ---- UI scene attachment ---------------------------------------------
+
+    /// Attach a RenderTree subtree for overlay UI rendering.
+    /// `tree`  — non-owning; must outlive this renderer.
+    /// `root`  — root handle inside `tree`; pass k_null_handle to detach.
+    /// The tree's update() / render() are driven inside Render() after the
+    /// wallpaper pass, within the same SDL_GPURenderPass.
+    void SetScene(RenderTree* tree,
+                  NodeHandle  root = k_null_handle) noexcept;
+
+    // ---- Shader hot-reload -----------------------------------------------
+
+    /// Reload the wallpaper fragment shader from disk and rebuild the pipeline.
+    /// Returns true on success; the previous pipeline stays active on failure.
     bool ReloadShader(const std::string& shaderPath);
 
-    // Returns whether the renderer is valid and ready to render.
-    bool IsValid() const { return initialized_.load(); }
+    // ---- Queries ---------------------------------------------------------
 
-    // Enumerate available GPU drivers / backends known by SDL (e.g. "metal", "vulkan").
-    std::vector<std::string> EnumerateAdapters() const;
+    [[nodiscard]] bool IsValid() const noexcept { return initialized_.load(); }
 
-    // Set the default shader source paths (optional convenience).
+    /// Enumerate SDL GPU driver names available on this machine.
+    [[nodiscard]] std::vector<std::string> EnumerateAdapters() const;
+
+    // ---- Shader source path hints ----------------------------------------
+
     void SetVertexShaderPath(const std::string& path)   { vertex_shader_path_ = path; }
     void SetFragmentShaderPath(const std::string& path) { shader_path_        = path; }
 
-    // --- GPU context access -----------------------------------------------
+    // ---- GPU context access (non-owning views) ---------------------------
 
-    // Return the SDL_GPUDevice owned by this renderer.
-    // Non-null only after a successful Initialize(). The device lifetime is
-    // tied to this SDLRenderer — callers must not call SDL_DestroyGPUDevice()
-    // on the returned pointer.
-    SDL_GPUDevice* GetDevice() const { return device_; }
+    /// The SDL_GPUDevice owned by this renderer.
+    /// Valid only after a successful Initialize(); lifetime tied to this instance.
+    [[nodiscard]] SDL_GPUDevice*        GetDevice()        const noexcept { return device_;        }
 
-    // Return the shader format that was selected during Initialize().
-    // Use this when creating additional pipelines against the same device so
-    // that shader sources match the backend (SPIRV vs MSL vs DXIL).
-    SDL_GPUShaderFormat GetShaderFormat() const { return shader_format_; }
+    /// The shader format selected during Initialize() (MSL, SPIRV, …).
+    [[nodiscard]] SDL_GPUShaderFormat   GetShaderFormat()  const noexcept { return shader_format_; }
+
+    /// The TextRenderer that backs ctx.drawText() for this window.
+    /// Non-null only after a successful Initialize().
+    [[nodiscard]] TextRenderer*  GetTextRenderer()  const noexcept { return text_renderer_.get(); }
 
 private:
-    // Probe available SDL GPU drivers and create a device for the given window.
-    // Selection order: SPIRV/Vulkan → MSL/Metal → DXIL/D3D12.
-    // Sets shader_format_ to reflect the chosen backend.
+    // ---- Internal pipeline builders -------------------------------------
+
+    /// Probe available SDL GPU drivers; create device; claim window.
+    /// Sets shader_format_ on success.
     bool CreateDeviceForWindow(SDL_Window* window);
 
-    // Build shaders and graphics pipeline from source strings.
-    // The format of vertSource / fragSource must match shader_format_.
-    // Both vertex and fragment entry-points are expected to be named `main0`.
-    bool CreatePipeline(const std::string& vertSource, const std::string& fragSource);
+    /// Build the wallpaper graphics pipeline from MSL/GLSL source strings.
+    /// Entry-point for both stages must be `main0`.
+    bool CreatePipeline(const std::string& vertSource,
+                        const std::string& fragSource);
 
-    // Internal helpers to load text files and check mtimes.
-    static std::string ReadTextFile(const std::string& path);
+    /// Build the ui_rect and ui_text pipelines.
+    /// Called from Initialize() after the wallpaper pipeline succeeds.
+    /// Returns false if either pipeline cannot be created (non-fatal: UI
+    /// rendering is disabled but the wallpaper still works).
+    bool CreateUIPipelines();
+
+    // ---- File helpers ---------------------------------------------------
+
+    static std::string    ReadTextFile(const std::string& path);
     static std::uintmax_t GetFileMTime(const std::string& path);
 
-    // Small uniform layout used when pushing fragment uniform data.
-    // Must be 16 bytes so it respects std140/std430-style alignment for push uniforms.
+    // ---- Uniform layout pushed to the wallpaper fragment shader ---------
+
     struct FragmentUniform {
         float time;
         float pad[3];
     };
-    static_assert(sizeof(FragmentUniform) == 16, "FragmentUniform must be 16 bytes");
+    static_assert(sizeof(FragmentUniform) == 16,
+                  "FragmentUniform must be 16 bytes for push-uniform alignment");
 
 private:
-    // --- SDL GPU objects (all owned by this instance) ---------------------
+    // ---- SDL GPU objects (all owned) ------------------------------------
+
     SDL_GPUDevice*           device_{nullptr};
+
+    // Wallpaper pipeline
     SDL_GPUShader*           vertex_shader_{nullptr};
     SDL_GPUShader*           fragment_shader_{nullptr};
     SDL_GPUGraphicsPipeline* pipeline_{nullptr};
 
-    // Non-owning reference to the window this renderer was initialized for.
+    // UI pipelines (alpha-blended; built by CreateUIPipelines)
+    SDL_GPUShader*           ui_rect_vert_{nullptr};   // shared between rect + text
+    SDL_GPUShader*           ui_rect_frag_{nullptr};
+    SDL_GPUShader*           ui_text_frag_{nullptr};
+    SDL_GPUGraphicsPipeline* ui_rect_pipeline_{nullptr};
+    SDL_GPUGraphicsPipeline* ui_text_pipeline_{nullptr};
+
+    // Non-owning reference to the window (lifetime managed by Window).
     SDL_Window* sdl_window_{nullptr};
 
-    // --- State ------------------------------------------------------------
-    std::atomic<bool>    initialized_{false};
-    SDL_GPUShaderFormat  shader_format_{SDL_GPU_SHADERFORMAT_INVALID}; // set by CreateDeviceForWindow
-    std::string          shader_path_;         // fragment shader path (hot-reload)
-    std::string          vertex_shader_path_;  // vertex shader path   (hot-reload)
-    std::uintmax_t       shader_mtime_{0};
+    // ---- Text renderer --------------------------------------------------
+
+    std::unique_ptr<TextRenderer> text_renderer_;
+
+    // ---- UI scene (non-owning) -----------------------------------------
+
+    RenderTree* scene_tree_{nullptr};
+    NodeHandle  scene_root_{k_null_handle};
+
+    // ---- State ----------------------------------------------------------
+
+    std::atomic<bool>   initialized_{false};
+    SDL_GPUShaderFormat shader_format_{SDL_GPU_SHADERFORMAT_INVALID};
+    std::string         shader_path_;
+    std::string         vertex_shader_path_;
+    std::uintmax_t      shader_mtime_{0};
 };
 
 } // namespace pce::sdlos

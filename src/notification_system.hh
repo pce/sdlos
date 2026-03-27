@@ -104,6 +104,10 @@ private:
 
     // Generate a unique ID for each notification (simple counter).
     int next_id_{1};
+
+    // Set by tick() whenever the active list changes; cleared by render().
+    // mutable so render() can clear it despite being const.
+    mutable bool dirty_{false};
 };
 
 } // namespace pce::sdlos

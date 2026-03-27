@@ -2,7 +2,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace sdlos::core {
+namespace pce::sdlos::core {
 
 
 struct SlotID {
@@ -82,4 +82,4 @@ public:
     }
 };
 
-} // namespace sdlos::core
+} // namespace pce::sdlos::core

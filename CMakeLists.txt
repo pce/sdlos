@@ -93,6 +93,8 @@ set(SDLOS_SOURCES
     src/event_bus.cxx
     src/sdl_renderer.cxx
     src/render_tree.cxx
+    src/text_renderer.cxx
+    src/widgets/input_box.cxx
 )
 
 add_executable(sdlos ${SDLOS_SOURCES})
@@ -104,6 +106,7 @@ add_executable(sdlos ${SDLOS_SOURCES})
 target_include_directories(sdlos PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/core"
+    "${CMAKE_SOURCE_DIR}/src/widgets"
 )
 
 # -----------------------------------------------------------------------------
@@ -219,6 +222,9 @@ endif()
 
 if(SDL_TTF_AVAILABLE)
     sdlos_link_addon(SDL_ttf "SDL3_ttf::SDL3_ttf" "SDL_ttf::SDL_ttf")
+    # Expose SDL_TTF_AVAILABLE as a preprocessor define so text_renderer.cxx
+    # can conditionally compile the SDL_ttf code paths at the C++ level.
+    target_compile_definitions(sdlos PRIVATE SDL_TTF_AVAILABLE=1)
 endif()
 
 # -----------------------------------------------------------------------------

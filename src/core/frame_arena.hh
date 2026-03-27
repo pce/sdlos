@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace sdlos::core {
+namespace pce::sdlos::core {
 
 class frame_arena {
     std::vector<std::byte> buffer;
@@ -25,4 +25,4 @@ public:
 
     void reset() { offset = 0; }
 };
-} // namespace sdlos::core
+} // namespace pce::sdlos::core

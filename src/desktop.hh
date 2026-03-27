@@ -6,14 +6,13 @@
 //
 //   Window  — self-contained "process window".
 //             One Window == one SDL_Window == one SDL_GPUDevice (via SDLRenderer).
-//             Constructing a Window allocates the native OS window and an
-//             independent GPU context. Destroying it releases both with no
-//             side-effects on any other Window. This mirrors OS-level process
-//             isolation: each app window owns its own rendering stack.
+//             Window uses a static factory (Window::create) that returns
+//             std::expected<unique_ptr<Window>, std::string> so failures are
+//             expressed as values, not exceptions.  No constructor throws.
 //
 //   Desktop — lifecycle owner for all live Window instances.
 //             Responsibilities:
-//               • open() / close() windows.
+//               • open() / close() windows.  open() returns -1 on failure.
 //               • Route SDL window events to the correct Window via a dual-ID
 //                 map (SDL assigns its own opaque SDL_WindowID; Desktop keeps a
 //                 second map from that to our sequential int so handleEvent()
@@ -27,9 +26,13 @@
 
 #include "i_window.hh"
 #include "sdl_handle.hh"
+#include "render_tree.hh"          // RenderTree, NodeHandle, Signal<T>
+#include "widgets/widget.hh"       // pce::sdlos::widgets types
+#include "widgets/input_box.hh"    // inputBox, inputBoxHandleEvent, …
 
 #include <SDL3/SDL.h>
 
+#include <expected>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -45,9 +48,21 @@ class SDLRenderer;
 
 class Window : public IWindow {
 public:
-    Window(int id, const std::string& title,
+    // ---- Factory ---------------------------------------------------------
+    //
+    // The only public way to construct a Window.  Returns the new Window on
+    // success, or a human-readable error string on failure.  No exception is
+    // ever thrown; errors are values.
+    //
+    //   auto result = Window::create(id, title, x, y, w, h, flags);
+    //   if (!result) { log(result.error()); return; }
+    //   windows_[id] = std::move(*result);
+    [[nodiscard]]
+    static std::expected<std::unique_ptr<Window>, std::string>
+    create(int id, const std::string& title,
            int x, int y, int w, int h,
            SDL_WindowFlags flags);
+
     ~Window() override;
 
     // Non-copyable / non-movable: owns GPU resources tied to a specific device.
@@ -97,7 +112,14 @@ public:
     /// the raw SDL_Window*.
     [[nodiscard]] SDL_WindowID sdlWindowId() const;
 
+    /// Attach a RenderTree scene to be rendered on top of the wallpaper.
+    /// Both pointers are non-owning; the scene must outlive the Window.
+    void setScene(RenderTree* tree, NodeHandle root);
+
 private:
+    // Private constructor — only called by Window::create().
+    Window(int id, const std::string& title, int w, int h);
+
     int         id_;
     std::string title_;
     int         width_{0};
@@ -126,15 +148,17 @@ public:
     Desktop()  = default;
     ~Desktop() = default;
 
-    // Non-copyable.
+    // Non-copyable / non-movable: owns a RenderTree with live node captures.
     Desktop(const Desktop&)            = delete;
     Desktop& operator=(const Desktop&) = delete;
+    Desktop(Desktop&&)                 = delete;
+    Desktop& operator=(Desktop&&)      = delete;
 
     // ---- Window lifecycle ------------------------------------------------
 
     /// Open a new isolated window (SDL_Window + independent GPU context).
-    /// Returns the application-level window ID on success.
-    /// Throws std::runtime_error if SDL or GPU initialisation fails.
+    /// Returns the application-level window ID (≥ 1) on success, or -1 on
+    /// any failure.  Never throws; errors are printed to stderr.
     int open(const std::string& title,
              int x, int y, int w, int h,
              SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE);
@@ -145,8 +169,10 @@ public:
 
     // ---- Main-loop hooks -------------------------------------------------
 
-    /// Route a raw SDL event to the window it belongs to.
-    /// Non-window events are silently ignored.
+    /// Route a raw SDL event.
+    /// Handles window events (resize, focus…), keyboard shortcuts
+    /// (Cmd/Ctrl+Space → toggle search overlay, Escape → close overlay),
+    /// and forwards text/key events to the focused overlay widget.
     void handleEvent(SDL_Event* event);
 
     /// Per-frame update tick (reserved for future per-window logic).
@@ -154,6 +180,23 @@ public:
 
     /// Render all live windows.
     void render();
+
+    // ---- Search overlay --------------------------------------------------
+
+    /// Show the search overlay and give focus to the input box.
+    void showSearchOverlay();
+
+    /// Hide the search overlay and stop text input.
+    void hideSearchOverlay();
+
+    /// Toggle search overlay visibility.
+    void toggleSearchOverlay();
+
+    [[nodiscard]] bool searchOverlayVisible() const noexcept
+    {
+        return search_visible_.get();
+    }
+
 
     // ---- Z-order / focus -------------------------------------------------
 
@@ -167,16 +210,47 @@ public:
     [[nodiscard]] bool                    empty()     const { return windows_.empty(); }
     [[nodiscard]] std::size_t             count()     const { return windows_.size();  }
 
+    // ---- Scene access (for OS / tests) -----------------------------------
+
+    [[nodiscard]] RenderTree& sceneTree() noexcept { return scene_tree_; }
+
 private:
+    // ---- Scene construction ----------------------------------------------
+
+    /// Build the desktop UI scene graph inside scene_tree_.
+    /// Called automatically the first time open() succeeds (desktop window).
+    /// Attaches the scene to the desktop window's renderer via SetScene().
+    void buildDesktopScene();
+
+    /// Route a keyboard or text-input event to the currently focused
+    /// overlay widget (search input box).
+    void routeOverlayEvent(const SDL_Event& event);
+
+
+    // ---- Window storage --------------------------------------------------
+
     // Application-level id → Window.
     std::unordered_map<int, std::shared_ptr<Window>> windows_;
 
-    // SDL_WindowID → application-level id.
-    // SDL assigns its own opaque IDs; this map lets handleEvent() find the
-    // right Window in O(1) without iterating over windows_.
+    // SDL_WindowID → application-level id (O(1) event routing).
     std::unordered_map<SDL_WindowID, int> sdl_to_id_;
 
     int next_id_{1};
+
+    // ---- Desktop UI scene ------------------------------------------------
+    //
+    // scene_tree_ is owned by Desktop and rendered inside the desktop
+    // window (id=1) via SDLRenderer::SetScene().  The scene is built once
+    // in buildDesktopScene() and mutated reactively via Signals.
+
+    RenderTree   scene_tree_;
+    NodeHandle   scene_root_;           // full-viewport root
+    NodeHandle   search_overlay_node_;  // container (hidden by default)
+    NodeHandle   search_input_node_;    // InputBox inside the overlay
+
+    // Reactive state driving the overlay visibility and search query.
+    Signal<bool>        search_visible_{false};
+    Signal<std::string> search_query_{std::string{}};
 };
 
 } // namespace pce::sdlos

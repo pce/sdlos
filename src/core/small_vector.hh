@@ -3,7 +3,7 @@
 #include <memory>
 #include <algorithm>
 
-namespace sdlos::core {
+namespace pce::sdlos::core {
 
 template<typename T, size_t N>
 class small_vector {
@@ -56,4 +56,4 @@ public:
     }
 };
 
-} // namespace sdlos::core
+} // namespace pce::sdlos::core

@@ -7,12 +7,13 @@
 // ================
 //   loadShader()   — read compiled shader blob from disk;
 //                    return std::expected<SDL_GPUShader*, std::string>
-//   RenderContext  — pipeline lookup, drawRect / drawText geometry stubs
+//   RenderContext  — pipeline lookup, drawRect / drawText geometry drawing
 //   RenderTree     — slot_map-based node alloc/free, LCRS tree ops,
 //                    dirty propagation, iterative preorder DFS,
 //                    frame_arena reset, update / render lifecycle
 
 #include "render_tree.hh"
+#include "text_renderer.hh"
 
 #include <algorithm>
 #include <cassert>
@@ -25,7 +26,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
-namespace sdlos {
+namespace pce::sdlos {
 
 // ===========================================================================
 // loadShader
@@ -98,6 +99,113 @@ loadShader(SDL_GPUDevice*     device,
 // RenderContext
 // ===========================================================================
 
+// ---------------------------------------------------------------------------
+// RenderContext::drawRect
+//
+// Draws a solid-colour rectangle using the "rect" pipeline registered in
+// `pipelines`.  No vertex buffer is needed — the vertex shader (ui_rect.vert)
+// generates a 6-vertex CCW quad entirely from push-uniform data.
+//
+// Push uniform layout (must match RectUniform in ui_rect.vert.metal):
+//   slot 0, vertex stage  → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
+//   slot 0, fragment stage → {r, g, b, a}
+// ---------------------------------------------------------------------------
+
+void RenderContext::drawRect(float x, float y, float w, float h,
+                              float r, float g, float b, float a)
+{
+    if (!pass || !cmd) return;
+
+    SDL_GPUGraphicsPipeline* pipe = pipeline("rect");
+    if (!pipe) return;
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    // Vertex-stage push uniform: rect bounds in pixel space + viewport size.
+    // Must be 32 bytes to match `struct RectUniform` in the Metal shader.
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float _pad0, _pad1;
+    };
+    static_assert(sizeof(RectUniform) == 32, "RectUniform must be 32 bytes");
+
+    const RectUniform vu{ x, y, w, h, viewport_w, viewport_h, 0.f, 0.f };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    // Fragment-stage push uniform: RGBA colour.
+    // Must be 16 bytes to match `struct ColorUniform` in ui_rect.frag.metal.
+    struct alignas(4) ColorUniform {
+        float r, g, b, a;
+    };
+    static_assert(sizeof(ColorUniform) == 16, "ColorUniform must be 16 bytes");
+
+    const ColorUniform fu{ r, g, b, a };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    // Draw: 6 vertices = 2 triangles = 1 quad (no vertex buffer).
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
+// ---------------------------------------------------------------------------
+// RenderContext::drawText
+//
+// Draws a pre-rendered text string using the "text" pipeline.
+// Texture upload is handled by TextRenderer::flushUploads() BEFORE the render
+// pass begins; by the time this is called the texture is already GPU-resident.
+//
+// Push uniform layout:
+//   slot 0, vertex stage   → RectUniform  (same as drawRect)
+//   slot 0, fragment stage → TintUniform  {r, g, b, a}
+// Sampler binding:
+//   fragment sampler slot 0 → text glyph texture
+// ---------------------------------------------------------------------------
+
+void RenderContext::drawText(std::string_view text,
+                              float x, float y,
+                              float size,
+                              float r, float g, float b, float a)
+{
+    if (!pass || !cmd || !text_renderer) return;
+    if (!text_renderer->isReady())       return;
+
+    SDL_GPUGraphicsPipeline* pipe = pipeline("text");
+    if (!pipe) return;
+
+    // Fetch (or queue) the glyph texture for this string.
+    const GlyphTexture gt = text_renderer->ensureTexture(text, size);
+    if (!gt.valid()) return;
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    // Vertex push uniform: position the quad at (x, y) with glyph dimensions.
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{
+        x, y,
+        static_cast<float>(gt.width),
+        static_cast<float>(gt.height),
+        viewport_w, viewport_h, 0.f, 0.f
+    };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    // Fragment push uniform: tint colour.
+    struct alignas(4) TintUniform { float r, g, b, a; };
+    const TintUniform fu{ r, g, b, a };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    // Bind glyph texture + sampler (slot 0).
+    SDL_GPUTextureSamplerBinding sb{};
+    sb.texture = gt.texture;
+    sb.sampler = text_renderer->sampler();
+    SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
 SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
 {
     // Avoid operator[] — it inserts a default entry on miss.
@@ -108,40 +216,7 @@ SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
     return nullptr;
 }
 
-void RenderContext::drawRect(float x, float y, float w, float h,
-                              float r, float g, float b, float a) const
-{
-    // TODO: allocate 6 vertices from arena, write NDC quad, bind rect
-    //       pipeline and issue SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0).
-    //
-    //   struct Vertex { float pos[2]; float color[4]; };
-    //   auto* v = static_cast<Vertex*>(
-    //       arena->alloc(6 * sizeof(Vertex), alignof(Vertex)));
-    //   v[0] = {{x,   y  }, {r,g,b,a}};
-    //   v[1] = {{x+w, y  }, {r,g,b,a}};
-    //   v[2] = {{x+w, y+h}, {r,g,b,a}};
-    //   v[3] = {{x,   y  }, {r,g,b,a}};
-    //   v[4] = {{x+w, y+h}, {r,g,b,a}};
-    //   v[5] = {{x,   y+h}, {r,g,b,a}};
-    //   SDL_BindGPUGraphicsPipeline(pass, pipeline("rect"));
-    //   SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
-    (void)x; (void)y; (void)w; (void)h;
-    (void)r; (void)g; (void)b; (void)a;
-}
 
-void RenderContext::drawText(std::string_view text,
-                              float x, float y, float size) const
-{
-    // TODO: walk the GlyphAtlas, build one TextVertex quad per glyph from
-    //       the arena, bind the "text" pipeline + font atlas sampler, and
-    //       issue SDL_DrawGPUPrimitives(pass, glyph_count * 6, 1, 0, 0).
-    //
-    //   struct TextVertex { float pos[2]; float uv[2]; float color[4]; };
-    //   SDL_BindGPUGraphicsPipeline(pass, pipeline("text"));
-    //   SDL_BindGPUFragmentSamplers(pass, 0, &font_sampler, 1);
-    //   SDL_DrawGPUPrimitives(pass, glyph_count * 6, 1, 0, 0);
-    (void)text; (void)x; (void)y; (void)size;
-}
 
 // ===========================================================================
 // RenderTree
@@ -415,4 +490,4 @@ void RenderTree::render(NodeHandle root, RenderContext& ctx)
     });
 }
 
-} // namespace sdlos
+} // namespace pce::sdlos

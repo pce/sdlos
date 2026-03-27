@@ -75,7 +75,12 @@
 #include <string_view>
 #include <vector>
 
-namespace sdlos {
+namespace pce::sdlos {
+
+// Forward declaration — avoids pulling all of SDL_ttf into every translation
+// unit that includes render_tree.hh.  The full definition is in text_renderer.hh.
+class TextRenderer;
+
 
 // ---------------------------------------------------------------------------
 // NodeHandle — alias for sdlos::core::SlotID.
@@ -137,17 +142,27 @@ struct RenderContext {
 
     core::frame_arena* arena = nullptr;
 
+    // ---- Text renderer (non-owning) -------------------------------------
+    //
+    // Set by SDLRenderer::Render() before calling RenderTree::render().
+    // Widget draw callbacks call drawText() which delegates here to obtain
+    // a cached GPU texture and bind it via the "text" pipeline.
+    // Null when text rendering is unavailable; drawText() no-ops gracefully.
+
+    TextRenderer* text_renderer = nullptr;
+
     // ---- Draw helpers ----------------------------------------------------
     //
-    // Submit geometry into `pass`. These are stubs until the geometry batcher
-    // is wired; the signatures define the interface for widget draw callbacks.
+    // Submit geometry into `pass`.  Non-const: both functions bind GPU
+    // pipelines and push uniform data, which mutates the command buffer state.
 
     void drawRect(float x, float y, float w, float h,
-                  float r, float g, float b, float a = 1.f) const;
+                  float r, float g, float b, float a = 1.f);
 
     void drawText(std::string_view text,
                   float x, float y,
-                  float size = 16.f) const;
+                  float size = 16.f,
+                  float r = 1.f, float g = 1.f, float b = 1.f, float a = 1.f);
 
     // ---- Pipeline access -------------------------------------------------
 
@@ -205,11 +220,23 @@ struct RenderNode {
 
     // ---- Per-frame callbacks ---------------------------------------------
     //
-    // draw   — issue GPU commands into ctx.pass. Must be set for visible output.
-    // update — read reactive state / animate before any draw calls; may be null.
+    // Both callbacks receive a non-const reference to the node itself as the
+    // first argument (`self`).  This removes the need for widgets to capture
+    // a `RenderTree*` or a raw `RenderNode*` in their closures — the pointer
+    // is valid for the entire duration of the callback because the traversal
+    // contract forbids alloc()/free() while fn is executing.
+    //
+    // draw(self, ctx)  — issue GPU commands into ctx.pass.
+    //                    Must be set for any node that produces visible output.
+    //                    Read self.x/y/w/h for layout; read self.state for
+    //                    widget-specific data via std::any_cast<State>(self.state).
+    //
+    // update(self)     — mutate time-dependent state before any draw calls.
+    //                    May be null.  Setting self.dirty_render = true here
+    //                    causes draw() to run on the same frame.
 
     std::function<void(RenderContext&)> draw;
-    std::function<void()>              update;
+    std::function<void()>               update;
 
     // ---- Type-erased widget state ----------------------------------------
     //
@@ -380,4 +407,4 @@ private:
     NodeHandle                 root_ = k_null_handle;
 };
 
-} // namespace sdlos
+} // namespace pce::sdlos
