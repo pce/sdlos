@@ -4,7 +4,7 @@
 #include "sdl_handle.hh"
 #include "render_tree.hh"
 #include "widgets/widget.hh"
-#include "widgets/input_box.hh"
+#include "widgets/input_text_box.hh"
 #include "debug/layout_debug.hh"
 
 #include <SDL3/SDL.h>
@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <optional>
 #include <vector>
 
 namespace pce::sdlos {
@@ -25,7 +26,6 @@ class SDLRenderer;
 
 class Window : public IWindow {
 public:
-    // ---- Factory ---------------------------------------------------------
 
     [[nodiscard]]
     static std::expected<std::unique_ptr<Window>, std::string>
@@ -208,7 +208,7 @@ private:
     RenderTree   scene_tree_;
     NodeHandle   scene_root_;
     NodeHandle   search_overlay_node_;
-    NodeHandle   search_input_node_;
+    std::optional<widgets::TextBox> search_input_box_;
     NodeHandle   layout_debug_node_;
 
     Signal<bool>        search_visible_{false};

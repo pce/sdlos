@@ -62,14 +62,7 @@ constexpr const char* alignAbbrev(LayoutProps::Align a) noexcept
     return "?";
 }
 
-[[nodiscard]]
-std::string primaryLabel(const RenderNode& n)
-{
-    return std::format("{} {:.0f},{:.0f} {:.0f}x{:.0f}",
-                       kindAbbrev(n.layout_kind),
-                       n.x, n.y,
-                       n.w, n.h);
-}
+
 
 [[nodiscard]]
 std::string secondaryLabel(const RenderNode& n)
@@ -124,20 +117,34 @@ void drawLayoutDebug(RenderContext&           ctx,
 {
     if (!root.valid()) return;
 
-    // Push children left-to-right then reverse the newly added segment so
-    // the leftmost child sits on top of the stack (popped first = preorder).
-    std::vector<NodeHandle> stack;
+    // Each stack entry carries the node handle plus the accumulated absolute
+    // origin of its *parent*.  Adding n->x / n->y gives the node's own
+    // absolute screen position, which is what drawRect / drawText expect.
+    struct Entry {
+        NodeHandle h;
+        float      pax;   // parent absolute x
+        float      pay;   // parent absolute y
+    };
+
+    std::vector<Entry> stack;
     stack.reserve(64);
-    stack.push_back(root);
+
+    // Start at root: root's own position contributes to its children.
+    // We push root with pax/pay = 0 so its absolute origin = (0+root->x, 0+root->y).
+    stack.push_back({root, 0.f, 0.f});
 
     while (!stack.empty()) {
-        const NodeHandle h = stack.back();
+        const auto [h, pax, pay] = stack.back();
         stack.pop_back();
 
         if (h == cfg.skip) continue;
 
         RenderNode* n = tree.node(h);
         if (!n) continue;   // stale handle — skip silently
+
+        // Absolute position of this node.
+        const float ax = pax + n->x;
+        const float ay = pay + n->y;
 
         const bool is_none     = (n->layout_kind == LayoutKind::None);
         const bool has_area    = (n->w > 0.f && n->h > 0.f);
@@ -146,18 +153,23 @@ void drawLayoutDebug(RenderContext&           ctx,
         if (should_draw) {
             const DebugColor c = colorForKind(n->layout_kind);
 
-            ctx.drawRect(n->x, n->y, n->w, n->h,
+            ctx.drawRect(ax, ay, n->w, n->h,
                          c.r, c.g, c.b, cfg.fill_alpha);
 
-            ctx.drawRectOutline(n->x, n->y, n->w, n->h,
+            ctx.drawRectOutline(ax, ay, n->w, n->h,
                                 cfg.border_width,
                                 c.r, c.g, c.b, 0.90f);
 
             if (cfg.show_labels) {
-                const float lx = n->x + cfg.border_width + 3.f;
-                float       ly = n->y + cfg.border_width + 2.f;
+                const float lx = ax + cfg.border_width + 3.f;
+                float       ly = ay + cfg.border_width + 2.f;
 
-                drawLabel(ctx, primaryLabel(*n),
+                // primaryLabel now receives absolute coords for the position
+                // annotation so the overlay matches what you see on screen.
+                drawLabel(ctx,
+                          std::format("{} {:.0f},{:.0f} {:.0f}x{:.0f}",
+                                      kindAbbrev(n->layout_kind),
+                                      ax, ay, n->w, n->h),
                           lx, ly, cfg.label_size,
                           c.r, c.g, c.b);
 
@@ -168,15 +180,34 @@ void drawLayoutDebug(RenderContext&           ctx,
                               lx, ly, cfg.label_size * 0.90f,
                               c.r * 0.85f, c.g * 0.85f, c.b * 0.85f);
                 }
+
+                // Optional: show the node id / class in a third line.
+                {
+                    const auto id  = n->style("id");
+                    const auto cls = n->style("class");
+                    std::string tag_info;
+                    if (!id.empty())  { tag_info += '#'; tag_info += id;  }
+                    if (!cls.empty()) {
+                        if (!tag_info.empty()) tag_info += ' ';
+                        tag_info += '.'; tag_info += cls;
+                    }
+                    if (!tag_info.empty()) {
+                        ly += cfg.label_size * 1.2f;
+                        drawLabel(ctx, tag_info,
+                                  lx, ly, cfg.label_size * 0.85f,
+                                  0.90f, 0.90f, 0.55f);
+                    }
+                }
             }
         }
 
+        // Push children: their parent absolute origin is (ax, ay).
         const auto base = static_cast<std::ptrdiff_t>(stack.size());
 
         for (NodeHandle c = n->child; c.valid(); ) {
             const RenderNode* cn = tree.node(c);
             if (!cn) break;
-            stack.push_back(c);
+            stack.push_back({c, ax, ay});
             c = cn->sibling;
         }
 

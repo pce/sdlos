@@ -289,6 +289,13 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform &u [[buffer(
         std::cerr << "SDLRenderer::Initialize - TextRenderer unavailable (text disabled)\n";
         text_renderer_.reset();
     } else {
+        // assets/fonts/ is a legacy CWD-relative search path.
+        // The canonical location is data/fonts/ resolved via SetDataBasePath(),
+        // which jade_host calls immediately after Initialize() succeeds.
+        // We try assets/fonts/ opportunistically so a developer running from the
+        // repo root still gets a font; in normal installed builds this will miss
+        // and the system font below serves as a temporary placeholder until
+        // SetDataBasePath() loads the bundled typeface.
         const bool font_ok = text_renderer_->loadFirstAvailable({
             "assets/fonts/InterVariable.ttf",
             "assets/fonts/Inter-Regular.ttf",
@@ -297,17 +304,211 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform &u [[buffer(
         }, 17.f);
 
         if (!font_ok) {
-            std::cerr << "SDLRenderer: no bundled font found in assets/fonts/\n"
-                      << "             trying system fonts as fallback...\n";
+            // Expected in normal builds — SetDataBasePath() will override this
+            // with the app-bundled font from data/fonts/.
+            std::cout << "[SDLRenderer] note: assets/fonts/ not found; "
+                         "installing system font as placeholder\n";
             if (!text_renderer_->tryLoadSystemFont(17.f)) {
-                std::cerr << "SDLRenderer: no font available — text rendering disabled\n";
+                std::cerr << "[SDLRenderer] warning: no font available — "
+                             "text rendering disabled\n";
             }
         }
     }
 
+    // ImageCache — GPU-backed image texture cache for <img src="..."> nodes.
+    // Requires SDL_image (SDL_IMAGE_AVAILABLE) for full format support; falls
+    // back to SDL_LoadBMP (BMP only) when SDL_image is not compiled in.
+    // Non-fatal: img nodes simply draw nothing if the cache is unavailable.
+    image_cache_ = std::make_unique<ImageCache>();
+    if (!image_cache_->init(device_)) {
+        std::cerr << "SDLRenderer::Initialize - ImageCache unavailable (img disabled)\n";
+        image_cache_.reset();
+    }
+
+    // Capture the logical→physical pixel ratio for the window that was just
+    // claimed.  sdl_window_ is valid at this point (set by CreateDeviceForWindow).
+    UpdatePixelScale();
+
     initialized_.store(true);
-    std::cerr << "SDLRenderer::Initialize - initialized successfully\n";
+    std::cerr << "SDLRenderer::Initialize - initialized successfully"
+              << "  scale=" << pixel_scale_x_ << "x" << pixel_scale_y_ << "\n";
     return true;
+}
+
+void SDLRenderer::SetDataBasePath(const std::string& path) noexcept
+{
+    data_base_path_ = path;
+    // Ensure trailing slash so we can concatenate sub-paths directly.
+    if (!data_base_path_.empty() && data_base_path_.back() != '/')
+        data_base_path_ += '/';
+    if (image_cache_)
+        image_cache_->setBasePath(data_base_path_);
+    std::cout << "[SDLRenderer] data base path: " << data_base_path_ << "\n";
+    // Font loading is NOT performed here.  Not every app ships a data/fonts/
+    // directory — only those that declare DATA_DIR in sdlos_jade_app().
+    // Font selection is the responsibility of:
+    //   1. loadAppFonts() in jade_host (scans <jade_dir>/data/fonts/)
+    //   2. SDLRenderer::SetFontPath() called explicitly from jade_host or a
+    //      behaviour via the _font jade attribute on the root node.
+}
+
+// ---------------------------------------------------------------------------
+// SetFontPath — explicit font selection (e.g. from a _font jade attribute or
+// from jade_app_init()).
+//
+// Relative paths are resolved against data_base_path_ so an app can write:
+//
+//   renderer.SetFontPath("data/fonts/Inter-Regular.ttf");
+//
+// or declare in jade:
+//
+//   app(_font="data/fonts/Inter-Regular.ttf")
+//
+// jade_host reads the _font attribute after jade_app_init() runs and calls
+// this method, giving the behaviour the last word on font selection.
+// ---------------------------------------------------------------------------
+bool SDLRenderer::SetFontPath(const std::string& path, float pt_size) noexcept
+{
+    if (!text_renderer_) return false;
+
+    // Absolute paths bypass the base path; relative paths are resolved under it.
+    const std::string full = (!path.empty() && path[0] == '/')
+                             ? path
+                             : data_base_path_ + path;
+
+    if (text_renderer_->loadFont(full, pt_size)) {
+        std::cout << "[SDLRenderer] font set: " << full << "\n";
+        return true;
+    }
+    std::cerr << "[SDLRenderer] SetFontPath: failed to load '" << full << "'\n";
+    return false;
+}
+
+/// Lazily load, compile, and cache a node shader pipeline.
+/// Reuses ui_rect_vert_ (already compiled) plus a custom fragment shader
+/// loaded from data/shaders/{platform}/{name}.frag.{ext}.
+SDL_GPUGraphicsPipeline*
+SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
+{
+    // Cache hit (including previously-failed loads stored as null).
+    auto it = node_shader_cache_.find(name);
+    if (it != node_shader_cache_.end())
+        return it->second.pipeline;
+
+    if (!device_ || !ui_rect_vert_) {
+        node_shader_cache_[name] = {};
+        return nullptr;
+    }
+
+    // Determine shader file path and GPU format from what the device supports.
+    SDL_GPUShaderFormat avail = SDL_GetGPUShaderFormats(device_);
+    std::string  frag_path;
+    SDL_GPUShaderFormat fmt = SDL_GPU_SHADERFORMAT_INVALID;
+
+    if (avail & SDL_GPU_SHADERFORMAT_MSL) {
+        frag_path = data_base_path_ + "data/shaders/msl/" + name + ".frag.metal";
+        fmt       = SDL_GPU_SHADERFORMAT_MSL;
+    } else if (avail & SDL_GPU_SHADERFORMAT_SPIRV) {
+        frag_path = data_base_path_ + "data/shaders/spirv/" + name + ".frag.spv";
+        fmt       = SDL_GPU_SHADERFORMAT_SPIRV;
+    } else {
+        std::cerr << "[NodeShader] no supported shader format for '" << name << "'\n";
+        node_shader_cache_[name] = {};
+        return nullptr;
+    }
+
+    // Load source / bytecode.
+    std::string source;
+    std::vector<Uint8> binary;
+    const Uint8*  code      = nullptr;
+    std::size_t   code_size = 0;
+
+    if (fmt == SDL_GPU_SHADERFORMAT_MSL) {
+        source = ReadTextFile(frag_path);
+        if (source.empty()) {
+            std::cerr << "[NodeShader] shader file not found: " << frag_path << "\n";
+            node_shader_cache_[name] = {};
+            return nullptr;
+        }
+        code      = reinterpret_cast<const Uint8*>(source.data());
+        code_size = source.size();
+    } else {
+        // SPIRV — read raw bytes.
+        std::ifstream f(frag_path, std::ios::binary | std::ios::ate);
+        if (!f) {
+            std::cerr << "[NodeShader] shader file not found: " << frag_path << "\n";
+            node_shader_cache_[name] = {};
+            return nullptr;
+        }
+        const auto sz = f.tellg();
+        f.seekg(0);
+        binary.resize(static_cast<std::size_t>(sz));
+        f.read(reinterpret_cast<char*>(binary.data()), sz);
+        code      = binary.data();
+        code_size = binary.size();
+    }
+
+    // Compile fragment shader.
+    SDL_GPUShaderCreateInfo fci{};
+    fci.code                = code;
+    fci.code_size           = code_size;
+    fci.entrypoint          = "main0";
+    fci.format              = fmt;
+    fci.stage               = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    fci.num_samplers        = 1;
+    fci.num_uniform_buffers = 1;
+    fci.props               = 0;
+
+    SDL_GPUShader* frag = SDL_CreateGPUShader(device_, &fci);
+    if (!frag) {
+        std::cerr << "[NodeShader] compile failed for '" << name
+                  << "': " << SDL_GetError() << "\n";
+        node_shader_cache_[name] = {};
+        return nullptr;
+    }
+
+    // Build pipeline — same blend state as the existing text/image pipeline.
+    SDL_GPUColorTargetDescription colorDesc{};
+    colorDesc.format = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+    colorDesc.blend_state.enable_blend            = true;
+    colorDesc.blend_state.src_color_blendfactor   = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    colorDesc.blend_state.dst_color_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.color_blend_op          = SDL_GPU_BLENDOP_ADD;
+    colorDesc.blend_state.src_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE;
+    colorDesc.blend_state.dst_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.alpha_blend_op          = SDL_GPU_BLENDOP_ADD;
+
+    SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
+    targetInfo.color_target_descriptions = &colorDesc;
+    targetInfo.num_color_targets         = 1;
+
+    SDL_GPUVertexInputState vis{};
+    vis.vertex_buffer_descriptions = nullptr;
+    vis.num_vertex_buffers         = 0;
+    vis.vertex_attributes          = nullptr;
+    vis.num_vertex_attributes      = 0;
+
+    SDL_GPUGraphicsPipelineCreateInfo pci{};
+    pci.vertex_shader   = ui_rect_vert_;
+    pci.fragment_shader = frag;
+    pci.vertex_input_state = vis;
+    pci.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pci.target_info     = targetInfo;
+    pci.props           = 0;
+
+    SDL_GPUGraphicsPipeline* pipe = SDL_CreateGPUGraphicsPipeline(device_, &pci);
+    SDL_ReleaseGPUShader(device_, frag);  // pipeline holds the only ref
+
+    if (!pipe) {
+        std::cerr << "[NodeShader] pipeline creation failed for '" << name
+                  << "': " << SDL_GetError() << "\n";
+        node_shader_cache_[name] = {};
+        return nullptr;
+    }
+
+    node_shader_cache_[name] = { pipe };
+    std::cerr << "[NodeShader] loaded '" << name << "' (" << frag_path << ")\n";
+    return pipe;
 }
 
 void SDLRenderer::Shutdown() noexcept {
@@ -316,14 +517,22 @@ void SDLRenderer::Shutdown() noexcept {
         return;
     }
 
-    // Text renderer holds GPU textures against this device — shut it down first.
+    // Text renderer and image cache both hold GPU textures against this device
+    // — shut them down before releasing pipelines and the device itself.
     if (text_renderer_) {
         text_renderer_->shutdown();
         text_renderer_.reset();
     }
 
+    if (image_cache_) {
+        image_cache_->shutdown();
+        image_cache_.reset();
+    }
+
     scene_tree_ = nullptr;
     scene_root_ = k_null_handle;
+
+    if (ui_texture_) { SDL_ReleaseGPUTexture(device_, ui_texture_); ui_texture_ = nullptr; ui_texture_w_ = 0; ui_texture_h_ = 0; }
 
     if (ui_rect_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_); ui_rect_pipeline_ = nullptr; }
     if (ui_text_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_text_pipeline_); ui_text_pipeline_ = nullptr; }
@@ -334,6 +543,13 @@ void SDLRenderer::Shutdown() noexcept {
     if (pipeline_)        { SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);        pipeline_        = nullptr; }
     if (vertex_shader_)   { SDL_ReleaseGPUShader(device_, vertex_shader_);             vertex_shader_   = nullptr; }
     if (fragment_shader_) { SDL_ReleaseGPUShader(device_, fragment_shader_);           fragment_shader_ = nullptr; }
+
+    // Release lazily-compiled node shader pipelines.
+    for (auto& [unused_name, entry] : node_shader_cache_) {
+        if (entry.pipeline)
+            SDL_ReleaseGPUGraphicsPipeline(device_, entry.pipeline);
+    }
+    node_shader_cache_.clear();
 
     // Release window claim before destroying the device.
     if (sdl_window_) {
@@ -349,6 +565,75 @@ void SDLRenderer::Shutdown() noexcept {
     shader_mtime_ = 0;
 
     std::cerr << "SDLRenderer::Shutdown - resources released\n";
+}
+
+// ---- HiDPI pixel scale ---------------------------------------------------
+
+void SDLRenderer::UpdatePixelScale() noexcept
+{
+    if (!sdl_window_) return;
+
+    int lw = 0, lh = 0, pw = 0, ph = 0;
+    SDL_GetWindowSize(sdl_window_, &lw, &lh);
+    SDL_GetWindowSizeInPixels(sdl_window_, &pw, &ph);
+
+    pixel_scale_x_ = (lw > 0 && pw > 0)
+                         ? static_cast<float>(pw) / static_cast<float>(lw)
+                         : 1.f;
+    pixel_scale_y_ = (lh > 0 && ph > 0)
+                         ? static_cast<float>(ph) / static_cast<float>(lh)
+                         : 1.f;
+}
+
+void SDLRenderer::RefreshPixelScale() noexcept
+{
+    UpdatePixelScale();
+}
+
+// ---- UI offscreen texture ------------------------------------------------
+
+bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept
+{
+    if (!device_ || w == 0 || h == 0) return false;
+    if (ui_texture_ && ui_texture_w_ == w && ui_texture_h_ == h) return true;
+
+    // Release the old texture first (safe to call even if null).
+    if (ui_texture_) {
+        SDL_ReleaseGPUTexture(device_, ui_texture_);
+        ui_texture_   = nullptr;
+        ui_texture_w_ = 0;
+        ui_texture_h_ = 0;
+    }
+
+    // Use the swapchain format so the existing UI pipelines (built for that
+    // format) can render into this texture without a separate pipeline variant.
+    SDL_GPUTextureFormat fmt = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+    if (fmt == SDL_GPU_TEXTUREFORMAT_INVALID)
+        fmt = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;   // safe fallback
+
+    SDL_GPUTextureCreateInfo tci{};
+    tci.type                 = SDL_GPU_TEXTURETYPE_2D;
+    tci.format               = fmt;
+    tci.usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
+                             | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.width                = w;
+    tci.height               = h;
+    tci.layer_count_or_depth = 1;
+    tci.num_levels           = 1;
+    tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
+    tci.props                = 0;
+
+    ui_texture_ = SDL_CreateGPUTexture(device_, &tci);
+    if (!ui_texture_) {
+        std::cerr << "SDLRenderer: failed to create UI texture ("
+                  << w << "×" << h << "): " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    ui_texture_w_ = w;
+    ui_texture_h_ = h;
+    std::cerr << "SDLRenderer: UI texture " << w << "×" << h << "\n";
+    return true;
 }
 
 void SDLRenderer::SetScene(RenderTree* tree,
@@ -370,7 +655,7 @@ bool SDLRenderer::CreateUIPipelines()
         vert_src = R"(
 #include <metal_stdlib>
 using namespace metal;
-struct RectUniform { float x,y,w,h,vw,vh,_p0,_p1; };
+struct RectUniform { float x,y,w,h,vw,vh,uv_x,uv_y,uv_w,uv_h,_p0,_p1; };
 struct VertOut { float4 position [[position]]; float2 uv [[user(locn0)]]; };
 static inline float2 pxn(float2 p,float vw,float vh){
     return float2((p.x/vw)*2.0f-1.0f,-(p.y/vh)*2.0f+1.0f);
@@ -380,7 +665,8 @@ vertex VertOut main0(uint vid[[vertex_id]],constant RectUniform&r[[buffer(0)]]){
     float2 C=float2(r.x+r.w,r.y+r.h),D=float2(r.x,r.y+r.h);
     float2 vs[6]={A,B,D,B,C,D};
     float2 us[6]={float2(0,0),float2(1,0),float2(0,1),float2(1,0),float2(1,1),float2(0,1)};
-    VertOut o; o.position=float4(pxn(vs[vid],r.vw,r.vh),0,1); o.uv=us[vid]; return o;
+    VertOut o; o.position=float4(pxn(vs[vid],r.vw,r.vh),0,1);
+    o.uv=float2(r.uv_x+us[vid].x*r.uv_w, r.uv_y+us[vid].y*r.uv_h); return o;
 }
 )";
     }
@@ -537,71 +823,66 @@ void SDLRenderer::Render(double timeSeconds) {
     }
 
     if (!swap) {
-        // Swapchain not ready (minimised / resize in progress). Submit empty cmd.
         SDL_SubmitGPUCommandBuffer(cmd);
         return;
     }
 
-    // ---- Pass 1: copy pass — flush pending glyph textures ---------------
-    if (text_renderer_ && text_renderer_->hasPendingUploads()) {
-        SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
-        if (cp) {
-            text_renderer_->flushUploads(cp);
-            SDL_EndGPUCopyPass(cp);
+    // ---- Ensure persistent UI texture exists and matches swapchain size --
+    // A size mismatch means the window was resized.  Recreate the texture and
+    // force a full repaint so no node renders into the wrong-sized buffer.
+    if (ui_texture_w_ != width || ui_texture_h_ != height) {
+        if (CreateOrResizeUITexture(width, height)) {
+            // Layout cascade from root resize will dirty the whole tree via
+            // markLayoutDirty → resolveLayout → child dirty flags.  Call
+            // forceAllDirty as an additional safety net (no-op if already set).
+            if (scene_tree_ && scene_root_.valid())
+                scene_tree_->forceAllDirty(scene_root_);
         }
     }
 
-    // ---- Pass 2: render pass — wallpaper + UI overlay -------------------
-    SDL_GPUColorTargetInfo ct{};
-    ct.texture              = swap;
-    ct.mip_level            = 0;
-    ct.layer_or_depth_plane = 0;
-    ct.clear_color          = {0.0f, 0.0f, 0.0f, 1.0f};
-    ct.load_op              = SDL_GPU_LOADOP_CLEAR;
-    ct.store_op             = SDL_GPU_STOREOP_STORE;
-    ct.resolve_texture      = nullptr;
-    ct.resolve_mip_level    = 0;
-    ct.resolve_layer        = 0;
-    ct.cycle                = true;
+    // ---- Pass 1: copy pass — flush pending texture uploads ---------------
+    // Both the text renderer (glyph atlas) and the image cache may have
+    // surfaces queued from the previous frame's draw callbacks.  Open a
+    // single copy pass and drain both queues — SDL3 GPU guarantees that
+    // upload commands recorded here complete before the render pass begins.
+    {
+        const bool needText  = text_renderer_ && text_renderer_->hasPendingUploads();
+        const bool needImage = image_cache_   && image_cache_->hasPendingUploads();
 
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
-    if (!pass) {
-        std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: "
-                  << SDL_GetError() << "\n";
-        SDL_SubmitGPUCommandBuffer(cmd);
-        return;
+        if (needText || needImage) {
+            SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
+            if (cp) {
+                if (needText)  text_renderer_->flushUploads(cp);
+                if (needImage) image_cache_->flushUploads(cp);
+                SDL_EndGPUCopyPass(cp);
+            }
+        }
     }
 
-    // ---- 2a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) ----------
-    SDL_BindGPUGraphicsPipeline(pass, pipeline_);
+    // ---- Pass 2: UI offscreen render pass --------------------------------
+    //
+    // Renders the scene into ui_texture_ (persistent, same format as the
+    // swapchain) with SDL_GPU_LOADOP_CLEAR on active frames.
+    //
+    // IDLE-FRAME SKIP: when no node has dirty_render == true, this entire
+    // pass is omitted.  ui_texture_ retains its content from the last active
+    // frame and is composited as-is in Pass 3 — zero UI GPU commands issued.
+    //
+    // FULL-REPAINT POLICY: if *any* node is dirty we call forceAllDirty()
+    // before rendering.  This guarantees every node re-emits its draw commands
+    // into the freshly-cleared texture, avoiding alpha-compositing artefacts
+    // that would occur if only a subset of overlapping nodes repainted.
+    //
+    // The "touched node self-marks dirty" contract is therefore real and
+    // meaningful: static nodes never install an update callback that sets
+    // dirty_render; only setStyle() / markDirty() / Animated<T> ticks do.
 
-    FragmentUniform fu{};
-    fu.time      = static_cast<float>(timeSeconds);
-    fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
-    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+    const bool scene_active = scene_tree_ && scene_root_.valid()
+                           && ui_rect_pipeline_ && ui_text_pipeline_
+                           && ui_texture_;
 
-    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
-
-    // ---- 2b. UI overlay (RenderTree widgets, alpha-blended on top) ------
-    if (scene_tree_ && scene_root_.valid() &&
-        ui_rect_pipeline_ && ui_text_pipeline_)
-    {
-        RenderContext ctx;
-        ctx.backend       = GPUBackend::Metal;
-        ctx.device        = device_;
-        ctx.cmd           = cmd;
-        ctx.pass          = pass;
-        ctx.viewport_w    = static_cast<float>(width);
-        ctx.viewport_h    = static_cast<float>(height);
-        ctx.arena         = &scene_tree_->arena();
-        ctx.text_renderer = text_renderer_.get();
-
-        ctx.pipelines["rect"] = ui_rect_pipeline_;
-        ctx.pipelines["text"] = ui_text_pipeline_;
-
-        // Root dimensions track the swapchain exactly (physical pixels,
-        // Retina-correct). markLayoutDirty() propagates downward so a window
-        // resize automatically re-flows the entire scene tree.
+    if (scene_active) {
+        // ---- Update root dimensions (may trigger markLayoutDirty) --------
         {
             RenderNode* root = scene_tree_->node(scene_root_);
             if (root) {
@@ -615,9 +896,128 @@ void SDLRenderer::Render(double timeSeconds) {
             }
         }
 
+        // ---- Layout + update callbacks (may set dirty_render) -----------
         scene_tree_->beginFrame();
         scene_tree_->update(scene_root_);
-        scene_tree_->render(scene_root_, ctx);
+
+        // ---- Check dirty and render if needed ---------------------------
+        if (scene_tree_->anyDirty(scene_root_)) {
+            // Propagate dirty to every node so the full scene repaints into
+            // the cleared texture (no stale pixel from a previous frame).
+            scene_tree_->forceAllDirty(scene_root_);
+
+            SDL_GPUColorTargetInfo ui_ct{};
+            ui_ct.texture     = ui_texture_;
+            ui_ct.load_op     = SDL_GPU_LOADOP_CLEAR;
+            ui_ct.store_op    = SDL_GPU_STOREOP_STORE;
+            ui_ct.clear_color = {0.f, 0.f, 0.f, 0.f};  // transparent black
+            ui_ct.cycle       = true;
+
+            SDL_GPURenderPass* ui_pass = SDL_BeginGPURenderPass(cmd, &ui_ct, 1, nullptr);
+            if (ui_pass) {
+                RenderContext ctx;
+                ctx.backend       = GPUBackend::Metal;
+                ctx.device        = device_;
+                ctx.cmd           = cmd;
+                ctx.pass          = ui_pass;
+                ctx.viewport_w    = static_cast<float>(width);
+                ctx.viewport_h    = static_cast<float>(height);
+                ctx.arena         = &scene_tree_->arena();
+                ctx.text_renderer = text_renderer_.get();
+                ctx.image_cache   = image_cache_.get();
+
+                ctx.pipelines["rect"]  = ui_rect_pipeline_;
+                ctx.pipelines["text"]  = ui_text_pipeline_;
+                ctx.time               = static_cast<float>(timeSeconds);
+                ctx.nodeShaderPipeline = [this](std::string_view n) noexcept {
+                    return ensureNodeShaderPipeline(std::string(n));
+                };
+
+                scene_tree_->render(scene_root_, ctx);
+                SDL_EndGPURenderPass(ui_pass);
+            }
+        }
+        // else: nothing dirty — ui_texture_ already holds the correct frame.
+    }
+
+    // ---- Pass 3: swapchain render pass — wallpaper + composite UI --------
+    //
+    // The wallpaper always redraws (it's an animated FBM shader).
+    // The UI texture is then alpha-composited on top using the text pipeline
+    // (textured quad, straight-alpha blend, tint = {1,1,1,1}).
+
+    SDL_GPUColorTargetInfo ct{};
+    ct.texture     = swap;
+    ct.load_op     = SDL_GPU_LOADOP_CLEAR;
+    ct.store_op    = SDL_GPU_STOREOP_STORE;
+    ct.clear_color = {0.f, 0.f, 0.f, 1.f};
+    ct.cycle       = true;
+
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
+    if (!pass) {
+        std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: "
+                  << SDL_GetError() << "\n";
+        SDL_SubmitGPUCommandBuffer(cmd);
+        return;
+    }
+
+    // ---- 3a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) ----------
+    SDL_BindGPUGraphicsPipeline(pass, pipeline_);
+
+    FragmentUniform fu{};
+    fu.time      = static_cast<float>(timeSeconds);
+    fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+
+    // ---- 3b. UI composite (fullscreen quad sampling ui_texture_) --------
+    // Reuses the text/image pipeline: samples a texture and multiplies by a
+    // tint uniform.  Tint {1,1,1,1} preserves the UI texture's RGBA exactly.
+    // The pipeline has straight-alpha blending enabled so transparent UI
+    // regions correctly reveal the wallpaper underneath.
+    if (ui_texture_ && ui_text_pipeline_) {
+        SDL_BindGPUGraphicsPipeline(pass, ui_text_pipeline_);
+
+        // Must be 48 bytes — matches struct RectUniform in the vertex shader
+        // { x, y, w, h, vw, vh, uv_x, uv_y, uv_w, uv_h, _p0, _p1 }.
+        // Previously only 32 bytes were pushed (uv_x/y/w/h missing), causing
+        // Metal to read zeros for uv_w/uv_h → all 6 vertices sampled UV (0,0)
+        // → the entire UI texture collapsed to one transparent pixel → clouds only.
+        struct alignas(4) RectUniform {
+            float x, y, w, h;
+            float vw, vh;
+            float uv_x, uv_y;
+            float uv_w, uv_h;
+            float _p0, _p1;
+        };
+        static_assert(sizeof(RectUniform) == 48,
+                      "RectUniform must be 48 bytes to match the vertex shader");
+        const RectUniform vu{
+            0.f, 0.f,
+            static_cast<float>(width), static_cast<float>(height),
+            static_cast<float>(width), static_cast<float>(height),
+            0.f, 0.f, 1.f, 1.f,   // uv_x=0, uv_y=0, uv_w=1, uv_h=1 — full texture
+            0.f, 0.f
+        };
+        SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+        struct alignas(4) TintUniform { float r, g, b, a; };
+        const TintUniform tu{ 1.f, 1.f, 1.f, 1.f };
+        SDL_PushGPUFragmentUniformData(cmd, 0, &tu, sizeof(tu));
+
+        // Prefer image_cache sampler; fall back to text_renderer sampler.
+        // Both are bilinear / clamp-to-edge — identical result at 1:1 mapping.
+        SDL_GPUSampler* samp = image_cache_   ? image_cache_->sampler()
+                             : text_renderer_ ? text_renderer_->sampler()
+                             : nullptr;
+        if (samp) {
+            SDL_GPUTextureSamplerBinding sb{};
+            sb.texture = ui_texture_;
+            sb.sampler = samp;
+            SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+            SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+        }
     }
 
     SDL_EndGPURenderPass(pass);

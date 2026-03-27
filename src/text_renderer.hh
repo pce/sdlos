@@ -85,6 +85,15 @@ public:
     /// Must be called BEFORE SDL_BeginGPURenderPass, inside a SDL_GPUCopyPass.
     void flushUploads(SDL_GPUCopyPass* copy_pass);
 
+    /// CPU-side text measurement — no GPU texture is allocated.
+    /// Returns {pixel_width, pixel_height} for `text` rendered at `size` points.
+    /// Falls back to {0, 0} when the renderer is not ready or TTF is unavailable.
+    /// NOTE: currently uses the font loaded at init time regardless of `size`
+    /// (multi-size font cache is a future TODO); the measurement is therefore
+    /// consistent with the actual render since drawText also uses that font.
+    [[nodiscard]] std::pair<int, int> measureText(std::string_view text,
+                                                   float            size = 0.f);
+
     /// Useful to skip creating a copy pass when nothing changed.
     [[nodiscard]] bool hasPendingUploads() const noexcept
     {

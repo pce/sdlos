@@ -1,5 +1,6 @@
 #include "render_tree.hh"
 #include "text_renderer.hh"
+#include "image_cache.hh"
 
 #include <algorithm>
 #include <cassert>
@@ -14,7 +15,6 @@
 
 namespace pce::sdlos {
 
-// ---- loadShader ----
 
 std::expected<SDL_GPUShader*, std::string>
 loadShader(SDL_GPUDevice*     device,
@@ -79,7 +79,6 @@ loadShader(SDL_GPUDevice*     device,
     return shader;
 }
 
-// ---- RenderContext ----
 
 // drawRect — no vertex buffer; ui_rect.vert generates a 6-vertex CCW quad
 // entirely from push-uniform data.
@@ -87,7 +86,6 @@ loadShader(SDL_GPUDevice*     device,
 // Push uniform layout (must match shader structs):
 //   slot 0, vertex stage   → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
 //   slot 0, fragment stage → {r, g, b, a}
-
 void RenderContext::drawRect(float x, float y, float w, float h,
                               float r, float g, float b, float a)
 {
@@ -98,15 +96,18 @@ void RenderContext::drawRect(float x, float y, float w, float h,
 
     SDL_BindGPUGraphicsPipeline(pass, pipe);
 
-    // Must be 32 bytes — matches struct RectUniform in ui_rect.vert.metal.
+    // 48 bytes — matches struct RectUniform in ui_rect.vert.metal (with UV fields).
     struct alignas(4) RectUniform {
         float x, y, w, h;
         float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
         float _pad0, _pad1;
     };
-    static_assert(sizeof(RectUniform) == 32, "RectUniform must be 32 bytes");
+    static_assert(sizeof(RectUniform) == 48, "RectUniform must be 48 bytes");
 
-    const RectUniform vu{ x, y, w, h, viewport_w, viewport_h, 0.f, 0.f };
+    const RectUniform vu{ x, y, w, h, viewport_w, viewport_h,
+                          0.f, 0.f, 1.f, 1.f, 0.f, 0.f };
     SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
     // Must be 16 bytes — matches struct ColorUniform in ui_rect.frag.metal.
@@ -149,13 +150,16 @@ void RenderContext::drawText(std::string_view text,
     struct alignas(4) RectUniform {
         float x, y, w, h;
         float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
         float _pad0, _pad1;
     };
     const RectUniform vu{
         x, y,
         static_cast<float>(gt.width),
         static_cast<float>(gt.height),
-        viewport_w, viewport_h, 0.f, 0.f
+        viewport_w, viewport_h,
+        0.f, 0.f, 1.f, 1.f, 0.f, 0.f
     };
     SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
@@ -191,6 +195,161 @@ SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
 // Top/bottom claim the corners; left/right span only h−2t for clean mitre joints.
 // `thickness` is clamped to ≤ min(w,h)/2 so rects never have negative extents.
 
+// drawImage — reuses the text pipeline (textured quad + tint uniform).
+// tint = {1, 1, 1, opacity} preserves the image's original RGBA colours.
+//
+// Push uniform layout (identical to drawText):
+//   vertex  slot 0 → RectUniform  {x, y, w, h, vw, vh, _, _}
+//   fragment slot 0 → TintUniform {r, g, b, a}
+// Sampler binding:
+//   fragment sampler slot 0 → image texture
+
+void RenderContext::drawImage(std::string_view src,
+                               float x, float y, float w, float h,
+                               float opacity, VisualProps::ObjectFit fit)
+{
+    if (!image_cache || !pass || !cmd) return;
+
+    const ImageTexture img = image_cache->ensureTexture(src);
+    if (!img.valid()) return;
+
+    SDL_GPUGraphicsPipeline* pipe = pipeline("text");
+    if (!pipe) return;
+
+    // Compute draw rect and UV crop based on fit mode
+    float dx = x, dy = y, dw = w, dh = h;
+    float uv_x = 0.f, uv_y = 0.f, uv_w = 1.f, uv_h = 1.f;
+
+    using OF = VisualProps::ObjectFit;
+
+    if (fit == OF::Contain && img.width > 0 && img.height > 0) {
+        // Scale uniformly to fit inside w×h; centre in the node rect.
+        const float sw = w / static_cast<float>(img.width);
+        const float sh = h / static_cast<float>(img.height);
+        const float s  = std::min(sw, sh);
+        dw = static_cast<float>(img.width)  * s;
+        dh = static_cast<float>(img.height) * s;
+        dx = x + (w - dw) * 0.5f;
+        dy = y + (h - dh) * 0.5f;
+        // Full UV — draw rect is already shrunk.
+
+    } else if (fit == OF::Cover && img.width > 0 && img.height > 0) {
+        // Keep draw rect = w×h.  UV-crop so the image fills without distortion.
+        const float img_ar  = static_cast<float>(img.width)
+                            / static_cast<float>(img.height);
+        const float rect_ar = (h > 0.f) ? w / h : 1.f;
+
+        if (img_ar > rect_ar) {
+            // Image is wider than the rect: fit height, crop left/right.
+            uv_w = rect_ar / img_ar;
+            uv_x = (1.f - uv_w) * 0.5f;
+        } else {
+            // Image is taller than the rect: fit width, crop top/bottom.
+            uv_h = img_ar / rect_ar;
+            uv_y = (1.f - uv_h) * 0.5f;
+        }
+        // dx/dy/dw/dh stay at the full node rect.
+    }
+    // ObjectFit::Fill: full rect, full UV (defaults already set).
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{ dx, dy, dw, dh, viewport_w, viewport_h,
+                          uv_x, uv_y, uv_w, uv_h, 0.f, 0.f };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    struct alignas(4) TintUniform { float r, g, b, a; };
+    const TintUniform fu{ 1.f, 1.f, 1.f, opacity };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    SDL_GPUTextureSamplerBinding sb{};
+    sb.texture = img.texture;
+    sb.sampler = image_cache->sampler();
+    SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
+void RenderContext::drawImageWithShader(std::string_view src,
+                                         std::string_view shader_name,
+                                         float x, float y, float w, float h,
+                                         float opacity,
+                                         VisualProps::ObjectFit fit,
+                                         const NodeShaderParams& shader_params)
+{
+    if (!image_cache || !pass || !cmd) return;
+    if (!nodeShaderPipeline) {
+        // No pipeline provider — fall back to plain image draw.
+        drawImage(src, x, y, w, h, opacity, fit);
+        return;
+    }
+
+    SDL_GPUGraphicsPipeline* pipe = nodeShaderPipeline(shader_name);
+    if (!pipe) {
+        drawImage(src, x, y, w, h, opacity, fit);
+        return;
+    }
+
+    const ImageTexture img = image_cache->ensureTexture(src);
+    if (!img.valid()) return;
+
+    // Compute draw rect and UV crop (same logic as drawImage)
+    float dx = x, dy = y, dw = w, dh = h;
+    float uv_x = 0.f, uv_y = 0.f, uv_w = 1.f, uv_h = 1.f;
+
+    using OF = VisualProps::ObjectFit;
+    if (fit == OF::Contain && img.width > 0 && img.height > 0) {
+        const float sw = w / static_cast<float>(img.width);
+        const float sh = h / static_cast<float>(img.height);
+        const float s  = std::min(sw, sh);
+        dw = static_cast<float>(img.width)  * s;
+        dh = static_cast<float>(img.height) * s;
+        dx = x + (w - dw) * 0.5f;
+        dy = y + (h - dh) * 0.5f;
+    } else if (fit == OF::Cover && img.width > 0 && img.height > 0) {
+        const float img_ar  = static_cast<float>(img.width)
+                            / static_cast<float>(img.height);
+        const float rect_ar = (h > 0.f) ? w / h : 1.f;
+        if (img_ar > rect_ar) {
+            uv_w = rect_ar / img_ar;
+            uv_x = (1.f - uv_w) * 0.5f;
+        } else {
+            uv_h = img_ar / rect_ar;
+            uv_y = (1.f - uv_h) * 0.5f;
+        }
+    }
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{ dx, dy, dw, dh, viewport_w, viewport_h,
+                          uv_x, uv_y, uv_w, uv_h, 0.f, 0.f };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    // Fragment buffer(0) = NodeShaderParams (32 bytes)
+    SDL_PushGPUFragmentUniformData(cmd, 0, &shader_params, sizeof(shader_params));
+
+    SDL_GPUTextureSamplerBinding sb{};
+    sb.texture = img.texture;
+    sb.sampler = image_cache->sampler();
+    SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
 void RenderContext::drawRectOutline(float x, float y, float w, float h,
                                      float thickness,
                                      float r, float g, float b, float a)
@@ -204,16 +363,13 @@ void RenderContext::drawRectOutline(float x, float y, float w, float h,
     drawRect(x + w - t, y + t,     t,   h - 2*t, r, g, b, a);  // right
 }
 
-// ---- Layout helpers (file-scope) ----
-//
-// Called from RenderTree::resolveLayout() when n.dirty_layout is true.
-// The slot_map is structurally stable for the entire layout pass (no
-// alloc/free inside update callbacks), so RenderNode* pointers remain valid.
 
 namespace {
 
-// collectChildren — arena-backed flat array of a node's direct children.
-// Two-pass (count then fill). Span is valid until the next arena_.reset().
+    // The slot_map is structurally stable for the entire layout pass (no
+    // alloc/free inside update callbacks), so RenderNode* pointers remain valid.
+    // collectChildren — arena-backed flat array of a node's direct children.
+    // Two-pass (count then fill). Span is valid until the next arena_.reset().
 
 std::span<RenderNode*> collectChildren(RenderNode& n, RenderTree& tree,
                                         core::frame_arena& arena)
@@ -257,8 +413,15 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
     auto children = collectChildren(n, tree, arena);
     if (children.empty()) return;
 
-    const float container_main  = is_column ? n.h : n.w;
-    const float container_cross = is_column ? n.w : n.h;
+    // Reduce the available layout space by the container's inner padding.
+    const auto& vp              = n.visual_props;
+    const float pad_main_start  = is_column ? vp.padding_top    : vp.padding_left;
+    const float pad_main_end    = is_column ? vp.padding_bottom : vp.padding_right;
+    const float pad_cross_start = is_column ? vp.padding_left   : vp.padding_top;
+    const float pad_cross_end   = is_column ? vp.padding_right  : vp.padding_bottom;
+
+    const float container_main  = (is_column ? n.h : n.w) - pad_main_start - pad_main_end;
+    const float container_cross = (is_column ? n.w : n.h) - pad_cross_start - pad_cross_end;
     const float gap             = n.layout_props.gap;
     const std::size_t nc        = children.size();
 
@@ -340,7 +503,7 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
 
     // ── Pass 3 cont.: position + cross-axis align ─────────────────────────
 
-    float main_offset = start_offset;
+    float main_offset = pad_main_start + start_offset;
 
     using A = LayoutProps::Align;
     for (RenderNode* child : children) {
@@ -352,27 +515,27 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
 
         switch (n.layout_props.align) {
             case A::Start:
-                if (is_column) child->x = 0.f;
-                else           child->y = 0.f;
+                if (is_column) child->x = pad_cross_start;
+                else           child->y = pad_cross_start;
                 break;
             case A::Center:
                 if (is_column)
-                    child->x = (container_cross - child->w) * 0.5f;
+                    child->x = pad_cross_start + (container_cross - child->w) * 0.5f;
                 else
-                    child->y = (container_cross - child->h) * 0.5f;
+                    child->y = pad_cross_start + (container_cross - child->h) * 0.5f;
                 break;
             case A::End:
-                if (is_column) child->x = container_cross - child->w;
-                else           child->y = container_cross - child->h;
+                if (is_column) child->x = pad_cross_start + container_cross - child->w;
+                else           child->y = pad_cross_start + container_cross - child->h;
                 break;
             case A::Stretch:
                 // Only override the size when the child declared it as auto (-1).
                 if (is_column) {
-                    child->x = 0.f;
+                    child->x = pad_cross_start;
                     if (child->layout_props.width < 0.f)
                         child->w = container_cross;
                 } else {
-                    child->y = 0.f;
+                    child->y = pad_cross_start;
                     if (child->layout_props.height < 0.f)
                         child->h = container_cross;
                 }
@@ -391,17 +554,19 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
 
 void blockLayout(RenderNode& n, RenderTree& tree)
 {
-    const float gap = n.layout_props.gap;
-    float y_offset  = 0.f;
+    const auto& vp      = n.visual_props;
+    const float gap     = n.layout_props.gap;
+    const float avail_w = n.w - vp.padding_left - vp.padding_right;
+    float y_offset      = vp.padding_top;
 
     for (NodeHandle c = n.child; c.valid(); ) {
         RenderNode* child = tree.node(c);
         if (!child) break;
 
-        if (child->layout_props.width < 0.f)  // -1 = auto: fill container
-            child->w = n.w;
+        if (child->layout_props.width < 0.f)  // -1 = auto: fill content area
+            child->w = avail_w;
 
-        child->x = 0.f;
+        child->x = vp.padding_left;
         child->y = y_offset;
         y_offset += child->h + gap;
 
@@ -414,16 +579,12 @@ void blockLayout(RenderNode& n, RenderTree& tree)
 
 } // anonymous namespace
 
-// ---- RenderTree ----
 
 RenderTree::RenderTree(std::size_t arena_size)
     : arena_(arena_size)
 {
 }
 
-// alloc — O(1) amortised via slot_map free-list.
-// Generational handles: a stale handle whose slot was reused returns nullptr
-// from node(), never silently aliasing the new occupant.
 
 NodeHandle RenderTree::alloc()
 {
@@ -463,7 +624,6 @@ void RenderTree::free(NodeHandle handle)
     }
 }
 
-// ---- Node access ----
 
 RenderNode* RenderTree::node(NodeHandle handle)
 {
@@ -475,7 +635,6 @@ const RenderNode* RenderTree::node(NodeHandle handle) const
     return nodes_.get(handle);
 }
 
-// ---- Tree structure ----
 
 void RenderTree::appendChild(NodeHandle parent, NodeHandle child)
 {
@@ -549,7 +708,6 @@ void RenderTree::detach(NodeHandle child)
     c->sibling = k_null_handle;
 }
 
-// ---- Dirty propagation ----
 
 void RenderTree::markDirty(NodeHandle handle)
 {
@@ -570,6 +728,126 @@ void RenderTree::markLayoutDirty(NodeHandle handle)
         n->dirty_render = true;
         h = n->parent;
     }
+}
+
+
+bool RenderTree::anyDirty(NodeHandle start) const noexcept
+{
+    if (!start.valid()) return false;
+
+    // Iterative DFS — avoids recursion overhead for deep trees.
+    // Using a small stack allocated on the C++ stack where possible;
+    // falls back to heap via std::vector for large scenes.
+    struct Frame { NodeHandle h; };
+    std::vector<Frame> stack;
+    stack.reserve(32);
+    stack.push_back({start});
+
+    while (!stack.empty()) {
+        const NodeHandle h = stack.back().h;
+        stack.pop_back();
+
+        const RenderNode* n = nodes_.get(h);
+        if (!n) continue;
+
+        if (n->dirty_render) return true;   // early-out on first hit
+
+        for (NodeHandle c = n->child; c.valid(); ) {
+            const RenderNode* cn = nodes_.get(c);
+            if (!cn) break;
+            stack.push_back({c});
+            c = cn->sibling;
+        }
+    }
+    return false;
+}
+
+void RenderTree::forceAllDirty(NodeHandle start) noexcept
+{
+    if (!start.valid()) return;
+
+    std::vector<NodeHandle> stack;
+    stack.reserve(32);
+    stack.push_back(start);
+
+    while (!stack.empty()) {
+        const NodeHandle h = stack.back();
+        stack.pop_back();
+
+        RenderNode* n = nodes_.get(h);
+        if (!n) continue;
+
+        n->dirty_render = true;
+
+        for (NodeHandle c = n->child; c.valid(); ) {
+            const RenderNode* cn = nodes_.get(c);
+            if (!cn) break;
+            stack.push_back(c);
+            c = cn->sibling;
+        }
+    }
+}
+
+
+NodeHandle RenderTree::findById(NodeHandle start, std::string_view id) const
+{
+    if (!start.valid()) return k_null_handle;
+    const RenderNode* n = nodes_.get(start);
+    if (!n) return k_null_handle;
+    if (n->style("id") == id) return start;
+    for (NodeHandle c = n->child; c.valid(); ) {
+        const RenderNode* cn = nodes_.get(c);
+        if (!cn) break;
+        const NodeHandle found = findById(c, id);
+        if (found.valid()) return found;
+        c = cn->sibling;
+    }
+    return k_null_handle;
+}
+
+std::vector<NodeHandle> RenderTree::findByClass(NodeHandle start,
+                                                std::string_view cls) const
+{
+    // Returns true when the space-separated token list contains `tok` exactly.
+    const auto hasToken = [](std::string_view list, std::string_view tok) noexcept {
+        std::size_t pos = 0;
+        while (pos <= list.size()) {
+            const std::size_t end  = list.find(' ', pos);
+            const std::size_t len  = (end == std::string_view::npos)
+                                     ? list.size() - pos
+                                     : end - pos;
+            if (list.substr(pos, len) == tok) return true;
+            if (end == std::string_view::npos) break;
+            pos = end + 1;
+        }
+        return false;
+    };
+
+    std::vector<NodeHandle> result;
+    std::vector<NodeHandle> stack;
+    if (start.valid()) stack.push_back(start);
+
+    while (!stack.empty()) {
+        const NodeHandle  h = stack.back();
+        stack.pop_back();
+        const RenderNode* n = nodes_.get(h);
+        if (!n) continue;
+
+        if (hasToken(n->style("class"), cls))
+            result.push_back(h);
+
+        // Push children right-to-left so the leftmost child is visited first.
+        std::vector<NodeHandle> kids;
+        for (NodeHandle c = n->child; c.valid(); ) {
+            const RenderNode* cn = nodes_.get(c);
+            if (!cn) break;
+            kids.push_back(c);
+            c = cn->sibling;
+        }
+        for (auto it = kids.rbegin(); it != kids.rend(); ++it)
+            stack.push_back(*it);
+    }
+    return result;
 }
 
 // traverse — iterative preorder DFS (parent before children, left-to-right).
@@ -614,7 +892,7 @@ void RenderTree::traverse(NodeHandle start, Fn&& fn)
     }
 }
 
-// ---- Frame lifecycle ----
+// Frame lifecycle
 
 void RenderTree::beginFrame()
 {
@@ -664,12 +942,55 @@ void RenderTree::render(NodeHandle root, RenderContext& ctx)
 {
     if (!root.valid()) return;
 
-    traverse(root, [&ctx](NodeHandle, RenderNode& n) {
-        if (n.draw && n.dirty_render) {
-            n.draw(ctx);
-            n.dirty_render = false;
+    // Iterative pre/post ("envelope") traversal.
+    //
+    // Each entry carries a "post" flag:
+    //   post=false  →  draw this node, push children, push post-sentinel if needed
+    //   post=true   →  all children done; call after_draw (used for scissor restore,
+    //                  mask pop, etc.)
+    //
+    // Children are pushed right-to-left so the leftmost child is processed first.
+
+    struct Entry { NodeHandle h; bool post; };
+    std::vector<Entry> stack;
+    stack.reserve(64);
+    stack.push_back({root, false});
+
+    while (!stack.empty()) {
+        const auto [h, post] = stack.back();
+        stack.pop_back();
+
+        RenderNode* n = nodes_.get(h);
+        if (!n) continue;
+
+        if (post) {
+            // Post-children hook — restore GPU state set in draw().
+            if (n->after_draw) n->after_draw(ctx);
+            continue;
         }
-    });
+
+        // Draw this node.
+        if (n->draw && n->dirty_render) {
+            n->draw(ctx);
+            n->dirty_render = false;
+        }
+
+        // If this node needs a post-children call, push the sentinel now
+        // so it fires after all descendants have been processed.
+        if (n->after_draw)
+            stack.push_back({h, true});
+
+        // Push children right-to-left so the leftmost is on top of the stack.
+        std::vector<NodeHandle> kids;
+        for (NodeHandle c = n->child; c.valid(); ) {
+            const RenderNode* cn = nodes_.get(c);
+            if (!cn) break;
+            kids.push_back(c);
+            c = cn->sibling;
+        }
+        for (auto it = kids.rbegin(); it != kids.rend(); ++it)
+            stack.push_back({*it, false});
+    }
 }
 
 } // namespace pce::sdlos

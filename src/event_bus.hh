@@ -22,6 +22,10 @@ public:
     void subscribe(const std::string& event_type, std::function<void(const std::string&)> callback) override;
     void publish(const std::string& event_type, const std::string& data = "") override;
 
+    /// Drop every subscription — call before loading a new scene so old
+    /// behaviour callbacks cannot fire against a destroyed RenderTree.
+    void reset();
+
     void unsubscribe(const std::string& event_type, std::function<void(const std::string&)> callback);
     void onAppLaunch(std::function<void(const std::string&)> callback);
     void onAppTerminate(std::function<void(const std::string&)> callback);

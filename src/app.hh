@@ -10,16 +10,20 @@ namespace pce::sdlos {
 
 struct AppBundle {
     std::string              name;
-    std::string              executable_path;
+    std::string              jade_path;        // .jade source — primary launch format
+    std::string              executable_path;  // native binary — future subprocess path
     std::string              icon_path;
     std::string              category;
     std::vector<std::string> dependencies;
 
-    /// Returns true when the bundle has the minimum fields required to launch.
+    /// Valid when name is set and at least one launch path is provided.
     [[nodiscard]] bool valid() const
     {
-        return !name.empty() && !executable_path.empty();
+        return !name.empty() && (!jade_path.empty() || !executable_path.empty());
     }
+
+    [[nodiscard]] bool isJadeApp()   const noexcept { return !jade_path.empty();       }
+    [[nodiscard]] bool isNativeApp() const noexcept { return !executable_path.empty(); }
 };
 
 // Lifecycle (driven by OS):

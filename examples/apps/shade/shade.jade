@@ -1,0 +1,57 @@
+// shade.jade — Realtime Shader Editor
+// Styles → shade.css  (loaded automatically by jade_host)
+//
+// Only per-node unique attrs remain inline:
+//   flexGrow, id, onclick, data-value, src, objectFit, _shader attrs,
+//   and the initial active-preset background override.
+
+row(id="root" flexGrow="1")
+
+  // Left: Shader Preset List ─────────────────────────────────────────────
+  col.sidebar(id="sidebar-presets" flexGrow="1")
+
+    div.section-title Shaders
+    div.divider
+
+    div.preset(onclick="shade:preset" data-value="perlin_noise"  backgroundColor="#6366f133" color="#ffffff") Perlin Noise
+    div.preset(onclick="shade:preset" data-value="tilt_blur") Tilt Blur
+    div.preset(onclick="shade:preset" data-value="contrast") Contrast
+    div.preset(onclick="shade:preset" data-value="vignette") Vignette
+    div.preset(onclick="shade:preset" data-value="none") None
+
+  // Main: Image Canvas ───────────────────────────────────────────────────
+  col.main-panel(id="main-panel" flexGrow="5")
+    img(id="shader-canvas" src="data/img/godot_lumberyard_demo.png" objectFit="cover" flexGrow="1" _shader="tiltblur" _shader_focusX="0.5" _shader_focusY="0.5" _shader_param0="50.0" _shader_param1="0.0" _shader_param2="0.0")
+
+  // Right: Numeric Param Controls ────────────────────────────────────────
+  col.sidebar(id="sidebar-params" flexGrow="1.2")
+
+    div.section-title Params
+    div.divider
+
+    div(id="active-name")
+    div(backgroundColor="#ffffff15" height="1")
+
+    // Scale ──────────────────────────────────────────────────────────────
+    div.param-label Scale
+    row.param-row
+      div.param-btn(id="btn-scale-dec" onclick="shade:dec" data-value="scale") -
+      div.param-val(id="val-scale" flexGrow="1") 1.0
+      div.param-btn(id="btn-scale-inc" onclick="shade:inc" data-value="scale") +
+
+    // Frequency ──────────────────────────────────────────────────────────
+    div.param-label Frequency
+    row.param-row
+      div.param-btn(id="btn-freq-dec" onclick="shade:dec" data-value="freq") -
+      div.param-val(id="val-freq" flexGrow="1") 0.02
+      div.param-btn(id="btn-freq-inc" onclick="shade:inc" data-value="freq") +
+
+    // Octaves ────────────────────────────────────────────────────────────
+    div.param-label Octaves
+    row.param-row
+      div.param-btn(id="btn-oct-dec" onclick="shade:dec" data-value="oct") -
+      div.param-val(id="val-oct" flexGrow="1") 4
+      div.param-btn(id="btn-oct-inc" onclick="shade:inc" data-value="oct") +
+
+    div(backgroundColor="#ffffff20" height="1")
+    div(id="status")

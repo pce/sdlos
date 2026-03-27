@@ -362,18 +362,14 @@ void Desktop::showSearchOverlay()
 {
     if (search_visible_.get()) return;
     search_visible_.set(true);
-    if (search_input_node_.valid()) {
-        widgets::inputBoxFocus(scene_tree_, search_input_node_);
-    }
+    if (search_input_box_) search_input_box_->focus();
 }
 
 void Desktop::hideSearchOverlay()
 {
     if (!search_visible_.get()) return;
     search_visible_.set(false);
-    if (search_input_node_.valid()) {
-        widgets::inputBoxUnfocus(scene_tree_, search_input_node_);
-    }
+    if (search_input_box_) search_input_box_->unfocus();
 }
 
 void Desktop::toggleSearchOverlay()
@@ -384,8 +380,8 @@ void Desktop::toggleSearchOverlay()
 
 void Desktop::routeOverlayEvent(const SDL_Event& event)
 {
-    if (!search_input_node_.valid()) return;
-    widgets::inputBoxHandleEvent(scene_tree_, search_input_node_, event);
+    if (!search_input_box_) return;
+    search_input_box_->handleEvent(event);
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +392,7 @@ void Desktop::routeOverlayEvent(const SDL_Event& event)
 //
 //   scene_root_
 //   └── search_overlay_node_          (hidden by default)
-//       └── search_input_node_        (InputBox, "Search…")
+//       └── search_input_box_         (TextBox, "Search…")
 //   └── layout_debug_node_            (F1 toggle, painted last / on top)
 //
 // The wallpaper pipeline CLEARs the framebuffer each frame — the overlay
@@ -459,7 +455,7 @@ void Desktop::buildDesktopScene()
     }
     scene_tree_.appendChild(scene_root_, search_overlay_node_);
 
-    // ── InputBox ─────────────────────────────────────────────────────────
+    // ── TextBox ──────────────────────────────────────────────────────────
     //
     // Layout is fixed against a 1280 × 800 reference viewport.
     // The flex layout pass (Phase 1) will make this respond to resize events.
@@ -470,20 +466,27 @@ void Desktop::buildDesktopScene()
     constexpr float kRefH   = 800.f;
     const float     kPanelY = kRefH * 0.25f;
 
-    search_input_node_ = widgets::inputBox(scene_tree_, {
-        .placeholder = "Search\xe2\x80\xa6",   // UTF-8 for "Search…"
-        .value       = &search_query_,
-        .x           = (kRefW - kInputW) * 0.5f,
-        .y           = kPanelY + (68.f - kInputH) * 0.5f,
-        .w           = kInputW,
-        .h           = kInputH,
-    });
-    scene_tree_.appendChild(search_overlay_node_, search_input_node_);
+    widgets::TextBoxConfig tbc;
+    tbc.placeholder = "Search\xe2\x80\xa6";   // UTF-8 "Search…"
+    tbc.value       = &search_query_;
+    tbc.w           = kInputW;
+    tbc.h           = kInputH;
+    tbc.on_submit   = [this](std::string_view) { hideSearchOverlay(); };
+
+    search_input_box_.emplace(widgets::makeTextBox(scene_tree_, std::move(tbc)));
+
+    // Absolute position in the reference viewport (TextBoxConfig has no x/y).
+    if (RenderNode* n = scene_tree_.node(search_input_box_->handle)) {
+        n->x = (kRefW - kInputW) * 0.5f;
+        n->y = kPanelY + (kInputH - kInputH) * 0.5f;  // centred in 68px panel
+    }
+
+    scene_tree_.appendChild(search_overlay_node_, *search_input_box_);
 
     // Bind: when search_visible_ changes, mark overlay + input dirty so the
     // change is visible on the very next frame.
     scene_tree_.bind(search_visible_, search_overlay_node_);
-    scene_tree_.bind(search_visible_, search_input_node_);
+    scene_tree_.bind(search_visible_, search_input_box_->handle);
 
     if (auto w = get(1)) {
         w->setScene(&scene_tree_, scene_root_);

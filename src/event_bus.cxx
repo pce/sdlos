@@ -5,6 +5,11 @@ namespace pce::sdlos {
 
 EventBus::EventBus() = default;
 
+void EventBus::reset() {
+    std::unique_lock<std::shared_mutex> lock(mutex);
+    subscribers.clear();
+}
+
 void EventBus::subscribe(const std::string& event_type, std::function<void(const std::string&)> callback) {
     std::unique_lock<std::shared_mutex> lock(mutex);
     subscribers[event_type].push_back(std::move(callback));

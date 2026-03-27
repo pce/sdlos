@@ -1,0 +1,54 @@
+== Calculator
+
+Events and behaviours attached, in reverse polish notation.
+
+renders
+
+    Calculator
+      → Column flex container
+        → Rows (flex containers)
+          → Buttons (flex items with grow factors)
+
+Every binary built with sdlos_jade_app() in CMake uses jade_host.cxx as its entry
+point.  
+Just the engine (sdlos_engine) and your jade scene.
+
+// SDLOS_JADE_ENTRY and SDLOS_APP_NAME are injected by the CMake function:
+// sdlos_jade_app(calculator examples/apps/calculator.jade)
+
+=== Behavior
+
+calculator_behavior.cxx — RPN (Reverse Polish Notation) stack machine.
+
+Included into jade_host.cxx via #include SDLOS_APP_BEHAVIOR.
+All sdlos headers (render_tree.hh, i_event_bus.hh etc.) are already in scope.
+
+=== State
+
+Every value on the stack is an int64_t scaled by kScale = 10^6.
+
+- Real value 3.14 → stored as 3_140_000
+- Real value 34.5 → stored as 34_500_000
+- Real value 0.001 → stored as 1_000
+
+This eliminates all IEEE-754 floating-point surprises:
+0.1 + 0.2 → 100_000 + 200_000 = 300_000 → display "0.3" (exact)
+
+=== Subscriptions
+
+EventBus topics per semantic action:
+calc:digit "0"–"9" "." append to the input buffer; display updates live
+calc:push "=" ENTER: push current input onto the stack
+calc:op "÷" "×" "−" "+" commit input (if any), pop 2, apply, push result
+calc:fn "AC" "±" "%" utility: clear / negate / percent
+
+Matching jade attributes (see calculator.jade):
+div.btn onclick="calc:digit" data-value="7"
+div.btn.eq onclick="calc:push" data-value="="
+div.btn.op onclick="calc:op" data-value="÷"
+div.btn (util) onclick="calc:fn" data-value="AC"
+
+=== State
+
+show: Writes state->display_str into the display node and marks it dirty,
+the tree is captured by reference and outlives the bus.

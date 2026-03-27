@@ -8,7 +8,6 @@
 
 namespace pce::sdlos {
 
-// ---- Lifecycle ----
 
 bool TextRenderer::init(SDL_GPUDevice* device, float default_size)
 {
@@ -82,7 +81,6 @@ void TextRenderer::shutdown()
     ready_  = false;
 }
 
-// ---- Font loading ----
 
 bool TextRenderer::loadFont(const std::string& path, float pt_size)
 {
@@ -160,7 +158,7 @@ bool TextRenderer::openFont(const std::string& path, float pt)
 
 GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size)
 {
-    if (!ready_) return {};
+    if (!ready_ || text.empty()) return {};
 
     const float  ns  = normaliseSize(size > 0.f ? size : default_size_);
     const Key    key { std::string(text), ns };
@@ -292,6 +290,29 @@ void TextRenderer::flushUploads(SDL_GPUCopyPass* copy_pass)
     pending_uploads_.clear();
 }
 
+std::pair<int, int> TextRenderer::measureText(std::string_view text, float /*size*/)
+{
+    if (!ready_ || text.empty()) return {0, 0};
+
+#ifdef SDL_TTF_AVAILABLE
+    if (!font_) return {0, 0};
+
+    int w = 0, h = 0;
+    // TTF_GetStringSize measures without allocating a GPU texture.
+    // `size` is accepted for API symmetry but currently ignored — the font is
+    // loaded at a fixed point size and all text (render + measure) uses it.
+    // Multi-size font caching is a future TODO.
+    if (!TTF_GetStringSize(font_, text.data(), text.size(), &w, &h)) {
+        // Measurement can fail for empty strings or if the font is broken;
+        // return {0, 0} so callers fall back gracefully.
+        return {0, 0};
+    }
+    return {w, h};
+#else
+    return {0, 0};
+#endif
+}
+
 void TextRenderer::clearCache()
 {
     if (device_) {
@@ -304,7 +325,6 @@ void TextRenderer::clearCache()
     cache_.clear();
 }
 
-// ---- Private helpers ----
 
 float TextRenderer::normaliseSize(float s) noexcept
 {

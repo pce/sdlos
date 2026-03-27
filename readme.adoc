@@ -17,6 +17,26 @@ Three valid boot targets, one codebase:
 
 ---
 
+== Standalone App
+
+[cols="1,2,3",options="header"]
+|===
+| CMake key | What it does | How it manifests
+
+| `<jade_file>`
+| Sets `SDLOS_JADE_ENTRY="<abs_path>"`
+| `jade_path` in `jade_host.cxx` — the binary always knows its jade file
+
+| `BEHAVIOR`
+| Sets `SDLOS_APP_BEHAVIOR="<abs_path>"`
+| `#include SDLOS_APP_BEHAVIOR` is compiled directly into `jade_host.cxx` — same TU, no linking tricks
+
+| `DATA_DIR`
+| `cmake --build` copies `data/` next to the executable
+| Fonts, shaders, images land at `<binary_dir>/data/…` so `SDL_GetBasePath()` finds them
+|===
+
+
 == Architecture
 
 ....
@@ -119,9 +139,9 @@ so the entire tree is laid out in one traversal with no fixpoint loop.
 | LayoutKind    | Debug colour | Algorithm
 | `None`        | gray   | Caller-managed. No automatic child positioning.
 | `Block`       | orange | Vertical stack. Children get full parent width.
-| `FlexRow`     | blue   | CSS flex row — `flex_grow`, `gap`, `justify`, `align`.
-| `FlexColumn`  | green  | CSS flex column — same props, vertical main axis.
-| `Grid`        | purple | Reserved — Phase 3.
+| `FlexRow`     | blue   | CSS flex row:`flex_grow`, `gap`, `justify`, `align`.
+| `FlexColumn`  | green  | CSS flex column: same props, vertical main axis.
+| `Grid`        | purple | Not yet implemented
 |===
 
 Press kbd:[F1] at runtime to toggle the layout debug overlay:
@@ -171,7 +191,25 @@ traffic during the hot path.
 |===
 
 `loadShader()` selects the right file by extension.
-Adding a backend = drop new shader files, no C++ changes.
+Adding a backend, drop new shader files, no C++ changes.
+
+
+image::examples/apps/shade/data/img/shade_titlt_blur.png[Shader Screenshot]
+
+---
+
+== Widgets
+
+Just Boxes atm.
+
+`TextBox`, `TextArea`, and `SelectBox` inherit template<typename StateT> struct WidgetView.
+
+        auto box = makeTextBox(tree, {.placeholder="Name", .w=280.f});
+        tree.appendChild(parent, box);   // implicit conversion to NodeHandle
+        box.setText("Alice");
+        box.focus();
+        std::string_view v = box.getText();
+
 
 ---
 
@@ -190,7 +228,7 @@ Adding a backend = drop new shader files, no C++ changes.
 
 == Text Rendering
 
-Fonts are *bundled under `assets/fonts/`* — no system font lookup.
+Fonts are *bundled under `assets/fonts/`*, no system font lookup.
 
 Two-phase upload aligned with the SDL3 GPU copy-pass / render-pass split:
 
@@ -201,6 +239,69 @@ draw callback             → sample atlas via "text" pipeline
 ....
 
 Cache key: `(text_string, normalised_size)` → `GlyphTexture { SDL_GPUTexture*, w, h }`.
+
+
+== JadeLite
+
+Jade is **not** a full implementation of Pug/Jade, nor of Modula-2 (a descendant of Pascal).
+
+Jade is designed to describe UI through **structure, style, and behavior** in a unified way.
+It emphasizes clarity, simplicity, and a direct mapping to UI elements.
+
+
+1. **Events** - things that happen TO a node (click, hover, reveal, scroll, interval)
+2. **Behaviors** - what a node DOES when an event fires (navigate, show, hide, toggle, etc.)
+
+
+Jadel source:
+
+    button.key(onclick="calc:press" data-value="7") 7
+    div.timer(interval-ms="1000" ontick="clock:tick")
+    div.card(onreveal="anim:enter")
+
+
+Runtime wiring:
+
+    click (SDL) → hitTest → node.style("onclick") → bus.publish(topic, data-value)
+    timer        → update() callback             → bus.publish(ontick, "")
+    reveal       → update() fires once           → bus.publish(onreveal, "")
+
+
+
+---
+
+== Build
+
+        rm -rf build
+        mkdir build  && cmake --preset macos-debug
+
+
+
+[cols="1,2",options="header"]
+|===
+| Step | Command (always from `userspace/`)
+
+| *Fresh configure*
+| `cmake --preset macos-debug`
+
+| *Build specific targets*
+| `cmake --build build --target shade calculator --parallel`
+
+| *Full rebuild*
+| `cmake --build build --parallel`
+
+| *Wipe and start over*
+| `rm -rf build && cmake --preset macos-debug`
+|===
+
+---
+
+== Unit-Test Suite
+
+
+        cmake --build build --target test_jade
+        ./build/test_jade --reporter compact
+
 
 ---
 
