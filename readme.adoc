@@ -1,0 +1,228 @@
+= sdlos — SDL3 GPU Render Core (C++23)
+:toc:
+:toclevels: 2
+
+A GPU-friendly framework for experimenting with a binary render tree,
+that might scale up to a forest.
+
+Three valid boot targets, one codebase:
+
+[cols="1,4",options="header"]
+|===
+| Mode | Description
+| *Shell*       | Desktop OS shell — shader wallpaper, search overlay, app launcher
+| *Framebuffer* | Boot directly into a GPU-driven framebuffer, no window manager required
+| *Harness*     | GPU experimentation — stress-test batching, layout algorithms, shaders
+|===
+
+---
+
+== Architecture
+
+....
+SDL_Event ──► Desktop::handleEvent()
+                  │
+OS::tick()  ──► Desktop::tick()
+                  │
+OS::render() ──► Desktop::render()
+                  │
+             SDLRenderer::Render()
+                  │
+         ┌────────┴────────┐
+    copy pass          render pass
+    (glyph upload)     wallpaper ──► 2D UI
+                                (future: 3D scene between)
+....
+
+`OS` wires components. `Desktop` owns windows and the shell scene graph.
+`SDLRenderer` owns the GPU device, pipelines, and the frame command buffer.
+No god objects. No shared mutable globals.
+
+---
+
+== Canvas & Dimensions
+
+The *swapchain texture* is the canvas. No hardcoded resolution anywhere.
+
+....
+SDL_AcquireGPUSwapchainTexture()
+        │
+        │  physical pixels — Retina-correct, never stale
+        ▼
+SDLRenderer::Render()
+  ├─ writes ──► scene_root_->w / scene_root_->h
+  │                   │
+  │             markLayoutDirty() on change
+  │                   │
+  │             flex / block layout cascade
+  │                   │
+  │             child->x, child->y, child->w, child->h
+  │
+  └─ ctx.viewport_w / ctx.viewport_h  (passed into every draw callback)
+....
+
+[cols="2,3,2",options="header"]
+|===
+| Source | What it gives you | Used for
+| `SDL_AcquireGPUSwapchainTexture` | Physical pixels, ground truth | Canvas dimensions
+| `scene_root_->w / h`            | Mirrored from swapchain each frame | Layout constraints
+| `ctx.viewport_w / h`            | Same value, in every draw callback | Draw calls
+| `SDL_EVENT_WINDOW_RESIZED` data1/data2 | *Logical* pixels (½ on Retina) | NOT used for layout
+|===
+
+Full-viewport nodes (overlays) mirror `scene_root_` via an `update()` callback.
+`update()` runs unconditionally every frame regardless of dirty flags.
+
+---
+
+== Render Tree
+
+Left-Child Right-Sibling (LCRS) topology.
+All nodes live in a `slot_map<RenderNode>` with stable `NodeHandle` (index + generation),
+no pointer invalidation on insert.
+
+[source,cpp]
+----
+struct RenderNode {
+    NodeHandle parent, child, sibling;
+    float x, y, w, h;
+
+    bool dirty_layout;   // re-run layout algorithm this frame
+    bool dirty_render;   // re-call draw() this frame
+
+    LayoutKind  layout_kind;   // None / Block / FlexRow / FlexColumn / Grid
+    LayoutProps layout_props;  // flex_grow, flex_shrink, gap, justify, align
+
+    std::function<void(RenderContext&)> draw;
+    std::function<void()>              update;
+    std::any                           state;   // widget-local mutable state
+};
+----
+
+Dirty propagation travels *up* to ancestors (`markDirty`).
+Layout cascade travels *down* via preorder traversal in `update()`.
+
+....
+markDirty(node)        ──► node → parent → grandparent   (render dirty, upward)
+markLayoutDirty(node)  ──► preorder cascade next frame   (layout dirty, downward)
+....
+
+---
+
+== Layout Engine
+
+Single-pass preorder cascade: parent layout resolves before children,
+so the entire tree is laid out in one traversal with no fixpoint loop.
+
+[cols="1,1,3",options="header"]
+|===
+| LayoutKind    | Debug colour | Algorithm
+| `None`        | gray   | Caller-managed. No automatic child positioning.
+| `Block`       | orange | Vertical stack. Children get full parent width.
+| `FlexRow`     | blue   | CSS flex row — `flex_grow`, `gap`, `justify`, `align`.
+| `FlexColumn`  | green  | CSS flex column — same props, vertical main axis.
+| `Grid`        | purple | Reserved — Phase 3.
+|===
+
+Press kbd:[F1] at runtime to toggle the layout debug overlay:
+every node with non-zero area is outlined in its kind colour with a
+position + size label.
+
+---
+
+== Frame Pipeline
+
+....
+ ┌──────────────────────────────────────────────────────────┐
+ │  per frame                                               │
+ │                                                          │
+ │  1  SDL_AcquireGPUCommandBuffer()                        │
+ │  2  SDL_AcquireGPUSwapchainTexture() → width, height     │
+ │  3  sync scene_root_->w/h  (if changed → markLayoutDirty)│
+ │                                                          │
+ │  ── copy pass ─────────────────────────────────────────  │
+ │  4  TextRenderer::flushUploads()   glyph textures to GPU │
+ │                                                          │
+ │  ── render pass ───────────────────────────────────────  │
+ │  5  wallpaper shader  (fullscreen triangle, FBM)         │
+ │  6  scene_tree_->beginFrame()   reset frame_arena        │
+ │  7  scene_tree_->update()       layout cascade + ticks   │
+ │  8  scene_tree_->render()       draw dirty nodes only    │
+ │                                                          │
+ │  9  SDL_EndGPURenderPass()                               │
+ │  10 SDL_SubmitGPUCommandBuffer()                         │
+ └──────────────────────────────────────────────────────────┘
+....
+
+The `frame_arena` is reset at step 6.
+All transient allocations (layout scratch buffers, vertex staging) come from it with zero heap
+traffic during the hot path.
+
+---
+
+== GPU Backends
+
+[cols="1,1,1,2",options="header"]
+|===
+| Platform      | SDL3 backend  | Shader format | Source location
+| macOS / iOS   | Metal         | MSL           | `assets/shaders/msl/*.metal`
+| Linux         | Vulkan        | SPIR-V        | `assets/shaders/glsl/` → `spv/`
+| Windows       | Vulkan / D3D12| SPIR-V / DXIL | same
+|===
+
+`loadShader()` selects the right file by extension.
+Adding a backend = drop new shader files, no C++ changes.
+
+---
+
+== Containers
+
+[cols="1,1,3",options="header"]
+|===
+| Type | Inline capacity | Purpose
+| `small_vector<T, N>`      | N items on stack  | Widget child lists, draw batches
+| `small_flat_map<K, V, N>` | N pairs on stack  | Pipeline cache, style properties
+| `slot_map<T>`             | heap, stable IDs  | `RenderNode` storage
+| `frame_arena`             | configurable bump | Per-frame scratch, reset each frame
+|===
+
+---
+
+== Text Rendering
+
+Fonts are *bundled under `assets/fonts/`* — no system font lookup.
+
+Two-phase upload aligned with the SDL3 GPU copy-pass / render-pass split:
+
+....
+ensureTexture(text, size) → CPU rasterise (SDL_ttf) + queue upload
+flushUploads(copy_pass)   → GPU upload   (copy pass, before render pass)
+draw callback             → sample atlas via "text" pipeline
+....
+
+Cache key: `(text_string, normalised_size)` → `GlyphTexture { SDL_GPUTexture*, w, h }`.
+
+---
+
+== Current Limitations
+
+* No 3D pipeline (Phase 7 — USD / PBR / skeletal animation)
+* No depth buffer
+* No hit-testing (Phase 2.2)
+* No percentage sizing (`width: 100%`); use `flex_grow: 1` instead
+* `SDL_EVENT_WINDOW_RESIZED` gives logical pixels only;
+  layout always reads physical pixels from the swapchain
+
+---
+
+== Philosophy
+
+"Make the GPU happy by making the CPU predictable."
+
+Linear memory. Stable IDs. Explicit dirty marks. No surprise allocations.
+
+---
+
+== License
+
+MIT

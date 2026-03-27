@@ -4,14 +4,7 @@
 #include <iostream>
 #include <sstream>
 
-// dirty_ is declared mutable in notification_system.hh so render() const
-// can clear it.  If the member is missing, add it there.
-
 namespace pce::sdlos {
-
-// ===========================================================================
-// Notification — factory helpers
-// ===========================================================================
 
 Notification Notification::make(const std::string& title,
                                  const std::string& message,
@@ -20,9 +13,9 @@ Notification Notification::make(const std::string& title,
     Notification n;
     // ID is assigned by NotificationCenter::post(); leave empty here so the
     // struct remains a plain value type with no external dependencies.
-    n.title        = title;
-    n.message      = message;
-    n.timestamp    = std::chrono::steady_clock::now();
+    n.title         = title;
+    n.message       = message;
+    n.timestamp     = std::chrono::steady_clock::now();
     n.duration_secs = duration_secs;
     return n;
 }
@@ -42,22 +35,13 @@ Notification Notification::success(const std::string& message)
     return make("Success", message);
 }
 
-// ===========================================================================
-// NotificationCenter
-// ===========================================================================
-
 NotificationCenter::NotificationCenter()
     : last_tick_(std::chrono::steady_clock::now())
 {
 }
 
-// ---------------------------------------------------------------------------
-// Post
-// ---------------------------------------------------------------------------
-
 void NotificationCenter::post(Notification notification)
 {
-    // Assign a unique ID if the caller left it empty.
     if (notification.id.empty()) {
         std::ostringstream ss;
         ss << "notif-" << next_id_++;
@@ -78,10 +62,6 @@ void NotificationCenter::post(const std::string& title,
     post(Notification::make(title, message, duration_secs));
 }
 
-// ---------------------------------------------------------------------------
-// Dismiss
-// ---------------------------------------------------------------------------
-
 void NotificationCenter::dismiss(const std::string& id)
 {
     const auto it = std::remove_if(
@@ -89,17 +69,12 @@ void NotificationCenter::dismiss(const std::string& id)
         [&id](const Notification& n) { return n.id == id; });
 
     if (it != active_.end()) {
-        // Fire the on_close callback if one was set.
         if (it->on_close) {
             it->on_close();
         }
         active_.erase(it, active_.end());
     }
 }
-
-// ---------------------------------------------------------------------------
-// Main-loop hooks
-// ---------------------------------------------------------------------------
 
 void NotificationCenter::tick()
 {
@@ -113,7 +88,6 @@ void NotificationCenter::tick()
     if (elapsed < 1) return;
     last_tick_ = now;
 
-    // --- Expire active notifications whose duration has elapsed ------------
     const auto expired = std::remove_if(
         active_.begin(), active_.end(),
         [&now](const Notification& n) {
@@ -131,7 +105,6 @@ void NotificationCenter::tick()
         dirty_ = true;
     }
 
-    // --- Promote pending notifications into the active list ----------------
     while (!pending_.empty() && active_.size() < k_max_active) {
         active_.push_back(std::move(pending_.front()));
         pending_.pop();
@@ -142,9 +115,8 @@ void NotificationCenter::tick()
 void NotificationCenter::render() const
 {
     // Stub: write to stdout only when the active list actually changed.
-    // The dirty_ flag is set by tick() whenever notifications are promoted
-    // or expired; it is cleared here after printing so we never spam the
-    // same line every frame.
+    // dirty_ is set by tick() on any change and cleared here so the same
+    // list is never re-printed every frame.
     if (!dirty_) return;
     dirty_ = false;
 

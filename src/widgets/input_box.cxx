@@ -1,32 +1,3 @@
-// input_box.cxx — InputBox widget implementation.
-//
-// Namespace : pce::sdlos::widgets
-// File      : src/widgets/input_box.cxx
-//
-// State model
-// ===========
-// All mutable widget state lives in a heap-allocated InputBoxState managed
-// by a shared_ptr.  The shared_ptr is stored in RenderNode::state (as
-// std::any<shared_ptr<InputBoxState>>) and is also captured by value in the
-// draw lambda.  This gives the lambda a stable pointer to the state without
-// ever storing a raw pointer to a slot_map entry (which can move on insert).
-//
-// Draw order (back-to-front)
-// ==========================
-//   1. Background rect
-//   2. Border  (four 1-px rects)
-//   3. Placeholder text  OR  active text
-//   4. Blinking cursor rect (when focused)
-//
-// Cursor blink
-// ============
-// Computed entirely from SDL_GetTicks() inside draw() — no update() callback
-// needed.  Desktop::tick() calls markSubtreeDirty() on the search overlay
-// every frame while it is visible, so draw() is already called every frame.
-//
-// No exception handling.  A bad_any_cast is a programmer bug — assert in
-// debug, crash-fast in release.
-
 #include "input_box.hh"
 
 #include <SDL3/SDL.h>
@@ -39,22 +10,14 @@
 
 namespace pce::sdlos::widgets {
 
-// ===========================================================================
-// Internal helpers
-// ===========================================================================
-
 namespace {
 
-// Retrieve a non-owning pointer to the shared state stored in node->state.
-// Returns nullptr on type mismatch (programmer error; assert fires in debug).
 std::shared_ptr<InputBoxState>* sharedStateOf(RenderNode* node) noexcept
 {
     if (!node) return nullptr;
     return std::any_cast<std::shared_ptr<InputBoxState>>(&node->state);
 }
 
-// Insert UTF-8 bytes at the cursor position, honouring max_length (bytes).
-// Returns true if the text changed.
 bool insertText(InputBoxState& s, std::string_view chars)
 {
     std::string next = s.text;
@@ -68,8 +31,6 @@ bool insertText(InputBoxState& s, std::string_view chars)
     return true;
 }
 
-// Erase the UTF-8 code-point immediately to the left of the cursor.
-// Returns true if anything was erased.
 bool eraseLeft(InputBoxState& s)
 {
     if (s.cursor_pos == 0 || s.text.empty()) return false;
@@ -86,7 +47,6 @@ bool eraseLeft(InputBoxState& s)
     return true;
 }
 
-// Draw a 1-px border as four axis-aligned filled rects.
 void drawBorder(RenderContext& ctx,
                 float x, float y, float w, float h,
                 const Color& c)
@@ -98,10 +58,6 @@ void drawBorder(RenderContext& ctx,
 }
 
 } // anonymous namespace
-
-// ===========================================================================
-// inputBox — factory
-// ===========================================================================
 
 Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
 {
@@ -116,23 +72,15 @@ Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
     n->dirty_render = true;
     n->dirty_layout = false;
 
-    // Heap-allocate state so the draw lambda can capture a stable pointer.
     auto state = std::make_shared<InputBoxState>();
     state->cfg  = std::move(cfg);
 
-    // Store the shared_ptr in the node so external helpers can reach it.
-    n->state = state;   // std::any holds shared_ptr<InputBoxState>
+    n->state = state;
 
-    // -----------------------------------------------------------------------
-    // draw — void(RenderContext&)
-    //
-    // Captures the shared_ptr<InputBoxState> by value.  The RenderTree owns
-    // the node; the node owns the shared_ptr via std::any; the lambda owns a
-    // second reference.  The state is freed when both the node and the lambda
-    // are destroyed (i.e. when tree.free(h) is called).
-    // -----------------------------------------------------------------------
+    // Lambda captures shared_ptr by value; state is freed only when both
+    // the node (via std::any) and the lambda are destroyed.
     n->draw = [state](RenderContext& ctx) {
-        const InputBoxState& s   = *state;
+        const InputBoxState& s    = *state;
         const InputBoxConfig& cfg = s.cfg;
 
         const float x = cfg.x;
@@ -140,15 +88,12 @@ Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
         const float w = cfg.w;
         const float h = cfg.h;
 
-        // 1. Background.
         const Color& bg = s.focused ? cfg.bg_focused : cfg.bg;
         ctx.drawRect(x, y, w, h, bg.r, bg.g, bg.b, bg.a);
 
-        // 2. Border.
         const Color& bord = s.focused ? cfg.border_focus : cfg.border;
         drawBorder(ctx, x + 1.f, y + 1.f, w - 2.f, h - 2.f, bord);
 
-        // 3. Placeholder or active text.
         const float tx = x + cfg.padding.left;
         const float ty = y + (h - cfg.font_size) * 0.5f;
 
@@ -158,7 +103,6 @@ Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
                          cfg.font_size, pc.r, pc.g, pc.b, pc.a);
         } else if (!s.text.empty()) {
             const Color& tc = cfg.text_color;
-            // Secure fields replace every glyph with '*'.
             const std::string& display = cfg.secure
                 ? std::string(s.text.size(), '*')
                 : s.text;
@@ -166,17 +110,15 @@ Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
                          tc.r, tc.g, tc.b, tc.a);
         }
 
-        // 4. Cursor — blinking at 0.5 Hz, derived from wall-clock time.
-        //    Desktop::tick() re-dirties the overlay every frame while visible,
-        //    so this draw callback is invoked on every frame; no update()
-        //    callback or explicit markDirty() is needed for the blink.
+        // Blink derived from wall-clock time; no update() or explicit
+        // markDirty() needed because Desktop::tick() re-dirties the overlay
+        // every frame while it is visible.
         if (s.focused) {
             const Uint64 ms    = SDL_GetTicks();
             const bool   blink = (ms / 500u) % 2u == 0u;
 
             if (blink) {
-                // Approximate cursor x with a fixed char-width factor.
-                // Phase 2 will replace this with TextRenderer::dimensions().
+                // TODO(phase-2): replace with TextRenderer::dimensions().
                 const float char_w   = cfg.font_size * 0.55f;
                 const float cursor_x = tx + static_cast<float>(s.cursor_pos) * char_w;
                 const float cursor_y = y + (h - cfg.font_size * 1.25f) * 0.5f;
@@ -187,14 +129,8 @@ Widget inputBox(RenderTree& tree, InputBoxConfig cfg)
         }
     };
 
-    // No update() callback — blink state is computed from wall-clock time in draw().
-
     return h;
 }
-
-// ===========================================================================
-// Event forwarding
-// ===========================================================================
 
 void inputBoxHandleEvent(RenderTree& tree, NodeHandle handle,
                          const SDL_Event& event)
@@ -211,7 +147,6 @@ void inputBoxHandleEvent(RenderTree& tree, NodeHandle handle,
 
     switch (event.type) {
 
-    // Focus / unfocus by hit-test on mouse click.
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         const float mx  = event.button.x;
         const float my  = event.button.y;
@@ -226,7 +161,6 @@ void inputBoxHandleEvent(RenderTree& tree, NodeHandle handle,
         break;
     }
 
-    // Printable characters from the OS input method.
     case SDL_EVENT_TEXT_INPUT: {
         if (!s.focused) break;
         if (insertText(s, event.text.text)) {
@@ -237,7 +171,6 @@ void inputBoxHandleEvent(RenderTree& tree, NodeHandle handle,
         break;
     }
 
-    // Navigation, editing, submit.
     case SDL_EVENT_KEY_DOWN: {
         if (!s.focused) break;
         const SDL_Keycode key = event.key.key;
@@ -300,10 +233,6 @@ void inputBoxHandleEvent(RenderTree& tree, NodeHandle handle,
     }
 }
 
-// ===========================================================================
-// Focus helpers
-// ===========================================================================
-
 void inputBoxFocus(RenderTree& tree, NodeHandle handle)
 {
     RenderNode* node = tree.node(handle);
@@ -315,10 +244,10 @@ void inputBoxFocus(RenderTree& tree, NodeHandle handle)
     InputBoxState& s = **sp;
     if (s.focused) return;
 
-    s.focused        = true;
-    s.cursor_pos     = s.text.size();   // place cursor at end on focus
+    s.focused    = true;
+    s.cursor_pos = s.text.size();  // place cursor at end
 
-    SDL_StartTextInput(nullptr);        // enable IME / text input events
+    SDL_StartTextInput(nullptr);   // enable OS IME / text-input events
     tree.markDirty(handle);
 }
 
@@ -338,10 +267,6 @@ void inputBoxUnfocus(RenderTree& tree, NodeHandle handle)
     SDL_StopTextInput(nullptr);
     tree.markDirty(handle);
 }
-
-// ===========================================================================
-// Text accessors
-// ===========================================================================
 
 std::string inputBoxGetText(const RenderTree& tree, NodeHandle handle)
 {

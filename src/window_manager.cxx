@@ -1,7 +1,3 @@
-// WindowManager.cxx
-// Implements Window (self-contained SDL_Window + isolated SDL_GPUDevice) and
-// WindowManager (lifecycle owner / event router for all live windows).
-//
 // Isolation guarantee
 // -------------------
 // Every Window constructor:
@@ -34,18 +30,11 @@
 
 namespace pce::sdlos {
 
-// ===========================================================================
-// Window
-// ===========================================================================
-
 Window::Window(int id, const std::string& title,
                int x, int y, int w, int h,
                SDL_WindowFlags flags)
     : id_(id), title_(title), width_(w), height_(h)
 {
-    // ------------------------------------------------------------------
-    // 1. Create the native OS window.
-    // ------------------------------------------------------------------
     SDL_Window* raw = SDL_CreateWindow(title.c_str(), w, h, flags);
     if (!raw) {
         throw std::runtime_error(
@@ -59,16 +48,8 @@ Window::Window(int id, const std::string& title,
     // Reflect the actual size that SDL ended up with (may differ for HiDPI).
     SDL_GetWindowSize(raw, &width_, &height_);
 
-    // Make the window visible immediately.
     SDL_ShowWindow(raw);
 
-    // ------------------------------------------------------------------
-    // 2. Create an isolated GPU context for this window.
-    //    SDLRenderer::Initialize() calls SDL_CreateGPUDevice internally,
-    //    then SDL_ClaimWindowForGPUDevice, then builds the shader pipeline.
-    //    If it fails we throw so the Window is never in a half-initialised
-    //    state; the sdl::handle destructor will clean up sdl_window_.
-    // ------------------------------------------------------------------
     renderer_ = std::make_unique<SDLRenderer>();
     if (!renderer_->Initialize(raw)) {
         // renderer_ holds no GPU resources on failure, safe to reset.
@@ -92,10 +73,6 @@ Window::~Window()
     sdl_window_.reset();
 }
 
-// ---------------------------------------------------------------------------
-// IWindow — visibility
-// ---------------------------------------------------------------------------
-
 void Window::show()
 {
     if (sdl_window_) SDL_ShowWindow(sdl_window_.get());
@@ -105,10 +82,6 @@ void Window::hide()
 {
     if (sdl_window_) SDL_HideWindow(sdl_window_.get());
 }
-
-// ---------------------------------------------------------------------------
-// IWindow — geometry
-// ---------------------------------------------------------------------------
 
 void Window::resize(int w, int h)
 {
@@ -121,10 +94,6 @@ void Window::move(int x, int y)
 {
     if (sdl_window_) SDL_SetWindowPosition(sdl_window_.get(), x, y);
 }
-
-// ---------------------------------------------------------------------------
-// IWindow — focus / state
-// ---------------------------------------------------------------------------
 
 void Window::focus()
 {
@@ -151,13 +120,9 @@ void Window::restore()
     if (sdl_window_) SDL_RestoreWindow(sdl_window_.get());
 }
 
-// ---------------------------------------------------------------------------
-// Per-frame
-// ---------------------------------------------------------------------------
-
 void Window::render(double timeSeconds)
 {
-    if (is_minimized_) return;   // nothing to present when minimised
+    if (is_minimized_) return;
     if (renderer_)     renderer_->Render(timeSeconds);
 }
 
@@ -196,10 +161,6 @@ void Window::handleEvent(const SDL_Event& e)
     }
 }
 
-// ---------------------------------------------------------------------------
-// GPU context / WindowManager internal
-// ---------------------------------------------------------------------------
-
 SDL_GPUDevice* Window::getGPUDevice() const
 {
     return renderer_ ? renderer_->GetDevice() : nullptr;
@@ -210,23 +171,17 @@ SDL_WindowID Window::sdlWindowId() const
     return sdl_window_ ? SDL_GetWindowID(sdl_window_.get()) : 0;
 }
 
-// ===========================================================================
-// WindowManager
-// ===========================================================================
-
 int WindowManager::createWindow(const std::string& title,
                                 int x, int y, int w, int h,
                                 SDL_WindowFlags flags)
 {
     const int app_id = next_id_++;
 
-    // Window constructor throws on failure — let it propagate so the caller
-    // knows the window was not created.
     auto win = std::make_shared<Window>(app_id, title, x, y, w, h, flags);
 
     const SDL_WindowID sdl_id = win->sdlWindowId();
 
-    windows_[app_id]      = win;
+    windows_[app_id]       = win;
     sdl_to_app_id_[sdl_id] = app_id;
 
     return app_id;
@@ -237,23 +192,18 @@ void WindowManager::destroyWindow(int id)
     auto it = windows_.find(id);
     if (it == windows_.end()) return;
 
-    // Remove the SDL_WindowID → app_id mapping first.
     sdl_to_app_id_.erase(it->second->sdlWindowId());
 
-    // Erase the Window; shared_ptr refcount drop triggers destructor which
-    // releases GPU context then the SDL window in the correct order.
+    // shared_ptr drop triggers the destructor, which releases GPU context
+    // then the SDL window in the correct order.
     windows_.erase(it);
 }
-
-// ---------------------------------------------------------------------------
-// Main-loop hooks
-// ---------------------------------------------------------------------------
 
 void WindowManager::handleEvent(SDL_Event* event)
 {
     if (!event) return;
 
-    // Only handle SDL window events; everything else is for the OS event bus.
+    // Only window events; everything else belongs to the OS event bus.
     if (event->type < SDL_EVENT_WINDOW_FIRST ||
         event->type > SDL_EVENT_WINDOW_LAST)
         return;
@@ -282,10 +232,6 @@ void WindowManager::render()
     }
 }
 
-// ---------------------------------------------------------------------------
-// Z-order / focus
-// ---------------------------------------------------------------------------
-
 void WindowManager::bringToFront(int id)
 {
     if (auto w = getWindow(id)) w->focus();
@@ -302,10 +248,6 @@ void WindowManager::setFocus(int id)
 {
     if (auto w = getWindow(id)) w->focus();
 }
-
-// ---------------------------------------------------------------------------
-// Queries
-// ---------------------------------------------------------------------------
 
 std::shared_ptr<Window> WindowManager::getWindow(int id) const
 {

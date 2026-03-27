@@ -102,7 +102,6 @@ std::vector<std::string> VirtualFileSystem::listDirectory(const std::string& pat
             result.push_back(entry.path().filename().string());
         }
     } catch (const std::exception&) {
-        // Return empty vector on error
     }
     return result;
 }

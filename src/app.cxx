@@ -1,14 +1,8 @@
-// App.cxx — Process execution context implementation.
-
 #include "app.hh"
 
 #include <iostream>
 
 namespace pce::sdlos {
-
-// ---------------------------------------------------------------------------
-// Process
-// ---------------------------------------------------------------------------
 
 Process::Process(std::string app_name, int window_id)
     : name_(std::move(app_name)), window_id_(window_id)
@@ -18,8 +12,8 @@ Process::Process(std::string app_name, int window_id)
 Process::~Process()
 {
     // Signal the task to stop, then wait for the thread to exit.
-    // This guarantees the thread is never left running past the object's
-    // lifetime regardless of how the caller cleans up.
+    // Guarantees the thread is never left running past the object's lifetime
+    // regardless of how the caller cleans up.
     stop();
     join();
 }
@@ -56,8 +50,8 @@ void Process::start(std::function<void()> task)
 
 void Process::stop()
 {
-    // Flip the flag so the running task can observe it via isRunning().
-    // We do not forcibly terminate the thread — cooperative cancellation only.
+    // Cooperative cancellation only — we do not forcibly terminate the thread.
+    // The running task must observe isRunning() to exit in a timely manner.
     running_.store(false);
 }
 

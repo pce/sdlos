@@ -1,15 +1,5 @@
-// OS.cxx — Top-level system coordinator implementation.
-//
 // boot() → run() → shutdown() is the only valid lifecycle sequence.
-// Calling run() without a successful boot() is a no-op.
-//
-// Launch sequence (per application):
-//   1. install(bundle)  — registers the bundle in the catalog.
-//   2. launch(name)     — finds the bundle, opens an isolated Window via
-//                         desktop_, constructs a Process, calls start().
-//   3. reapFinished()   — called every frame; when a Process reports
-//                         !isRunning() its window is closed and the
-//                         Process is destroyed (thread joined in dtor).
+// Calling run() without a successful boot() is a no-op (desktop will be empty).
 
 #include "os.hh"
 
@@ -28,8 +18,7 @@ namespace pce::sdlos {
 
 namespace {
 
-// Signal-driven termination flag.
-// Only the atomic store is called from the handler — no heap, no I/O.
+// Only the atomic store is called from the signal handler — no heap, no I/O.
 std::atomic<bool> g_quit_requested{false};
 
 extern "C" void signal_handler(int) noexcept
@@ -121,7 +110,6 @@ void OS::run()
             handleSystemEvents();
         }
 
-        // Honour OS-level signals (SIGINT / SIGTERM).
         if (g_quit_requested.load()) {
             running_.store(false);
             break;
@@ -142,7 +130,6 @@ void OS::shutdown()
 {
     running_.store(false);
 
-    // Stop and reap all live processes before destroying their windows.
     for (auto& [wid, proc] : processes_) {
         proc->stop();
     }
@@ -177,7 +164,6 @@ int OS::launch(const std::string& app_name)
         return -1;
     }
 
-    // ---- Open an isolated window for this application --------------------
     int window_id = -1;
     try {
         window_id = desktop_.open(
@@ -190,11 +176,10 @@ int OS::launch(const std::string& app_name)
         return -1;
     }
 
-    // ---- Construct and start the process ---------------------------------
     auto proc = std::make_unique<Process>(bundle->name, window_id);
 
-    // Capture what the task needs by value so it is safe to run on a
-    // background thread without touching the catalog or desktop directly.
+    // Capture by value so the task is safe to run on a background thread
+    // without touching the catalog or desktop directly.
     const std::string name = bundle->name;
     const std::string path = bundle->executable_path;
 
@@ -283,7 +268,6 @@ void OS::reapFinished()
 
 void OS::cleanup()
 {
-    // services_ are stateless callables — just clear them.
     services_.clear();
     fs_.reset();
 }

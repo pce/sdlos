@@ -1,20 +1,3 @@
-
-// SDLRenderer.cxx
-// SDL3 GPU-based renderer implementation for pce::sdlos
-//
-// - Uses SDL's GPU API to create a device (preferring Metal on macOS via MSL).
-// - Compiles MSL vertex/fragment shaders at runtime and creates a graphics pipeline.
-// - Provides a simple fullscreen pass renderer with a time uniform pushed every frame.
-// - Supports hot-reload of the fragment shader via file mtime (ReloadShader).
-//
-// Notes:
-//  - The shader entrypoints for MSL are expected to be named `main0` (vertex + fragment).
-//  - The fragment shader should declare a small uniform buffer at [[buffer(0)]] with a
-//    float (we push a 16-byte block where .x == time).
-//
-// This file is intended to be self-contained and should compile with the SDL3 GPU
-// headers included in the repository deps.
-
 #include "sdl_renderer.hh"
 
 #include <iostream>
@@ -30,7 +13,6 @@ SDLRenderer::~SDLRenderer() {
     Shutdown();
 }
 
-// Helper: read an entire text file into a string.
 std::string SDLRenderer::ReadTextFile(const std::string& path) {
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) {
@@ -67,10 +49,9 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
         return false;
     }
 
-    // Prefer Metal + MSL on platforms that support it.
+    // Prefer Metal + MSL; try named driver first, then any compatible driver.
     device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, false, "metal");
     if (!device_) {
-        // Try without forcing a specific driver name; allow any driver that supports MSL.
         device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, false, nullptr);
     }
     if (!device_) {
@@ -78,7 +59,6 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
         return false;
     }
 
-    // Claim the window so SDL manages swapchain / presentation for it.
     if (!SDL_ClaimWindowForGPUDevice(device_, window)) {
         std::cerr << "SDLRenderer::CreateDeviceForWindow - SDL_ClaimWindowForGPUDevice failed: " << SDL_GetError() << "\n";
         SDL_DestroyGPUDevice(device_);
@@ -96,7 +76,6 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
         return false;
     }
 
-    // Create vertex shader
     SDL_GPUShaderCreateInfo vsc{};
     vsc.code = reinterpret_cast<const Uint8*>(vertSource.data());
     vsc.code_size = vertSource.size();
@@ -113,7 +92,6 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
         return false;
     }
 
-    // Create fragment shader
     SDL_GPUShaderCreateInfo fsc{};
     fsc.code = reinterpret_cast<const Uint8*>(fragSource.data());
     fsc.code_size = fragSource.size();
@@ -121,7 +99,7 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
     fsc.format = SDL_GPU_SHADERFORMAT_MSL;
     fsc.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
     fsc.num_samplers = 0;
-    fsc.num_uniform_buffers = 1; // we push a small time uniform
+    fsc.num_uniform_buffers = 1;
     fsc.props = 0;
 
     SDL_GPUShader* newFragment = SDL_CreateGPUShader(device_, &fsc);
@@ -131,9 +109,8 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
         return false;
     }
 
-    // Pipeline create info
     SDL_GPUGraphicsPipelineCreateInfo pci{};
-    // Vertex input state: empty (we rely on vertex_id in shader)
+    // No vertex buffer: geometry generated from vertex_id in the shader.
     SDL_GPUVertexInputState vis{};
     vis.vertex_buffer_descriptions = nullptr;
     vis.num_vertex_buffers = 0;
@@ -143,10 +120,8 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
 
     pci.vertex_shader = newVertex;
     pci.fragment_shader = newFragment;
-
     pci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
-    // Rasterizer / multisample / depth-stencil default (zero-initialized)
     SDL_GPURasterizerState ras{};
     pci.rasterizer_state = ras;
 
@@ -156,7 +131,6 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
     SDL_GPUDepthStencilState ds{};
     pci.depth_stencil_state = ds;
 
-    // Target info: use the swapchain texture format for this window/device.
     SDL_GPUColorTargetDescription colorDesc{};
     colorDesc.format = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
     SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
@@ -173,7 +147,7 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
         return false;
     }
 
-    // Success: replace old pipeline & shaders atomically
+    // Replace old pipeline and shaders atomically.
     if (pipeline_) {
         SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);
         pipeline_ = nullptr;
@@ -206,19 +180,16 @@ bool SDLRenderer::Initialize(SDL_Window* window) {
         return true;
     }
 
-    // Create device and claim window
     if (!CreateDeviceForWindow(window)) {
         return false;
     }
 
-    // Attempt to find shader files in the standard assets location
-    // Vertex shader (optional; fallback to built-in)
     std::string vertPath = vertex_shader_path_.empty() ? "assets/shaders/desktop.vert.metal" : vertex_shader_path_;
     std::string fragPath = shader_path_.empty() ? "assets/shaders/desktop.frag.metal" : shader_path_;
 
     std::string vertCode = ReadTextFile(vertPath);
     if (vertCode.empty()) {
-        // Fallback vertex shader: fullscreen triangle using vertex_id
+        // Fallback: fullscreen triangle using vertex_id
         vertCode = R"(
 #include <metal_stdlib>
 using namespace metal;
@@ -238,7 +209,7 @@ vertex VertOut main0(uint vid [[vertex_id]]) {
 
     std::string fragCode = ReadTextFile(fragPath);
     if (fragCode.empty()) {
-        // Fallback fragment shader: simple animated FBM-ish gradient
+        // Fallback: simple animated FBM gradient
         fragCode = R"(
 #include <metal_stdlib>
 using namespace metal;
@@ -292,14 +263,12 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform &u [[buffer(
 )";
     }
 
-    // Build pipeline from the sources
     if (!CreatePipeline(vertCode, fragCode)) {
         std::cerr << "SDLRenderer::Initialize - failed to build pipeline from default shaders\n";
         Shutdown();
         return false;
     }
 
-    // Record fragment shader path mtime if the file exists
     if (fs::exists(fragPath)) {
         shader_path_ = fragPath;
         shader_mtime_ = GetFileMTime(fragPath);
@@ -308,18 +277,32 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform &u [[buffer(
         shader_mtime_ = 0;
     }
 
-    // Build alpha-blended UI pipelines (rect + text).
-    // Non-fatal: wallpaper still works without them; overlay is just disabled.
+    // Non-fatal: wallpaper still works; UI overlay is just disabled.
     if (!CreateUIPipelines()) {
         std::cerr << "SDLRenderer::Initialize - UI pipelines unavailable (overlay disabled)\n";
     }
 
-    // Initialise text renderer (SDL_ttf → per-frame GPU glyph texture cache).
-    // Non-fatal: drawText() no-ops gracefully when the renderer is not ready.
+    // Non-fatal: drawText() no-ops gracefully when the renderer is absent.
+    // init() never loads fonts — font loading is always explicit.
     text_renderer_ = std::make_unique<TextRenderer>();
     if (!text_renderer_->init(device_)) {
         std::cerr << "SDLRenderer::Initialize - TextRenderer unavailable (text disabled)\n";
         text_renderer_.reset();
+    } else {
+        const bool font_ok = text_renderer_->loadFirstAvailable({
+            "assets/fonts/InterVariable.ttf",
+            "assets/fonts/Inter-Regular.ttf",
+            "assets/fonts/Roboto-Regular.ttf",
+            "assets/fonts/LiberationSans-Regular.ttf",
+        }, 17.f);
+
+        if (!font_ok) {
+            std::cerr << "SDLRenderer: no bundled font found in assets/fonts/\n"
+                      << "             trying system fonts as fallback...\n";
+            if (!text_renderer_->tryLoadSystemFont(17.f)) {
+                std::cerr << "SDLRenderer: no font available — text rendering disabled\n";
+            }
+        }
     }
 
     initialized_.store(true);
@@ -339,18 +322,15 @@ void SDLRenderer::Shutdown() noexcept {
         text_renderer_.reset();
     }
 
-    // Detach scene (non-owning pointers — just clear them).
     scene_tree_ = nullptr;
     scene_root_ = k_null_handle;
 
-    // Release UI pipelines and their shaders.
     if (ui_rect_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_); ui_rect_pipeline_ = nullptr; }
     if (ui_text_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_text_pipeline_); ui_text_pipeline_ = nullptr; }
     if (ui_rect_vert_)     { SDL_ReleaseGPUShader(device_, ui_rect_vert_);               ui_rect_vert_     = nullptr; }
     if (ui_rect_frag_)     { SDL_ReleaseGPUShader(device_, ui_rect_frag_);               ui_rect_frag_     = nullptr; }
     if (ui_text_frag_)     { SDL_ReleaseGPUShader(device_, ui_text_frag_);               ui_text_frag_     = nullptr; }
 
-    // Release wallpaper pipeline and its shaders.
     if (pipeline_)        { SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);        pipeline_        = nullptr; }
     if (vertex_shader_)   { SDL_ReleaseGPUShader(device_, vertex_shader_);             vertex_shader_   = nullptr; }
     if (fragment_shader_) { SDL_ReleaseGPUShader(device_, fragment_shader_);           fragment_shader_ = nullptr; }
@@ -371,27 +351,12 @@ void SDLRenderer::Shutdown() noexcept {
     std::cerr << "SDLRenderer::Shutdown - resources released\n";
 }
 
-// ---------------------------------------------------------------------------
-// SetScene
-// ---------------------------------------------------------------------------
-
 void SDLRenderer::SetScene(RenderTree* tree,
                             NodeHandle  root) noexcept
 {
     scene_tree_ = tree;
     scene_root_ = root;
 }
-
-// ---------------------------------------------------------------------------
-// CreateUIPipelines
-//
-// Builds two alpha-blended pipelines that share the same vertex shader:
-//   ui_rect  — solid-colour rectangles (push uniform RGBA, no sampler)
-//   ui_text  — glyph textures from TextRenderer (sampler slot 0 + tint uniform)
-//
-// Both use the "no vertex buffer" design: the vertex shader generates all
-// six vertices of a quad from a push-uniform RectUniform + vertex_id.
-// ---------------------------------------------------------------------------
 
 bool SDLRenderer::CreateUIPipelines()
 {
@@ -549,25 +514,6 @@ fragment float4 main0(VertOut in[[stage_in]],
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Render
-//
-// Two-pass frame submission in a single command buffer:
-//
-//   Pass 1 — SDL_GPUCopyPass
-//     Flush any glyph textures queued by TextRenderer::ensureTexture() during
-//     the previous update pass.  Skipped when nothing is pending (zero cost).
-//
-//   Pass 2 — SDL_GPURenderPass
-//     2a. Wallpaper: fullscreen FBM triangle, time push uniform.
-//     2b. UI scene (optional): traverse the RenderTree, drive update() for
-//         animation ticks, then render() to emit widget draw calls.
-//         Both wallpaper and UI draw within the same render pass so there is
-//         no extra pass-boundary overhead.
-//
-// Contract: do NOT call SDL_ReleaseGPUTexture on the swapchain texture.
-// ---------------------------------------------------------------------------
-
 void SDLRenderer::Render(double timeSeconds) {
     if (!initialized_.load() || !device_) {
         return;
@@ -596,7 +542,7 @@ void SDLRenderer::Render(double timeSeconds) {
         return;
     }
 
-    // ---- Pass 1: copy pass — upload pending glyph textures ---------------
+    // ---- Pass 1: copy pass — flush pending glyph textures ---------------
     if (text_renderer_ && text_renderer_->hasPendingUploads()) {
         SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
         if (cp) {
@@ -605,7 +551,7 @@ void SDLRenderer::Render(double timeSeconds) {
         }
     }
 
-    // ---- Pass 2: render pass — wallpaper + UI overlay --------------------
+    // ---- Pass 2: render pass — wallpaper + UI overlay -------------------
     SDL_GPUColorTargetInfo ct{};
     ct.texture              = swap;
     ct.mip_level            = 0;
@@ -626,7 +572,7 @@ void SDLRenderer::Render(double timeSeconds) {
         return;
     }
 
-    // ---- 2a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) -----------
+    // ---- 2a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) ----------
     SDL_BindGPUGraphicsPipeline(pass, pipeline_);
 
     FragmentUniform fu{};
@@ -636,7 +582,7 @@ void SDLRenderer::Render(double timeSeconds) {
 
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
 
-    // ---- 2b. UI overlay (RenderTree widgets, alpha-blended on top) -------
+    // ---- 2b. UI overlay (RenderTree widgets, alpha-blended on top) ------
     if (scene_tree_ && scene_root_.valid() &&
         ui_rect_pipeline_ && ui_text_pipeline_)
     {
@@ -653,8 +599,22 @@ void SDLRenderer::Render(double timeSeconds) {
         ctx.pipelines["rect"] = ui_rect_pipeline_;
         ctx.pipelines["text"] = ui_text_pipeline_;
 
-        // update() runs animation ticks (cursor blink, transitions).
-        // render() issues draw calls only for dirty nodes.
+        // Root dimensions track the swapchain exactly (physical pixels,
+        // Retina-correct). markLayoutDirty() propagates downward so a window
+        // resize automatically re-flows the entire scene tree.
+        {
+            RenderNode* root = scene_tree_->node(scene_root_);
+            if (root) {
+                const float fw = static_cast<float>(width);
+                const float fh = static_cast<float>(height);
+                if (root->w != fw || root->h != fh) {
+                    root->w = fw;
+                    root->h = fh;
+                    scene_tree_->markLayoutDirty(scene_root_);
+                }
+            }
+        }
+
         scene_tree_->beginFrame();
         scene_tree_->update(scene_root_);
         scene_tree_->render(scene_root_, ctx);
@@ -686,8 +646,6 @@ bool SDLRenderer::ReloadShader(const std::string& path) {
         return false;
     }
 
-    // Load vertex shader from disk when a path is known; fall back to the
-    // built-in fullscreen-triangle source used during Initialize().
     std::string vertSource;
     if (!vertex_shader_path_.empty() &&
         fs::exists(vertex_shader_path_, ec) && !ec) {

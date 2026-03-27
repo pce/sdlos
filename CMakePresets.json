@@ -18,6 +18,30 @@
       }
     },
     {
+      "name": "macos-debug",
+      "displayName": "macOS Debug",
+      "description": "Debug build for macOS — vendored SDL_ttf deps, no system FreeType/HarfBuzz required. Use: cmake --preset macos-debug && cmake --build build -j",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SDLTTF_VENDORED": "ON",
+        "SDLTTF_FREETYPE_VENDORED": "ON",
+        "SDLTTF_HARFBUZZ_VENDORED": "ON"
+      }
+    },
+    {
+      "name": "macos-release",
+      "displayName": "macOS Release",
+      "description": "Optimised release build for macOS — vendored SDL_ttf deps.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SDLTTF_VENDORED": "ON",
+        "SDLTTF_FREETYPE_VENDORED": "ON",
+        "SDLTTF_HARFBUZZ_VENDORED": "ON"
+      }
+    },
+    {
       "name": "llvm22-custom",
       "displayName": "LLVM 22 Custom Toolchain",
       "description": "Uses the local LLVM 22.1.1 toolchain for C++23 development",
@@ -72,6 +96,14 @@
     {
       "name": "build-default",
       "configurePreset": "default"
+    },
+    {
+      "name": "build-macos-debug",
+      "configurePreset": "macos-debug"
+    },
+    {
+      "name": "build-macos-release",
+      "configurePreset": "macos-release"
     },
     {
       "name": "build-llvm22",

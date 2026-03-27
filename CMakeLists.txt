@@ -76,6 +76,23 @@ endmacro()
 
 sdlos_optional_addon(IMAGE SDL_image)
 sdlos_optional_addon(MIXER SDL_mixer)
+
+# SDL_ttf requires FreeType (and optionally HarfBuzz).  Neither is guaranteed
+# to be installed system-wide, so we tell SDL_ttf to use its own vendored
+# copies.  These cache variables must be set BEFORE add_subdirectory so that
+# SDL_ttf's CMakeLists.txt sees them when it runs find_package(Freetype).
+#
+# Override with -DSDLTTF_VENDORED=OFF on the command line if you explicitly
+# want to use system libraries.
+if(EXISTS "${CMAKE_SOURCE_DIR}/deps/SDL_ttf/CMakeLists.txt")
+    set(SDLTTF_VENDORED          ON CACHE BOOL
+        "Use SDL_ttf's bundled FreeType + HarfBuzz (sdlos default)" FORCE)
+    set(SDLTTF_FREETYPE_VENDORED ON CACHE BOOL
+        "Use SDL_ttf's bundled FreeType (sdlos default)" FORCE)
+    set(SDLTTF_HARFBUZZ_VENDORED ON CACHE BOOL
+        "Use SDL_ttf's bundled HarfBuzz (sdlos default)" FORCE)
+endif()
+
 sdlos_optional_addon(TTF   SDL_ttf)
 
 # -----------------------------------------------------------------------------
@@ -95,6 +112,7 @@ set(SDLOS_SOURCES
     src/render_tree.cxx
     src/text_renderer.cxx
     src/widgets/input_box.cxx
+    src/debug/layout_debug.cxx
 )
 
 add_executable(sdlos ${SDLOS_SOURCES})

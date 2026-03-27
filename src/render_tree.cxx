@@ -1,17 +1,3 @@
-// render_tree.cxx — Scene graph implementation.
-//
-// Namespace : sdlos
-// File      : render_tree.cxx  (lowercase snake_case)
-//
-// Responsibilities
-// ================
-//   loadShader()   — read compiled shader blob from disk;
-//                    return std::expected<SDL_GPUShader*, std::string>
-//   RenderContext  — pipeline lookup, drawRect / drawText geometry drawing
-//   RenderTree     — slot_map-based node alloc/free, LCRS tree ops,
-//                    dirty propagation, iterative preorder DFS,
-//                    frame_arena reset, update / render lifecycle
-
 #include "render_tree.hh"
 #include "text_renderer.hh"
 
@@ -28,9 +14,7 @@
 
 namespace pce::sdlos {
 
-// ===========================================================================
-// loadShader
-// ===========================================================================
+// ---- loadShader ----
 
 std::expected<SDL_GPUShader*, std::string>
 loadShader(SDL_GPUDevice*     device,
@@ -95,21 +79,14 @@ loadShader(SDL_GPUDevice*     device,
     return shader;
 }
 
-// ===========================================================================
-// RenderContext
-// ===========================================================================
+// ---- RenderContext ----
 
-// ---------------------------------------------------------------------------
-// RenderContext::drawRect
+// drawRect — no vertex buffer; ui_rect.vert generates a 6-vertex CCW quad
+// entirely from push-uniform data.
 //
-// Draws a solid-colour rectangle using the "rect" pipeline registered in
-// `pipelines`.  No vertex buffer is needed — the vertex shader (ui_rect.vert)
-// generates a 6-vertex CCW quad entirely from push-uniform data.
-//
-// Push uniform layout (must match RectUniform in ui_rect.vert.metal):
-//   slot 0, vertex stage  → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
+// Push uniform layout (must match shader structs):
+//   slot 0, vertex stage   → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
 //   slot 0, fragment stage → {r, g, b, a}
-// ---------------------------------------------------------------------------
 
 void RenderContext::drawRect(float x, float y, float w, float h,
                               float r, float g, float b, float a)
@@ -121,8 +98,7 @@ void RenderContext::drawRect(float x, float y, float w, float h,
 
     SDL_BindGPUGraphicsPipeline(pass, pipe);
 
-    // Vertex-stage push uniform: rect bounds in pixel space + viewport size.
-    // Must be 32 bytes to match `struct RectUniform` in the Metal shader.
+    // Must be 32 bytes — matches struct RectUniform in ui_rect.vert.metal.
     struct alignas(4) RectUniform {
         float x, y, w, h;
         float vw, vh;
@@ -133,8 +109,7 @@ void RenderContext::drawRect(float x, float y, float w, float h,
     const RectUniform vu{ x, y, w, h, viewport_w, viewport_h, 0.f, 0.f };
     SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
-    // Fragment-stage push uniform: RGBA colour.
-    // Must be 16 bytes to match `struct ColorUniform` in ui_rect.frag.metal.
+    // Must be 16 bytes — matches struct ColorUniform in ui_rect.frag.metal.
     struct alignas(4) ColorUniform {
         float r, g, b, a;
     };
@@ -143,23 +118,17 @@ void RenderContext::drawRect(float x, float y, float w, float h,
     const ColorUniform fu{ r, g, b, a };
     SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
-    // Draw: 6 vertices = 2 triangles = 1 quad (no vertex buffer).
-    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);  // 6 verts = 2 tris = 1 quad
 }
 
-// ---------------------------------------------------------------------------
-// RenderContext::drawText
-//
-// Draws a pre-rendered text string using the "text" pipeline.
-// Texture upload is handled by TextRenderer::flushUploads() BEFORE the render
-// pass begins; by the time this is called the texture is already GPU-resident.
+// drawText — the glyph texture must already be GPU-resident; call
+// TextRenderer::flushUploads() BEFORE SDL_BeginGPURenderPass.
 //
 // Push uniform layout:
 //   slot 0, vertex stage   → RectUniform  (same as drawRect)
 //   slot 0, fragment stage → TintUniform  {r, g, b, a}
 // Sampler binding:
-//   fragment sampler slot 0 → text glyph texture
-// ---------------------------------------------------------------------------
+//   fragment sampler slot 0 → glyph texture
 
 void RenderContext::drawText(std::string_view text,
                               float x, float y,
@@ -172,13 +141,11 @@ void RenderContext::drawText(std::string_view text,
     SDL_GPUGraphicsPipeline* pipe = pipeline("text");
     if (!pipe) return;
 
-    // Fetch (or queue) the glyph texture for this string.
     const GlyphTexture gt = text_renderer->ensureTexture(text, size);
     if (!gt.valid()) return;
 
     SDL_BindGPUGraphicsPipeline(pass, pipe);
 
-    // Vertex push uniform: position the quad at (x, y) with glyph dimensions.
     struct alignas(4) RectUniform {
         float x, y, w, h;
         float vw, vh;
@@ -192,12 +159,10 @@ void RenderContext::drawText(std::string_view text,
     };
     SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
-    // Fragment push uniform: tint colour.
     struct alignas(4) TintUniform { float r, g, b, a; };
     const TintUniform fu{ r, g, b, a };
     SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
-    // Bind glyph texture + sampler (slot 0).
     SDL_GPUTextureSamplerBinding sb{};
     sb.texture = gt.texture;
     sb.sampler = text_renderer->sampler();
@@ -209,40 +174,46 @@ void RenderContext::drawText(std::string_view text,
 SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
 {
     // Avoid operator[] — it inserts a default entry on miss.
-    // Iterate directly; the map holds ≤ 8 entries on the stack.
+    // Iterate directly; the map holds ≤ 8 entries.
     for (auto& [k, v] : pipelines) {
         if (k == name) return v;
     }
     return nullptr;
 }
 
-// ===========================================================================
-// Layout — file-scope helpers (not part of the public RenderTree API)
+// drawRectOutline — four axis-aligned filled rects:
 //
-// flexLayout  — FlexRow / FlexColumn container layout (CSS flex subset).
-// blockLayout — vertical stack with gap (CSS block layout subset).
+//   ┌─────────────────────┐   ← top    (x, y,        w,     t)
+//   │                     │   ← left   (x, y+t,      t, h−2t)
+//   │                     │   ← right  (x+w−t, y+t,  t, h−2t)
+//   └─────────────────────┘   ← bottom (x, y+h−t,    w,     t)
 //
-// Both functions:
-//   • Read layout_props from the CONTAINER node (n) for gap / justify / align.
-//   • Read layout_props from each CHILD node for sizing / grow hints.
-//   • Write x, y, w, h on each direct child.
-//   • Mark each child dirty_layout + dirty_render so the preorder traversal
-//     in update() cascades layout to their own children on the same frame.
+// Top/bottom claim the corners; left/right span only h−2t for clean mitre joints.
+// `thickness` is clamped to ≤ min(w,h)/2 so rects never have negative extents.
+
+void RenderContext::drawRectOutline(float x, float y, float w, float h,
+                                     float thickness,
+                                     float r, float g, float b, float a)
+{
+    const float t = std::min(thickness, std::min(w, h) * 0.5f);
+    if (t <= 0.f || w <= 0.f || h <= 0.f) return;
+
+    drawRect(x,         y,         w,   t,       r, g, b, a);  // top
+    drawRect(x,         y + h - t, w,   t,       r, g, b, a);  // bottom
+    drawRect(x,         y + t,     t,   h - 2*t, r, g, b, a);  // left
+    drawRect(x + w - t, y + t,     t,   h - 2*t, r, g, b, a);  // right
+}
+
+// ---- Layout helpers (file-scope) ----
 //
 // Called from RenderTree::resolveLayout() when n.dirty_layout is true.
-// The slot_map is structurally stable for the duration of the traversal
-// (no alloc/free happens inside update callbacks), so RenderNode* pointers
-// obtained via tree.node() remain valid for the entire layout pass.
-// ===========================================================================
+// The slot_map is structurally stable for the entire layout pass (no
+// alloc/free inside update callbacks), so RenderNode* pointers remain valid.
 
 namespace {
 
-// ---------------------------------------------------------------------------
 // collectChildren — arena-backed flat array of a node's direct children.
-//
-// Two-pass: count first, then fill.  Uses the frame_arena so there is no
-// heap allocation; the span is valid until the next arena_.reset().
-// ---------------------------------------------------------------------------
+// Two-pass (count then fill). Span is valid until the next arena_.reset().
 
 std::span<RenderNode*> collectChildren(RenderNode& n, RenderTree& tree,
                                         core::frame_arena& arena)
@@ -268,31 +239,17 @@ std::span<RenderNode*> collectChildren(RenderNode& n, RenderTree& tree,
     return children;
 }
 
-// ---------------------------------------------------------------------------
-// flexLayout — FlexRow and FlexColumn layout.
+// flexLayout — FlexRow (is_column=false, main=X cross=Y) and
+//              FlexColumn (is_column=true,  main=Y cross=X).
 //
-//   is_column = false → FlexRow    main=X cross=Y
-//   is_column = true  → FlexColumn main=Y cross=X
-//
-// Three-pass algorithm
-// --------------------
-//   Pass 1 — base sizes
-//     For each child:
-//       basis = flex_basis  (if ≥ 0)
-//             → width / height  (if ≥ 0, axis-dependent)
-//             → intrinsic (keep existing w / h)
-//     Accumulate total_fixed and total_grow.
-//
-//   Pass 2 — flex-grow distribution
+// Three-pass algorithm:
+//   Pass 1 — base sizes.
+//     Priority: flex_basis → width/height → intrinsic (keep existing w/h).
+//     Sentinel -1 means "not specified; use next fallback".
+//   Pass 2 — flex-grow distribution.
 //     remaining = container_main − total_fixed − total_gap
-//     Distribute remaining proportionally to flex_grow (grow only, no shrink).
-//
-//   Pass 3 — justify + align, then position
-//     Recompute free_space after grow.
-//     Apply justify-content to derive start_offset and extra_gap.
-//     Apply align-items to set cross-axis position (and optionally stretch).
-//     Mark each child dirty so its subtree re-layouts next.
-// ---------------------------------------------------------------------------
+//     Distributed proportionally to flex_grow (grow only, no shrink).
+//   Pass 3 — justify-content + align-items, then position.
 
 void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
                 bool is_column)
@@ -306,9 +263,6 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
     const std::size_t nc        = children.size();
 
     // ── Pass 1: base sizes ────────────────────────────────────────────────
-    //
-    // Priority chain: flex_basis → width/height → intrinsic (keep as-is).
-    // Sentinel -1 means "not specified; try next fallback".
 
     float total_fixed = 0.f;
     float total_grow  = 0.f;
@@ -324,8 +278,8 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
             if (is_column) child->h = basis;
             else           child->w = basis;
         }
-        // If still auto (-1): keep the child's current w/h (intrinsic size
-        // set by a previous draw callback or parent layout on an earlier frame).
+        // Still -1 (auto): keep existing w/h — intrinsic size set by a draw
+        // callback or parent layout on an earlier frame.
 
         total_fixed += is_column ? child->h : child->w;
         total_grow  += lp.flex_grow;
@@ -348,10 +302,8 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
     }
 
     // ── Pass 3: justify-content ───────────────────────────────────────────
-    //
-    // Re-sum content after grow; derive start_offset and per-gap extra.
-    // free_space is clamped to ≥ 0 so overflow containers don't produce
-    // negative offsets (shrink behaviour is a future Phase 2 addition).
+    // free_space clamped ≥ 0: overflow containers don't produce negative
+    // offsets (shrink is a future addition).
 
     float total_content = 0.f;
     for (RenderNode* child : children)
@@ -394,12 +346,10 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
     for (RenderNode* child : children) {
         const float child_main = is_column ? child->h : child->w;
 
-        // Main-axis position.
         if (is_column) child->y = main_offset;
         else           child->x = main_offset;
         main_offset += child_main + gap + extra_gap;
 
-        // Cross-axis position (align-items).
         switch (n.layout_props.align) {
             case A::Start:
                 if (is_column) child->x = 0.f;
@@ -416,7 +366,7 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
                 else           child->y = container_cross - child->h;
                 break;
             case A::Stretch:
-                // Only override the size when the child declared it as auto.
+                // Only override the size when the child declared it as auto (-1).
                 if (is_column) {
                     child->x = 0.f;
                     if (child->layout_props.width < 0.f)
@@ -429,20 +379,15 @@ void flexLayout(RenderNode& n, RenderTree& tree, core::frame_arena& arena,
                 break;
         }
 
-        // The child's geometry changed — cascade layout to its subtree.
+        // Cascade layout to this child's subtree.
         child->dirty_layout = true;
         child->dirty_render = true;
     }
 }
 
-// ---------------------------------------------------------------------------
-// blockLayout — vertical stack with optional gap (CSS block layout).
-//
-// Children are placed top-to-bottom in document order.
+// blockLayout — vertical stack with optional gap.
 // A child with layout_props.width == -1 (auto) inherits the container width.
-// Child heights are taken as-is (intrinsic, set by draw callback or prior
-// layout pass).
-// ---------------------------------------------------------------------------
+// Child heights are taken as-is (intrinsic).
 
 void blockLayout(RenderNode& n, RenderTree& tree)
 {
@@ -453,8 +398,7 @@ void blockLayout(RenderNode& n, RenderTree& tree)
         RenderNode* child = tree.node(c);
         if (!child) break;
 
-        // Auto-width: fill the container.
-        if (child->layout_props.width < 0.f)
+        if (child->layout_props.width < 0.f)  // -1 = auto: fill container
             child->w = n.w;
 
         child->x = 0.f;
@@ -470,31 +414,16 @@ void blockLayout(RenderNode& n, RenderTree& tree)
 
 } // anonymous namespace
 
-// ===========================================================================
-// RenderTree
-// ===========================================================================
-
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
+// ---- RenderTree ----
 
 RenderTree::RenderTree(std::size_t arena_size)
     : arena_(arena_size)
 {
 }
 
-// ---------------------------------------------------------------------------
-// Node allocation  —  delegates entirely to slot_map
-//
-// slot_map::insert() handles the free-list internally:
-//   • Pops a recycled slot when one is available (O(1)).
-//   • Appends a new Slot to the backing vector otherwise (amortised O(1)).
-//   • Returns a generational SlotID — the NodeHandle.
-//
-// Generational safety: a previously freed handle whose slot has been
-// reused gets a new generation counter, so stale handles returned by
-// slot_map::get() are nullptr rather than silently aliasing the new node.
-// ---------------------------------------------------------------------------
+// alloc — O(1) amortised via slot_map free-list.
+// Generational handles: a stale handle whose slot was reused returns nullptr
+// from node(), never silently aliasing the new occupant.
 
 NodeHandle RenderTree::alloc()
 {
@@ -505,11 +434,11 @@ void RenderTree::free(NodeHandle handle)
 {
     if (!handle.valid()) return;
 
-    // Detach from the parent chain first so no dangling LCRS links remain.
+    // Detach first so no dangling LCRS links remain.
     detach(handle);
 
-    // Collect every node in the subtree (BFS via the growth of to_free).
-    // Iterating by index avoids iterator invalidation if the vector grows.
+    // BFS subtree collection via vector growth — index-based loop avoids
+    // iterator invalidation when the vector reallocates.
     std::vector<NodeHandle> to_free;
     to_free.reserve(16);
     to_free.push_back(handle);
@@ -527,16 +456,14 @@ void RenderTree::free(NodeHandle handle)
         }
     }
 
-    // Erase every collected slot — increments each slot's generation so
-    // any surviving handles to these nodes become stale immediately.
+    // Erasing increments each slot's generation — surviving handles to these
+    // nodes become stale immediately.
     for (const NodeHandle h : to_free) {
         nodes_.erase(h);
     }
 }
 
-// ---------------------------------------------------------------------------
-// Node access
-// ---------------------------------------------------------------------------
+// ---- Node access ----
 
 RenderNode* RenderTree::node(NodeHandle handle)
 {
@@ -548,9 +475,7 @@ const RenderNode* RenderTree::node(NodeHandle handle) const
     return nodes_.get(handle);
 }
 
-// ---------------------------------------------------------------------------
-// Tree structure
-// ---------------------------------------------------------------------------
+// ---- Tree structure ----
 
 void RenderTree::appendChild(NodeHandle parent, NodeHandle child)
 {
@@ -559,7 +484,6 @@ void RenderTree::appendChild(NodeHandle parent, NodeHandle child)
     assert(p && "appendChild — invalid parent handle");
     assert(c && "appendChild — invalid child handle");
 
-    // Detach child from its current parent if it has one.
     if (c->parent.valid()) {
         detach(child);
         c = nodes_.get(child);   // re-fetch: detach does not invalidate
@@ -569,12 +493,10 @@ void RenderTree::appendChild(NodeHandle parent, NodeHandle child)
     c->sibling = k_null_handle;
 
     if (!p->child.valid()) {
-        // No children yet — child becomes the first.
         p->child = child;
         return;
     }
 
-    // Walk to the last sibling and link there.
     NodeHandle last = p->child;
     for (;;) {
         RenderNode* ln = nodes_.get(last);
@@ -602,17 +524,15 @@ void RenderTree::detach(NodeHandle child)
 
     RenderNode* p = nodes_.get(c->parent);
     if (!p) {
-        // Parent is stale — just clear the child's link.
+        // Parent is stale — clear the child's link.
         c->parent  = k_null_handle;
         c->sibling = k_null_handle;
         return;
     }
 
     if (p->child == child) {
-        // child is the first (leftmost) child.
         p->child = c->sibling;
     } else {
-        // Walk the sibling chain to find the predecessor.
         NodeHandle prev = p->child;
         while (prev.valid()) {
             RenderNode* pn = nodes_.get(prev);
@@ -629,9 +549,7 @@ void RenderTree::detach(NodeHandle child)
     c->sibling = k_null_handle;
 }
 
-// ---------------------------------------------------------------------------
-// Dirty propagation
-// ---------------------------------------------------------------------------
+// ---- Dirty propagation ----
 
 void RenderTree::markDirty(NodeHandle handle)
 {
@@ -654,26 +572,16 @@ void RenderTree::markLayoutDirty(NodeHandle handle)
     }
 }
 
-// ---------------------------------------------------------------------------
-// traverse — iterative preorder DFS
+// traverse — iterative preorder DFS (parent before children, left-to-right).
 //
-// Visit order: parent → children left-to-right.
+// Children are pushed left→right onto the stack then the newly pushed segment
+// is reversed in-place so the leftmost child sits on top — allocation-free
+// ordering trick, no temporary container needed.
+// Stale handles are silently skipped via the nullptr check on nodes_.get().
 //
-// Allocation-free inner loop trick
-// ---------------------------------
-// Children are pushed left→right onto the stack, then the newly pushed
-// segment is reversed in-place so the leftmost child sits on top and is
-// therefore popped (and visited) first.  No temporary container needed.
-//
-// Stale handles (slot was erased and generation advanced) are silently
-// skipped via the nullptr check on nodes_.get().
-//
-// Mutation constraint
-// -------------------
-// fn must not call alloc() or free() during traversal. slot_map::insert()
-// may reallocate its internal vector, which would invalidate the RenderNode*
-// held by fn. Structural mutations should be queued and applied after render.
-// ---------------------------------------------------------------------------
+// Mutation constraint: fn must not call alloc() or free() during traversal.
+// slot_map::insert() may reallocate its backing vector, invalidating any
+// RenderNode* held by fn. Queue structural mutations and apply after render.
 
 template<std::invocable<NodeHandle, RenderNode&> Fn>
 void RenderTree::traverse(NodeHandle start, Fn&& fn)
@@ -691,10 +599,8 @@ void RenderTree::traverse(NodeHandle start, Fn&& fn)
         RenderNode* n = nodes_.get(h);
         if (!n) continue;   // stale handle — skip gracefully
 
-        // Pre-order visit.
         fn(h, *n);
 
-        // Push children left→right then reverse so leftmost is on top.
         const auto base = static_cast<std::ptrdiff_t>(stack.size());
 
         for (NodeHandle c = n->child; c.valid(); ) {
@@ -708,15 +614,12 @@ void RenderTree::traverse(NodeHandle start, Fn&& fn)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Frame lifecycle
-// ---------------------------------------------------------------------------
+// ---- Frame lifecycle ----
 
 void RenderTree::beginFrame()
 {
-    // Reset the bump allocator to offset 0 — all arena memory from the
-    // previous frame is reclaimed in a single instruction.  No individual
-    // frees, no fragmentation.
+    // O(1) bump-allocator reset: reclaims all arena memory from the previous
+    // frame in a single instruction — no individual frees, no fragmentation.
     arena_.reset();
 }
 
@@ -725,18 +628,10 @@ void RenderTree::update(NodeHandle root)
     const NodeHandle start = root.valid() ? root : root_;
     if (!start.valid()) return;
 
-    // Preorder traversal: parent is always visited before its children.
-    //
-    // For each node:
-    //   1. resolveLayout — if dirty_layout, run the container's layout
-    //      algorithm to position direct children and mark them dirty.
-    //      Because traversal is preorder, those children will then run their
-    //      own layouts when visited, cascading geometry down the tree in one
-    //      pass without a separate fixpoint loop.
-    //   2. update callback — widget-specific per-frame state update.
-    //      May set dirty_render = true to trigger a redraw this frame.
-    //      May call markLayoutDirty() to request a layout on the next frame.
-
+    // Because traversal is preorder, resolveLayout on a dirty_layout node
+    // writes geometry onto direct children and marks them dirty_layout too —
+    // their own layouts then run when they are visited, cascading down the
+    // tree in one pass without a separate fixpoint loop.
     traverse(start, [this](NodeHandle h, RenderNode& n) {
         if (n.dirty_layout) {
             resolveLayout(h, n);
@@ -745,22 +640,6 @@ void RenderTree::update(NodeHandle root)
         if (n.update) n.update();
     });
 }
-
-// ---------------------------------------------------------------------------
-// RenderTree::resolveLayout
-//
-// Dispatch to the correct layout algorithm based on n.layout_kind.
-//
-// LayoutKind::None  — no-op: absolute positioning, caller manages children.
-// LayoutKind::Block — blockLayout: vertical stack, auto-width children.
-// LayoutKind::FlexRow    — flexLayout (is_column=false): CSS flex row.
-// LayoutKind::FlexColumn — flexLayout (is_column=true):  CSS flex column.
-// LayoutKind::Grid  — reserved for Phase 3.
-//
-// Every layout function writes x/y/w/h on direct children and sets their
-// dirty_layout + dirty_render flags.  The traversal then visits those
-// children and cascades layout to their subtrees on the same frame.
-// ---------------------------------------------------------------------------
 
 void RenderTree::resolveLayout(NodeHandle /*h*/, RenderNode& n)
 {
@@ -776,7 +655,7 @@ void RenderTree::resolveLayout(NodeHandle /*h*/, RenderNode& n)
             break;
         case LayoutKind::None:
         case LayoutKind::Grid:
-            // Absolute / caller-managed.  Grid reserved for Phase 3.
+            // Absolute / caller-managed. Grid reserved for Phase 3.
             break;
     }
 }

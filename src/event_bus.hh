@@ -10,13 +10,6 @@
 
 namespace pce::sdlos {
 
-/*
- KISS EventBus:
- - Implements IEventBus (string-based events).
- - No Event struct or templates here; events are (type, string data).
- - Thread-safe subscription/publish with a shared_mutex.
-*/
-
 class EventBus : public IEventBus {
 private:
     std::unordered_map<std::string, std::vector<std::function<void(const std::string&)>>> subscribers;
@@ -26,11 +19,9 @@ public:
     EventBus();
     ~EventBus() = default;
 
-    // IEventBus interface (string payload)
     void subscribe(const std::string& event_type, std::function<void(const std::string&)> callback) override;
     void publish(const std::string& event_type, const std::string& data = "") override;
 
-    // Optional helpers (unsubscribe and common-event shortcuts)
     void unsubscribe(const std::string& event_type, std::function<void(const std::string&)> callback);
     void onAppLaunch(std::function<void(const std::string&)> callback);
     void onAppTerminate(std::function<void(const std::string&)> callback);

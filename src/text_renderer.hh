@@ -1,61 +1,16 @@
 #pragma once
 
-// text_renderer.hh — SDL_ttf-backed text-to-GPU-texture cache.
+// Two-step GPU upload model:
+//   1. ensureTexture(text, size)  — during update(); renders glyph CPU-side,
+//      pre-allocates GPU texture, queues to pending_uploads_.
+//   2. flushUploads(copy_pass)    — must be called BEFORE SDL_BeginGPURenderPass,
+//      inside a SDL_GPUCopyPass; uploads surfaces to GPU, releases CPU memory.
 //
-// Namespace : sdlos
-// File      : src/text_renderer.hh
-//
-// Responsibilities
-// ================
-//   TextRenderer owns a TTF_Font and maintains a cache that maps
-//   (text, point-size) → SDL_GPUTexture*.  A texture is created the first
-//   time a string is requested and reused on every subsequent call.
-//
-//   GPU upload flow (SDL3 GPU)
-//   --------------------------
-//   Text is rendered CPU-side via TTF_RenderText_Blended() into an SDL_Surface.
-//   The surface pixels are then transferred to the GPU in two steps:
-//
-//     1.  ensureTexture(text, size)
-//             Called during the update() phase (before the render pass).
-//             Checks the cache; if the entry is missing it renders the glyph
-//             surface and stashes it in pending_uploads_.
-//
-//     2.  flushUploads(copy_pass)
-//             Called once per frame BEFORE SDL_BeginGPURenderPass, inside a
-//             SDL_GPUCopyPass.  Uploads every pending surface to its GPU
-//             texture via SDL_UploadToGPUTexture, then releases the surface
-//             and the temporary transfer buffer.
-//
-//   After flushUploads() returns, every texture in the cache is resident on
-//   the GPU and safe to bind in the render pass.
-//
-// Lifetime
-// ========
-//   TextRenderer must be initialised with a valid SDL_GPUDevice* before any
-//   call to ensureTexture().  Call shutdown() (or let the destructor run)
-//   to release all GPU textures, the sampler, and the font handle.
-//
-// Thread safety
-// =============
-//   Not thread-safe.  All calls must originate from the render thread that
-//   owns the SDL_GPUDevice.
-//
-// Font resolution
-// ===============
-//   tryLoadFont() probes a list of platform font paths in order and returns
-//   the first one that TTF_OpenFont() accepts.  On macOS the system Helvetica
-//   Neue is tried first; a bundled fallback (assets/fonts/) is tried last.
-//   If no font can be opened, text rendering is silently skipped (drawText
-//   no-ops gracefully).
-
-#pragma once
+// Not thread-safe — all calls must come from the render thread that owns the device.
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
-// SDL3_ttf — conditional compilation guard so the project still builds
-// on systems where SDL3_ttf was not found by CMake.
 #ifdef SDL_TTF_AVAILABLE
 #  include <SDL3_ttf/SDL_ttf.h>
 #endif
@@ -69,12 +24,7 @@
 
 namespace pce::sdlos {
 
-// ---------------------------------------------------------------------------
-// GlyphTexture — one cached entry.
-//
-// Stores the GPU texture and the pixel dimensions of the rendered string so
-// callers can lay out the quad without a second query.
-// ---------------------------------------------------------------------------
+// ---- GlyphTexture ----
 
 struct GlyphTexture {
     SDL_GPUTexture* texture = nullptr;
@@ -84,9 +34,7 @@ struct GlyphTexture {
     [[nodiscard]] bool valid() const noexcept { return texture != nullptr; }
 };
 
-// ---------------------------------------------------------------------------
-// TextRenderer
-// ---------------------------------------------------------------------------
+// ---- TextRenderer ----
 
 class TextRenderer {
 public:
@@ -99,15 +47,12 @@ public:
 
     // ---- Lifecycle -------------------------------------------------------
 
-    /// Initialise with an already-created GPU device.
     /// `default_size` is the point size used when ensureTexture() is called
     /// without an explicit size argument.
-    /// Returns true on success; false if TTF init or font loading fails
-    /// (text rendering is disabled but the renderer remains in a valid state
-    /// that no-ops all subsequent calls).
+    /// Returns false if TTF init fails; text rendering is disabled but the
+    /// renderer no-ops all subsequent calls gracefully.
     bool init(SDL_GPUDevice* device, float default_size = 17.f);
 
-    /// Release all GPU textures, the sampler, and the TTF font.
     /// Safe to call multiple times.
     void shutdown();
 
@@ -115,47 +60,32 @@ public:
 
     // ---- Font loading ----------------------------------------------------
 
-    /// Try to open a font from `path` at `pt_size`.
-    /// Replaces the current font on success; returns true.
-    /// On failure, the previous font (if any) remains active; returns false.
+    /// On failure, the previous font (if any) remains active.
     bool loadFont(const std::string& path, float pt_size);
 
-    /// Probe a prioritised list of platform font paths and load the first
-    /// one that succeeds.  On macOS, Helvetica Neue / Helvetica / SF are
-    /// tried; on Linux, DejaVu Sans and Liberation Sans.
-    /// Returns true if any font was loaded.
+    /// Try each path in order; load the first that succeeds.
+    bool loadFirstAvailable(std::initializer_list<std::string_view> candidates,
+                            float pt_size);
+
+    /// Explicit opt-in — never called automatically by init().
+    /// Call after loadFirstAvailable() fails if a system fallback is desired.
     bool tryLoadSystemFont(float pt_size);
 
     // ---- Cache interface -------------------------------------------------
 
-    /// Return the cached GlyphTexture for `text` at `size` points.
-    /// If the entry is absent, renders it CPU-side (TTF_RenderText_Blended)
-    /// and queues it for GPU upload in the next flushUploads() call.
     /// Returns an invalid GlyphTexture{} if the renderer is not ready.
     [[nodiscard]] GlyphTexture ensureTexture(std::string_view text,
                                               float            size = 0.f);
 
-    /// Convenience: same as ensureTexture but uses the default font size.
     [[nodiscard]] GlyphTexture ensureTexture(std::string_view text)
     {
         return ensureTexture(text, 0.f);
     }
 
-    /// Upload all textures that were queued by ensureTexture() since the
-    /// last flushUploads() call.
-    ///
-    /// MUST be called inside a SDL_GPUCopyPass and BEFORE
-    /// SDL_BeginGPURenderPass so that the uploaded textures are resident
-    /// when the render pass begins.
-    ///
-    ///   SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
-    ///   text_renderer.flushUploads(cp);
-    ///   SDL_EndGPUCopyPass(cp);
-    ///   // … SDL_BeginGPURenderPass …
+    /// Must be called BEFORE SDL_BeginGPURenderPass, inside a SDL_GPUCopyPass.
     void flushUploads(SDL_GPUCopyPass* copy_pass);
 
-    /// Returns true if there is at least one pending upload waiting to be
-    /// flushed.  Useful to skip creating a copy pass when nothing changed.
+    /// Useful to skip creating a copy pass when nothing changed.
     [[nodiscard]] bool hasPendingUploads() const noexcept
     {
         return !pending_uploads_.empty();
@@ -163,18 +93,15 @@ public:
 
     // ---- Sampler ---------------------------------------------------------
 
-    /// The linear sampler to bind when drawing text quads.
     /// Non-null only after a successful init().
     [[nodiscard]] SDL_GPUSampler* sampler() const noexcept { return sampler_; }
 
     // ---- Cache management ------------------------------------------------
 
-    /// Evict all cached textures, releasing their GPU memory.
     /// The renderer remains ready; textures will be re-created on the next
     /// ensureTexture() call.
     void clearCache();
 
-    /// Return the number of currently cached textures.
     [[nodiscard]] std::size_t cacheSize() const noexcept { return cache_.size(); }
 
 private:
@@ -199,8 +126,6 @@ private:
                 h ^= static_cast<unsigned char>(c);
                 h *= 0x100000001b3ull;
             }
-            // Mix in size as a bit pattern to distinguish same-text queries
-            // at different sizes.
             uint32_t si;
             __builtin_memcpy(&si, &k.size, sizeof(si));
             h ^= static_cast<std::size_t>(si) * 0x9e3779b97f4a7c15ull;
@@ -218,15 +143,13 @@ private:
 
     // ---- Helpers ---------------------------------------------------------
 
-    /// Normalise size: clamp to [6, 256] and round to nearest 0.5pt so
-    /// the cache doesn't explode with floating-point near-duplicates.
+    /// Clamp to [6, 256] and round to nearest 0.5pt to prevent near-duplicate
+    /// cache entries from floating-point variation.
     [[nodiscard]] static float normaliseSize(float s) noexcept;
 
-    /// Create and return a GPU texture for a surface of the given dimensions.
-    /// Returns nullptr on failure.
     [[nodiscard]] SDL_GPUTexture* createTexture(int w, int h);
 
-    /// Create a linear-clamp sampler.  Called once during init().
+    /// Called once during init().
     [[nodiscard]] SDL_GPUSampler* createSampler();
 
     // ---- State -----------------------------------------------------------
@@ -235,19 +158,19 @@ private:
     SDL_GPUSampler* sampler_      = nullptr;
     float           default_size_ = 17.f;
     bool            ready_        = false;
+    bool            ttf_inited_   = false;  // true after TTF_Init(), gates TTF_Quit()
 
 #ifdef SDL_TTF_AVAILABLE
     TTF_Font* font_ = nullptr;
 
-    /// Open (or re-open) font_ from `path` at `pt`.
-    /// Closes the previous font first.  Returns true on success.
+    /// Closes the previous font before opening the new one.
     bool openFont(const std::string& path, float pt);
 #endif
 
-    // Cache: (text, size) → resident GPU texture + dimensions.
+    // (text, size) → resident GPU texture + dimensions.
     std::unordered_map<Key, GlyphTexture, KeyHash> cache_;
 
-    // Uploads queued by ensureTexture(); drained by flushUploads().
+    // Queued by ensureTexture(); drained by flushUploads().
     std::vector<PendingUpload> pending_uploads_;
 };
 

@@ -1,13 +1,3 @@
-// ApplicationManager.cxx
-// Application process management implementation for pce::sdlos.
-//
-// Key design points (see ApplicationManager.h for full rationale):
-//   - Application owns NO SDL resources. SDL_Window / GPU handles live
-//     exclusively inside WindowManager's Window instances.
-//   - window_id is the only link between an Application and its Window.
-//   - execution_thread is always joined in terminate() so the object is
-//     safe to destroy from any thread.
-
 #include "application_manager.hh"
 
 #include <chrono>
@@ -16,10 +6,6 @@
 #include <stdexcept>
 
 namespace pce::sdlos {
-
-// ===========================================================================
-// Application
-// ===========================================================================
 
 Application::Application(const std::string& name, const std::string& path)
     : name(name), executable_path(path)
@@ -65,8 +51,8 @@ bool Application::launch()
 
 void Application::terminate()
 {
-    // Signal the thread to stop (for real apps this would send a shutdown
-    // message; here we just wait for the sleep to finish).
+    // Cooperative cancellation only — for real apps this would send a shutdown
+    // message; here we just let the sleep finish.
     is_running.store(false);
 
     if (execution_thread.joinable()) {
@@ -90,10 +76,6 @@ std::string Application::getPath() const
 {
     return executable_path;
 }
-
-// ===========================================================================
-// ApplicationManager
-// ===========================================================================
 
 bool ApplicationManager::registerApplication(const std::string& name,
                                               const std::string& path)
@@ -136,8 +118,8 @@ ApplicationManager::launchApplication(const std::string& name)
     }
 
     // The OS is responsible for calling WindowManager::createWindow() and
-    // then setting app->window_id. We track by window_id once it is set.
-    // If a window_id was already assigned (re-launch scenario), re-insert it.
+    // then setting app->window_id. If a window_id was already assigned
+    // (re-launch scenario), re-insert it into the running map now.
     if (app->window_id >= 0) {
         running_apps_[app->window_id] = app;
     }
@@ -157,8 +139,8 @@ void ApplicationManager::terminateApplication(const std::string& name)
 
     if (!app->isRunning()) return;
 
-    // Remove from the running map before terminating so that update() does
-    // not race with the erase below.
+    // Remove from the running map before terminating so that update()
+    // does not race with the erase below.
     if (app->window_id >= 0) {
         running_apps_.erase(app->window_id);
     }
