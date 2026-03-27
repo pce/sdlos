@@ -1,0 +1,61 @@
+// scene3d.jade — 3D Scene overlay page
+//
+// Page 3 of 3 in the Style Guide presentation.
+// The actual scene3d node lives at the app root (styleguide.jade) and is
+// activated by styleguide.cxx when this page becomes active.  This jade
+// defines only the 2-D overlay that sits on top of the 3-D pre-pass.
+//
+// Layout:
+//   col (full height, transparent — 3D shows through)
+//     row top-bar     (semi-opaque, page label)
+//     div spacer      (flex-grow=1, transparent — the 3D viewport area)
+//     col bottom-panel (semi-opaque glass, model info + hotspot feedback)
+
+col(flexGrow="1")
+
+  // ── Top info bar ──────────────────────────────────────────────────────────
+  row(height="48" backgroundColor="#00000099" paddingLeft="24" paddingRight="24" alignItems="center")
+    div(color="#94a3b8" fontSize="11" fontWeight="bold") 3D SCENE
+    div(flexGrow="1")
+    div(color="#334155" fontSize="11") 03 / 03
+
+  // ── Transparent viewport area — 3D scene renders here via GPU pre-pass ───
+  div(flexGrow="1")
+
+  // ── Bottom info panel (glassmorphic) ──────────────────────────────────────
+  col(padding="20" gap="10" backgroundColor="#000000cc")
+
+    // Model name + format badge
+    row(alignItems="center" gap="12")
+      div(color="#c4b5fd" fontSize="18" fontWeight="bold") Crystal Shard
+      div(backgroundColor="#1e1040" color="#a78bfa" fontSize="10" fontWeight="bold" borderRadius="6" padding="4" borderColor="#6d28d9" borderWidth="1") glTF 2.0
+
+    // Hotspot info line — updated by styleguide.cxx on "hotspot:select"
+    div#sg-hotspot-info(color="#64748b" fontSize="12") Click the crystal to inspect it…
+
+    // Material info row
+    row(gap="24")
+      col(gap="3")
+        div(color="#475569" fontSize="10" fontWeight="bold") RENDERER
+        div(color="#94a3b8" fontSize="12") PBR  ·  SDL3 GPU
+      col(gap="3")
+        div(color="#475569" fontSize="10" fontWeight="bold") MATERIAL
+        div(color="#94a3b8" fontSize="12") Metallic-Roughness
+      col(gap="3")
+        div(color="#475569" fontSize="10" fontWeight="bold") LIGHTING
+        div(color="#94a3b8" fontSize="12") Directional  +  Ambient
+
+    // Divider
+    div(height="1" backgroundColor="#1e293b")
+
+    // Controls hint row
+    row(gap="32")
+      row(gap="8" alignItems="center")
+        div(backgroundColor="#1e293b" color="#64748b" fontSize="11" borderRadius="4" padding="4") RMB
+        div(color="#475569" fontSize="11") Orbit camera
+      row(gap="8" alignItems="center")
+        div(backgroundColor="#1e293b" color="#64748b" fontSize="11" borderRadius="4" padding="4") Scroll
+        div(color="#475569" fontSize="11") Zoom in / out
+      row(gap="8" alignItems="center")
+        div(backgroundColor="#1e293b" color="#64748b" fontSize="11" borderRadius="4" padding="4") LMB
+        div(color="#475569" fontSize="11") Click crystal hotspot

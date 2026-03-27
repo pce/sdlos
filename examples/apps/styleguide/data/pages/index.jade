@@ -1,0 +1,79 @@
+// index.jade — Welcome / landing page for the Style Guide
+//
+// Layout:
+//   col (full height, dark bg)
+//     col hero (flex-grow=1, centered)
+//       badge · big title · subtitle · hint
+//     row feature-cards (3 equal-width cards)
+
+col(flexGrow="1" backgroundColor="#0a0a0f")
+
+  // Hero
+  col(flexGrow="1" justifyContent="center" alignItems="center" gap="24" padding="48")
+
+// Badge
+div(color="#8b5cf6" fontSize="11" fontWeight="bold") ✦ DEMO UTF8 / Style GUIDE
+
+  // Arabic (RTL)
+  p(text="مرحبًا بكم"; style="direction: rtl; fontSize: 24")
+  // Hebrew (RTL)
+  p(text="ברוכים הבאים"; style="direction: rtl; fontSize: 24")
+  // English
+  p(text="Welcome"; style="fontSize: 24")
+  // French
+  p(text="Bienvenue"; style="fontSize: 24")
+  // German
+  p(text="Willkommen"; style="fontSize: 24")
+  // Spanish
+  p(text="Bienvenidos"; style="fontSize: 24")
+  // Russian (Cyrillic)
+  p(text="Добро пожаловать"; style="fontSize: 24")
+  // Greek
+  p(text="Καλώς ήρθατε"; style="fontSize: 24")
+  // Hindi (Devanagari)
+  p(text="स्वागत है"; style="fontSize: 24")
+  // Thai
+  p(text="ยินดีต้อนรับ"; style="fontSize: 24")
+  // Chinese (Simplified)
+  p(text="欢迎"; style="fontSize: 24")
+  // Japanese
+  p(text="ようこそ"; style="fontSize: 24")
+  // Korean
+  p(text="환영합니다"; style="fontSize: 24")
+
+    div(color="#f1f5f9" fontSize="14" fontWeight="bold")
+        div(backgroundColor="#312130" color="#acdeec" borderRadius="2" border) Design Tokens
+
+
+    // Big title
+    div(color="#f8fafc" fontSize="44" fontWeight="bold" textAlign="center") Component Library for SDL3
+
+    // Tagline
+    div(color="#94a3b8" fontSize="15" textAlign="center") SDL3 GPU  -  Flexbox Layout  -  PBR 3D
+
+    // Spacer
+    div(height="8")
+
+    // Hint
+    div(backgroundColor="#1e293b" color="#475569" fontSize="12" textAlign="center" borderRadius="8" padding="8")  ← →  arrow keys  ·  nav bar below
+
+  // Feature cards
+  row(gap="16" padding="24" paddingTop="0")
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#6366f1" fontSize="28") ✦
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") Design Tokens
+      div(color="#64748b" fontSize="12") Colors · Typography · Components
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#06b6d4" fontSize="28") ⬡
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") Flexbox Layout
+      div(color="#64748b" fontSize="12") Rows · Columns · flex-grow · wrap
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#a78bfa" fontSize="28") ◈
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") 3D Scene
+      div(color="#64748b" fontSize="12") glTF 2.0 · PBR materials · Camera
+
+  // Bottom rule
+  div(height="1" backgroundColor="#1e293b")

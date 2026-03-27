@@ -1,0 +1,15 @@
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+ehthumbs.db
+# SPIRV bytecode — compiled from Metal / GLSL sources, not typically tracked.
+# To compile MSL shaders to SPIRV with spirv-cross:
+#   spirv-cross --msl preset_a.frag.metal --output preset_a.frag.spv
+#
+# Uncomment the line below to start tracking compiled SPIRV in this repo:
+# !*.spv
+*.spv

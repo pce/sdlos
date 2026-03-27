@@ -1,0 +1,239 @@
+/* automat.css — Unicorn Colored Bubble Gum Automat visual styles
+ *
+ * Loaded manually in automat.cc after GltfScene.attach() so that
+ * dynamically-injected object3d proxy nodes also receive styles.
+ *
+ * Unicorn palette
+ *   --unicorn-pink:   #ff6eb4
+ *   --unicorn-purple: #bf5fff
+ *   --unicorn-cyan:   #5ffff2
+ *   --unicorn-gold:   #ffd700
+ *   --surface:        #1a0a2e
+ *   --on-surface:     #f0e8ff
+ *
+ * Selector constraint
+ * The sdlos CSS parser (css_loader::isSimpleSelector) accepts ONLY:
+ *   .class-name          .class-name:hover / :active / :focus
+ *   #node-id             #node-id:hover
+ * Tag selectors (app, h1, button, object3d …) are silently skipped.
+ * Compound selectors (.modal.visible) are also NOT supported.
+ * Modal show/hide is therefore driven by direct setStyle() calls in the
+ * behaviour (height + overflow) rather than a CSS class toggle.
+ *
+ * 3-D material properties (consumed by GltfScene per-frame)
+ *   color          → albedo tint  (hex or rgba string)
+ *   border-color   → rim highlight colour (activated when border-width > 0)
+ *   border-width   → rim highlight strength; 0 = off
+ *   --roughness    → PBR roughness override  [0..1]
+ *   --metallic     → PBR metallic factor     [0..1]
+ *   --emissive     → self-illumination colour + intensity (a channel)
+ *
+ * Scene-level light overrides (on the .unicorn-scene node)
+ *   --light-color      → directional light RGB colour
+ *   --light-intensity  → directional light multiplier
+ *
+ * CSS kebab-case → camelCase conversion (css_loader.cxx::kebabToCamel):
+ *   background-color → backgroundColor   border-radius → borderRadius
+ *   font-size        → fontSize           flex-grow     → flexGrow
+ *   --roughness      → Roughness          --metallic    → Metallic
+ *   --light-color    → LightColor         --light-intensity → LightIntensity
+ * Trailing "px" is stripped automatically.
+ */
+
+
+.automat-root {
+    background-color: #1a0a2e;
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+
+.automat-welcome {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /*width: 100%;*/
+}
+
+/* 3-D viewport node (scene3d)  */
+/* No 2-D background — 3-D renders in a pre-pass behind the jade 2-D UI. */
+
+.unicorn-scene {
+    flex-grow: 1;
+    background-color: transparent;
+    --light-color: #fff0ff;
+    --light-intensity: 2.2;
+}
+
+/* 2-D overlay container */
+/* pointer-events: none is not yet in the layout engine; the overlay is   */
+/* rendered on top and mouse events fall through to 3-D hit-test instead. */
+
+.ui-overlay {
+    flex-direction: column;
+    justify-content: space-between;
+    background-color: transparent;
+}
+
+ /* HUD — top title bar */
+
+.hud {
+    flex-direction: row;
+    align-items: center;
+    gap: 8;
+    padding: 10;
+    background-color: #2a0a4ecc;
+}
+
+.hud-title {
+    font-size: 22;
+    color: #ffd700;
+    font-weight: bold;
+    flex-grow: 1;
+}
+
+.star {
+    font-size: 20;
+}
+
+/* Hotspot info modal */
+/* Starts collapsed via jade attr height="0" overflow="hidden".           */
+/* automat.cc reveals it by writing height + overflow directly onto the  */
+/* RenderNode's StyleMap (no compound-selector magic needed).             */
+
+.modal {
+    background-color: #1e0d40;
+    border-radius: 14;
+    padding: 20;
+    gap: 14;
+    color: #f0e8ff;
+    font-size: 14;
+    border-color: #bf5fff;
+    border-width: 2;
+}
+
+/* Modal header row */
+
+.modal-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    color: #bf5fff;
+    font-size: 16;
+    font-weight: bold;
+}
+
+/* Modal body text area */
+
+.modal-body {
+    color: #d8c8ff;
+    font-size: 13;
+    padding: 4;
+}
+
+/* Generic buttons */
+
+.btn {
+    background-color: #bf5fff;
+    color: #ffffff;
+    border-radius: 8;
+    padding: 6;
+    font-size: 14;
+    font-weight: bold;
+}
+
+.btn:hover {
+    background-color: #d280ff;
+}
+
+.btn:active {
+    background-color: #9940cc;
+}
+
+/* Stage progress label — sequential reveal indicator */
+/* automat.cxx writes the current model name into "text" each reveal step. */
+
+.stage-label {
+    padding: 6;
+    background-color: #12063a99;
+    color: #bf5fff;
+    font-size: 13;
+    font-weight: bold;
+    align-items: center;
+    border-color: #bf5fff;
+    border-width: 1;
+}
+
+/* Controls hint bar — bottom of overlay */
+
+.controls {
+    padding: 8;
+    background-color: #0a0520cc;
+    color: #5ffff2;
+    font-size: 12;
+}
+
+/* object3d proxy nodes injected by GltfScene.attach() */
+/* GltfScene sets class="mesh-node" on each injected object3d RenderNode. */
+/* No 2-D visual — these nodes exist only for hover/hit-test AABB.        */
+
+.mesh-node {
+    background-color: transparent;
+}
+
+.mesh-node:hover {
+    border-color: #5ffff2;
+    border-width: 3;
+}
+
+/* Per-mesh material overrides (matched by id on the object3d node)       */
+/* color → albedo tint read by GltfScene FragPush each frame.             */
+/* --roughness / --metallic → PBR override uniforms.                      */
+/* border-color / border-width → rim highlight when hover_t > 0.          */
+
+#coin-slot {
+    color: #c8a0ff;
+}
+
+#coin-slot:hover {
+    border-color: #ffd700;
+    border-width: 4;
+}
+
+#dome {
+    color: rgba(255, 200, 255, 0.6);
+    --roughness: 0.05;
+    --metallic: 0.1;
+}
+
+#dome:hover {
+    border-color: #ff6eb4;
+    border-width: 2;
+}
+
+#lever {
+    color: #c0ff80;
+    --roughness: 0.3;
+    --metallic: 0.8;
+}
+
+#lever:hover {
+    border-color: #ffd700;
+    border-width: 3;
+}
+
+#product-window {
+    color: rgba(200, 240, 255, 0.5);
+    --roughness: 0.05;
+    --metallic: 0;
+}
+
+#product-window:hover {
+    border-color: #5ffff2;
+    border-width: 2;
+}
+
+#modal-close:hover {
+    background-color: #ff6eb4;
+}

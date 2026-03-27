@@ -1,0 +1,97 @@
+# sdlos app config — example showing all supported keys
+# -------------------------------------------------------
+# Run:  sdlos create --config config/app.yaml
+#
+# CLI flags always override values set here.
+# Unknown keys are stored in AppConfig.extra and available to features.
+
+# ── Identity ──────────────────────────────────────────────────────────────────
+
+name: my_app
+# App name in snake_case.  Becomes the CMake target and output directory name.
+# Hyphens are converted to underscores automatically.
+# Must match: [a-z][a-z0-9_]*
+
+template: minimal
+# Starter template.  One of:
+#   minimal   — empty jade_app_init stub with correct signature + TODO markers
+#   shader    — shader canvas + preset sidebar + +/– param controls
+#   camera    — live video canvas + filter chips + dragnum inputs
+#   pug       — pipeline.pug framegraph demo
+
+# ── Window ────────────────────────────────────────────────────────────────────
+
+win_w: 800
+win_h: 600
+# Logical window dimensions in pixels.
+# These are passed to SDLOS_WIN_W / SDLOS_WIN_H at compile time.
+
+# ── Scaffold options ──────────────────────────────────────────────────────────
+
+data_dir: false
+# If true, create a data/ skeleton colocated with the app source:
+#
+#   examples/apps/<name>/
+#   ├── <name>.jade
+#   ├── <name>.css
+#   ├── <name>_behavior.cxx
+#   ├── <name>.cmake
+#   └── data/               ← created when data_dir: true
+#       ├── shaders/msl/    — Metal shader sources
+#       ├── shaders/spirv/  — SPIR-V shader sources
+#       ├── img/            — images / textures
+#       └── models/         — glTF / GLB model files
+#
+# Keeping data/ inside the app directory makes each app self-contained:
+# one folder to copy, move, archive, or delete — no parallel trees.
+#
+# The generated <name>.cmake will include:
+#   DATA_DIR examples/apps/<name>/data
+# which tells the build to copy the folder next to the binary at POST_BUILD.
+
+with_model: ~
+# Optional path to a .glb or .gltf file to copy into data/models/ during
+# scaffold.  Absolute or relative to the working directory.
+# Example: assets/Crystal_Cluster.glb
+
+# ── CMake ─────────────────────────────────────────────────────────────────────
+#
+# No patch_cmake setting needed.
+# sdlos create writes a <name>.cmake file into the app directory.
+# The root CMakeLists.txt picks it up automatically via:
+#
+#   file(GLOB _app_cmake_files "examples/apps/*/*.cmake")
+#   foreach(_f ${_app_cmake_files}) include(${_f}) endforeach()
+#
+# To register: create the app.  To unregister: delete the directory.
+
+# ── Build & run ───────────────────────────────────────────────────────────────
+#
+# After scaffolding, iterate with:
+#
+#   sdlos run <name>           build + launch (incremental, no dep re-fetch)
+#   sdlos run <name> --watch   rebuild + relaunch on every source change
+#   sdlos run <name> --clean   cmake --clean-first, then launch
+#
+# sdlos run always calls  cmake --build --target <name>  so only the app
+# target is rebuilt — shared engine libs and FetchContent deps are untouched.
+
+# ── Safety / UX ───────────────────────────────────────────────────────────────
+
+overwrite: false
+# Re-generate and overwrite existing scaffold files.
+# User code between  --- enter the forrest ---  and  --- back to the sea ---
+# markers is preserved verbatim even when overwriting.
+
+dry_run: false
+# Print what would happen without touching the filesystem or CMakeLists.txt.
+
+verbose: true
+# Emit a per-file log line during generation.
+
+# ── Feature: Updater ──────────────────────────────────────────────────────────
+# These keys land in AppConfig.extra and are read by sdlos.features.Updater.
+
+# updater_url: https://updates.example.com/my_app
+# updater_channel: stable
+# updater_binary: tools/updater/bin/updater

@@ -1,0 +1,68 @@
+/* scene.css — 3D scene layout for the Style Guide Crystal Cluster model
+ *
+ * Loaded manually in styleguide.cxx after GltfScene.attach() so that
+ * dynamically-injected proxy nodes are already in the RenderTree when
+ * applyTo() runs.
+ *
+ * Target node: #sg-crystal (mesh-id set on the scene3d#sg-3d node)
+ *
+ * 3-D transform properties (read by GltfScene::buildModelMatrix())
+ *   --scale           → uniform scale multiplier (applied on top of glTF world_mat)
+ *   --translate-x/y/z → world-space offset in metres
+ *   --rotation-x/y/z  → Euler rotation in degrees (applied as Rz · Ry · Rx)
+ *
+ * PBR material overrides (read by GltfScene::drawEntry() per-frame)
+ *   color          → albedo tint  (hex or rgba string)
+ *   --roughness    → PBR roughness override  [0..1]
+ *   --metallic     → PBR metallic factor     [0..1]
+ *   --emissive     → self-illumination colour + intensity (alpha = intensity)
+ *
+ * Scene-level light overrides (matched on the scene3d container node)
+ *   --light-color     → directional light RGB colour
+ *   --light-intensity → directional light multiplier
+ *
+ * CSS kebab-case → camelCase conversion (css_loader.cxx::kebabToCamel)
+ *   CSS custom properties (--foo) are stored verbatim: key = "--foo"
+ *   Standard properties: background-color → backgroundColor, etc.
+ *
+ * Selector constraint
+ *   Only .class and #id selectors are supported.
+ *   Tag selectors (scene3d, app …) are silently skipped.
+ */
+
+/* Crystal Cluster mesh proxy                                            */
+/* mesh-id="sg-crystal" → proxy RenderNode id = "sg-crystal"            */
+
+#sg-crystal {
+    --scale: 1.5;
+    --translate-x: 0;
+    --translate-y: 0;
+    --translate-z: 0;
+    --rotation-x: 0;
+    --rotation-y: 0;
+    --rotation-z: 0;
+
+    /* Slight purple-violet tint to accent the crystal material */
+    color: #dcc8ffd9;
+
+    /* PBR overrides — crystal-like low roughness, slight metallic sheen */
+    --roughness: 0.15;
+    --metallic: 0.05;
+
+    /* Soft violet emissive glow (rgba(140, 80, 255, 0.18) → #8c50ff2e) */
+    --emissive: #8c50ff2e;
+    --emissive-intensity: 1.2;
+}
+
+#sg-crystal:hover {
+    border-color: #c4b5fd;
+    border-width: 2;
+}
+
+/* Scene3d container light overrides                                     */
+/* Target the scene3d node itself via its id "sg-3d".                   */
+
+#sg-3d {
+    --light-color: #f0eaff;
+    --light-intensity: 2.0;
+}

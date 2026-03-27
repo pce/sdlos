@@ -1,0 +1,239 @@
+// =============================================================================
+// flatshader_behavior.cc  —  [shader] behaviour for the flatshader app
+// =============================================================================
+//
+// Architecture overview
+// ---------------------
+//   This file is #include-d directly into jade_host.cc at compile time.
+//   All declarations in jade_host.cc are visible here without any includes.
+//   The entry point is jade_app_init() — called once after the scene is fully
+//   parsed, styled, and layout-bound.
+//
+// Lifecycle
+// ---------
+//   1. jade_host.cc: SDL_Init, create window, SDLRenderer::Initialize
+//   2. jade_host.cc: load + parse flatshader.jade  →  RenderTree
+//   3. jade_host.cc: apply flatshader.css           →  StyleSheet
+//   4. jade_host.cc: resolve asset paths (src=, _font=, …)
+//   5. jade_host.cc: bindDrawCallbacks + bindNodeEvents
+//   6. jade_host.cc: <| jade_app_init() |>  ← you are here
+//   7. jade_host.cc: event loop → render loop
+//
+// EventBus topics (published by this behavior)
+// --------------------------------------------
+//   flatshader:preset   payload = preset display name  (shader template only)
+//   flatshader:inc      payload = param key  (e.g. "p0")
+//   flatshader:dec      payload = param key
+//
+// Customisation guide
+// -------------------
+//   1. Add rows to kFlatshaderPresets[] — display name, shader stem,
+//      and default param values.  One row per chip in the jade sidebar.
+//   2. Extend FlatshaderState with per-session fields.  The shared_ptr
+//      lifetime ensures bus callbacks remain safe after jade_app_init returns.
+//   3. Put shader binaries in data/shaders/msl/ (Metal) or
+//      data/shaders/spirv/ (Vulkan/SPIR-V).
+//
+// Regeneration
+// ------------
+//   sdlos create flatshader --overwrite
+//   Code between "enter the forrest" / "back to the sea" markers is preserved.
+//
+// Performance notes
+// -----------------
+//   • Bus callbacks run on the render thread — keep them O(1).
+//   • tree.node(h)->dirty_render = true marks only the subtree that changed;
+//     jade_host will forceAllDirty only if at least one node is dirty.
+//   • Never call SDL_PollEvent(), acquire a GPU command buffer, or block on
+//     I/O from inside jade_app_init() or any bus callback.
+// =============================================================================
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+// ── Preset catalogue ──────────────────────────────────────────────────────────
+//
+// display  — matches the data-value= attribute on the preset chip in jade.
+// shader   — _shader attribute value; empty string = no shader (plain image).
+// param0…2 — default values pushed to the canvas on preset activation.
+
+struct Preset {
+    std::string display;
+    std::string shader;
+    float       param0;
+    float       param1;
+    float       param2;
+};
+
+// --- enter the forrest ---
+
+const Preset kFlatshaderPresets[] = {
+    { "preset_a", "preset_a", 1.f,  0.f,  0.f },
+    { "preset_b", "preset_b", 0.5f, 0.1f, 0.f },
+    { "none",     "",         0.f,  0.f,  0.f },
+};
+
+// --- back to the sea ---
+
+// ── Parameter descriptor ──────────────────────────────────────────────────────
+
+struct Param {
+    std::string style_key;   // _shader_param0 / _shader_param1 / …
+    std::string lbl_id;      // id= of the label div
+    std::string val_id;      // id= of the value display div
+    float       value;
+    float       step;
+    float       min_val;
+    float       max_val;
+    pce::sdlos::NodeHandle label_h   = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle display_h = pce::sdlos::k_null_handle;
+};
+
+struct FlatshaderState {
+    std::string active_preset = "preset_a";
+
+    std::vector<Param> params = {
+        { "_shader_param0", "lbl-p0", "val-p0", 1.f,  0.1f,  0.f, 10.f },
+        { "_shader_param1", "lbl-p1", "val-p1", 0.f,  0.05f, 0.f,  1.f },
+    };
+
+    pce::sdlos::NodeHandle canvas_h      = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle active_name_h = pce::sdlos::k_null_handle;
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+[[nodiscard]] static std::string fmtVal(float v) noexcept
+{
+    char buf[32];
+    if (v == std::floor(v) && v > -9999.f && v < 9999.f)
+        std::snprintf(buf, sizeof(buf), "%.0f", static_cast<double>(v));
+    else
+        std::snprintf(buf, sizeof(buf), "%.3f", static_cast<double>(v));
+    return buf;
+}
+
+static void setAttr(pce::sdlos::RenderTree& tree,
+                    pce::sdlos::NodeHandle   h,
+                    const std::string& key, const std::string& val)
+{
+    if (pce::sdlos::RenderNode* n = tree.node(h)) {
+        n->setStyle(key, val);
+        n->dirty_render = true;
+    }
+}
+
+static void refreshParam(pce::sdlos::RenderTree& tree,
+                          FlatshaderState& s, std::size_t idx)
+{
+    auto& p = s.params[idx];
+    if (p.display_h.valid())
+        setAttr(tree, p.display_h, "text", fmtVal(p.value));
+    if (s.canvas_h.valid())
+        setAttr(tree, s.canvas_h, p.style_key, fmtVal(p.value));
+}
+
+static void applyPreset(pce::sdlos::RenderTree& tree,
+                         FlatshaderState& s,
+                         const std::string& preset_name,
+                         const std::vector<pce::sdlos::NodeHandle>& chips)
+{
+    const Preset* pr = nullptr;
+    for (const auto& p : kFlatshaderPresets)
+        if (p.display == preset_name) { pr = &p; break; }
+
+    if (pr) {
+        s.active_preset   = preset_name;
+        s.params[0].value = pr->param0;
+        s.params[1].value = pr->param1;
+
+        if (s.canvas_h.valid()) {
+            setAttr(tree, s.canvas_h, "_shader",        pr->shader);
+            setAttr(tree, s.canvas_h, "_shader_param0", fmtVal(pr->param0));
+            setAttr(tree, s.canvas_h, "_shader_param1", fmtVal(pr->param1));
+            setAttr(tree, s.canvas_h, "_shader_param2", fmtVal(pr->param2));
+        }
+    }
+
+    // Highlight the active chip; dim all others.
+    for (auto h : chips) {
+        if (pce::sdlos::RenderNode* n = tree.node(h)) {
+            const bool active = (n->style("data-value") == preset_name);
+            n->setStyle("backgroundColor", active ? "#6366f133" : "#ffffff0a");
+            n->dirty_render = true;
+        }
+    }
+
+    for (std::size_t i = 0; i < s.params.size(); ++i)
+        refreshParam(tree, s, i);
+
+    if (s.active_name_h.valid())
+        setAttr(tree, s.active_name_h, "text", preset_name);
+}
+
+} // namespace
+
+// ── jade_app_init ─────────────────────────────────────────────────────────────
+
+void jade_app_init(pce::sdlos::RenderTree&               tree,
+                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::SDLRenderer&               /*renderer*/,
+                   std::function<bool(const SDL_Event&)>& /*out_handler*/)
+{
+    auto state = std::make_shared<FlatshaderState>();
+
+    state->canvas_h      = tree.findById(root, "flatshader-canvas");
+    state->active_name_h = tree.findById(root, "active-name");
+    for (auto& p : state->params) {
+        p.label_h   = tree.findById(root, p.lbl_id);
+        p.display_h = tree.findById(root, p.val_id);
+    }
+
+    const auto chips = tree.findByClass(root, "preset");
+
+    sdlos_log("[flatshader] canvas="   + std::string(state->canvas_h.valid() ? "ok" : "MISSING")
+              + "  presets=" + std::to_string(chips.size()));
+
+    bus.subscribe("flatshader:preset",
+        [&tree, state, chips](const std::string& v) {
+            applyPreset(tree, *state, v, chips);
+        });
+
+    auto paramIdx = [](const std::string& k) -> int {
+        if (k == "p0") return 0;
+        if (k == "p1") return 1;
+        return -1;
+    };
+
+    bus.subscribe("flatshader:inc",
+        [&tree, state, paramIdx](const std::string& key) {
+            const int i = paramIdx(key);
+            if (i < 0) return;
+            auto& p = state->params[static_cast<std::size_t>(i)];
+            p.value = std::clamp(p.value + p.step, p.min_val, p.max_val);
+            refreshParam(tree, *state, static_cast<std::size_t>(i));
+        });
+
+    bus.subscribe("flatshader:dec",
+        [&tree, state, paramIdx](const std::string& key) {
+            const int i = paramIdx(key);
+            if (i < 0) return;
+            auto& p = state->params[static_cast<std::size_t>(i)];
+            p.value = std::clamp(p.value - p.step, p.min_val, p.max_val);
+            refreshParam(tree, *state, static_cast<std::size_t>(i));
+        });
+
+    // ── User extension point ───────────────────────────────────────────────────
+    // --- enter the forrest ---
+
+    // --- back to the sea ---
+
+    applyPreset(tree, *state, state->active_preset, chips);
+}

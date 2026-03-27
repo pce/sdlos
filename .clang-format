@@ -1,0 +1,211 @@
+# sdlos project — clang-format style
+# Based on LLVM with adjustments for C++23 and the sdlos naming/layout conventions.
+#
+# Usage
+# -----
+#   clang-format -i src/render_tree.cxx          format a single file
+#   find src -name '*.cxx' -o -name '*.hh' | xargs clang-format -i
+#   sdlos analyze src/ --format --write           via the sdlos tooling
+#
+# CI / editor integration
+# -----------------------
+#   Most editors (VSCode, CLion, Zed, Emacs, Vim) pick this file up
+#   automatically from the nearest ancestor directory.
+#
+#   void jade_app_init(pce::sdlos::RenderTree&               tree,
+#                      pce::sdlos::NodeHandle                 root,
+#                      pce::sdlos::IEventBus&                 bus,
+#                      pce::sdlos::SDLRenderer&               renderer,
+#                      std::function<bool(const SDL_Event&)>& out_handler)
+#
+
+---
+Language: Cpp
+Standard: c++23
+
+# Indentation
+IndentWidth:                 4
+TabWidth:                    4
+UseTab:                      Never
+ContinuationIndentWidth:     4
+ConstructorInitializerIndentWidth: 4
+LambdaBodyIndentation:       Signature
+
+# Line length
+ColumnLimit:                 100
+
+# Alignment
+AlignAfterOpenBracket:       AlwaysBreak
+AlignArrayOfStructures:      Right
+AlignConsecutiveAssignments:
+  Enabled:                   true
+  AcrossEmptyLines:          false
+  AcrossComments:            false
+  AlignCompound:             true
+  PadOperators:              true
+AlignConsecutiveBitFields:
+  Enabled:                   true
+  AcrossEmptyLines:          false
+  AcrossComments:            false
+AlignConsecutiveDeclarations:
+  Enabled:                   false   # too aggressive across disparate types
+  AcrossEmptyLines:          false
+  AcrossComments:            false
+AlignConsecutiveMacros:
+  Enabled:                   true
+  AcrossEmptyLines:          false
+  AcrossComments:            false
+AlignEscapedNewlines:        Left
+AlignOperands:               AlignAfterOperator
+AlignTrailingComments:
+  Kind:                      Always
+  OverEmptyLines:            1
+
+# Arguments / parameters
+AllowAllArgumentsOnNextLine:        false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments:                   false
+BinPackParameters:                  false
+
+# Short-form collapsing
+AllowShortBlocksOnASingleLine:      Never
+AllowShortCaseLabelsOnASingleLine:  false
+AllowShortEnumsOnASingleLine:       false
+AllowShortFunctionsOnASingleLine:   Inline   # allow only truly trivial getters
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine:     All
+AllowShortLoopsOnASingleLine:       false
+
+# Brace wrapping
+BreakBeforeBraces:           Custom
+BraceWrapping:
+  AfterCaseLabel:            false
+  AfterClass:                false
+  AfterControlStatement:     Never
+  AfterEnum:                 false
+  AfterFunction:             false
+  AfterNamespace:            false
+  AfterObjCDeclaration:      false
+  AfterStruct:               false
+  AfterUnion:                false
+  AfterExternBlock:          false
+  BeforeCatch:               false
+  BeforeElse:                false
+  BeforeLambdaBody:          false
+  BeforeWhile:               false
+  IndentBraces:              false
+  SplitEmptyFunction:        false
+  SplitEmptyRecord:          false
+  SplitEmptyNamespace:       false
+
+# Pointer / reference style
+# Align * and & with the type: `const char* ptr`, `const SDL_Event& ev`
+PointerAlignment:            Right
+ReferenceAlignment:          Right
+QualifierAlignment:          Left    # const on the left: `const int` not `int const`
+
+# Include sorting
+SortIncludes:                CaseSensitive
+IncludeBlocks:               Regroup
+IncludeCategories:
+  # 1. Project umbrella / precompiled header
+  - Regex:           '^"(pch|stdafx)\.(h|hh|hpp)"'
+    Priority:        1
+    SortPriority:    1
+  # 2. Same-directory / project headers (quoted, no path separator)
+  - Regex:           '^"[^/]+'
+    Priority:        2
+    SortPriority:    2
+  # 3. Project subdirectory headers (quoted, with path separator)
+  - Regex:           '^"'
+    Priority:        3
+    SortPriority:    3
+  # 4. SDL3 headers
+  - Regex:           '^<SDL3/'
+    Priority:        4
+    SortPriority:    4
+  # 5. Everything else (system / third-party angle-bracket headers)
+  - Regex:           '^<'
+    Priority:        5
+    SortPriority:    5
+
+# Namespace
+CompactNamespaces:           false
+FixNamespaceComments:        true
+NamespaceIndentation:        None
+ShortNamespaceLines:         0
+
+# Template / concept formatting
+AlwaysBreakTemplateDeclarations:     Yes
+BreakBeforeConceptDeclarations:      Always
+RequiresClausePosition:              OwnLine
+RequiresExpressionIndentation:       OuterScope
+IndentRequiresClause:                true
+
+# Break locations
+AlwaysBreakAfterReturnType:          None
+BreakAfterAttributes:                Always     # [[nodiscard]] on its own line
+BreakBeforeBinaryOperators:          NonAssignment
+BreakBeforeTernaryOperators:         true
+BreakConstructorInitializers:        BeforeComma
+BreakInheritanceList:                BeforeComma
+BreakStringLiterals:                 true
+
+# Misc
+DerivePointerAlignment:              false
+DisableFormat:                       false
+EmptyLineAfterAccessModifier:        Never
+EmptyLineBeforeAccessModifier:       LogicalBlock
+IndentAccessModifiers:               false
+IndentCaseBlocks:                    false
+IndentCaseLabels:                    false
+IndentExternBlock:                   Indent
+IndentGotoLabels:                    true
+IndentPPDirectives:                  BeforeHash
+InsertBraces:                        false   # do not auto-insert braces — too invasive
+InsertNewlineAtEOF:                  true
+InsertTrailingCommas:                None
+IntegerLiteralSeparator:
+  Binary:  4
+  Decimal: 3
+  Hex:     4
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep:              1
+PenaltyBreakAssignment:           2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment:              300
+PenaltyBreakFirstLessLess:        120
+PenaltyBreakOpenParenthesis:      0
+PenaltyBreakString:               1000
+PenaltyBreakTemplateDeclaration:  10
+PenaltyExcessCharacter:           1000000
+PenaltyIndentedWhitespace:        0
+ReflowComments:                   true
+RemoveSemicolon:                  false
+SeparateDefinitionBlocks:         Leave
+SortUsingDeclarations:            LexicographicNumeric
+SpaceAfterCStyleCast:             false
+SpaceAfterLogicalNot:             false
+SpaceAfterTemplateKeyword:        true
+SpaceAroundPointerQualifiers:     Default
+SpaceBeforeAssignmentOperators:   true
+SpaceBeforeCaseColon:             false
+SpaceBeforeCpp11BracedList:       false
+SpaceBeforeCtorInitializerColon:  true
+SpaceBeforeInheritanceColon:      true
+SpaceBeforeParens:                ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets:        false
+SpaceInEmptyBlock:                false
+SpaceInEmptyParentheses:          false
+SpacesBeforeTrailingComments:     2
+SpacesInAngles:                   Never
+SpacesInConditionalStatement:     false
+SpacesInContainerLiterals:        false
+SpacesInCStyleCastParentheses:    false
+SpacesInLineCommentPrefix:
+  Minimum:  1
+  Maximum:  -1
+SpacesInParentheses:              false
+SpacesInSquareBrackets:           false
+PenaltyReturnTypeOnItsOwnLine:    69

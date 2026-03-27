@@ -1,0 +1,94 @@
+// layout.jade — Flexbox Layout showcase
+//
+// Page 2 of 3 in the Style Guide presentation.
+// Demonstrates: equal rows, weighted rows, columns, justify-content, flex-wrap cards.
+// All styles are inline — no external CSS dependency.
+
+col(flexGrow="1" overflow="hidden" backgroundColor="#0a0a0f")
+
+  // ── Header bar ────────────────────────────────────────────────────────────
+  row(height="48" backgroundColor="#0f172a" paddingLeft="24" paddingRight="24" alignItems="center")
+    div(color="#94a3b8" fontSize="11" fontWeight="bold") FLEXBOX LAYOUT
+    div(flexGrow="1")
+    div(color="#334155" fontSize="11") 02 / 03
+
+  // ── Scrollable content ────────────────────────────────────────────────────
+  col(flexGrow="1" overflow="scroll" padding="24" gap="32")
+
+    // ── ROW — equal flex-grow ─────────────────────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") ROW  ·  flex-grow: 1  1  1  (equal)
+      row(gap="10")
+        div(flexGrow="1" backgroundColor="#6366f130" borderRadius="8" height="52" fontSize="13" color="#a5b4fc" fontWeight="bold") 1
+        div(flexGrow="1" backgroundColor="#6366f130" borderRadius="8" height="52" fontSize="13" color="#a5b4fc" fontWeight="bold") 2
+        div(flexGrow="1" backgroundColor="#6366f130" borderRadius="8" height="52" fontSize="13" color="#a5b4fc" fontWeight="bold") 3
+
+    // ── ROW — weighted flex-grow ──────────────────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") ROW  ·  flex-grow: 1  2  1  (weighted)
+      row(gap="10")
+        div(flexGrow="1" backgroundColor="#8b5cf630" borderRadius="8" height="52" fontSize="12" color="#c4b5fd") grow 1
+        div(flexGrow="2" backgroundColor="#8b5cf660" borderRadius="8" height="52" fontSize="12" color="#c4b5fd" fontWeight="bold") grow 2  (double)
+        div(flexGrow="1" backgroundColor="#8b5cf630" borderRadius="8" height="52" fontSize="12" color="#c4b5fd") grow 1
+
+    // ── COLUMN — stacked with gap ─────────────────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") COLUMN  ·  gap: 8
+      col(gap="8")
+        div(backgroundColor="#06b6d430" borderRadius="8" height="44" fontSize="13" color="#67e8f9") Row  A
+        div(backgroundColor="#06b6d430" borderRadius="8" height="44" fontSize="13" color="#67e8f9") Row  B
+        div(backgroundColor="#06b6d430" borderRadius="8" height="44" fontSize="13" color="#67e8f9") Row  C
+
+    // ── ROW — justify-content space-between ───────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") ROW  ·  justify-content: space-between
+      row(justifyContent="space-between" backgroundColor="#0f172a" borderRadius="10" padding="12")
+        div(backgroundColor="#10b981" color="#ffffff" width="80" height="44" borderRadius="8" fontSize="12") Start
+        div(backgroundColor="#10b981" color="#ffffff" width="80" height="44" borderRadius="8" fontSize="12") Middle
+        div(backgroundColor="#10b981" color="#ffffff" width="80" height="44" borderRadius="8" fontSize="12") End
+
+    // ── ROW — justify-content center ──────────────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") ROW  ·  justify-content: center
+      row(justifyContent="center" gap="12" backgroundColor="#0f172a" borderRadius="10" padding="12")
+        div(backgroundColor="#f59e0b" color="#1a1200" width="80" height="44" borderRadius="8" fontSize="12" fontWeight="bold") Alpha
+        div(backgroundColor="#f59e0b" color="#1a1200" width="80" height="44" borderRadius="8" fontSize="12" fontWeight="bold") Beta
+        div(backgroundColor="#f59e0b" color="#1a1200" width="80" height="44" borderRadius="8" fontSize="12" fontWeight="bold") Gamma
+
+    // ── FLEX WRAP — cards ─────────────────────────────────────────────────────
+    col(gap="10")
+      div(color="#475569" fontSize="10" fontWeight="bold") FLEX WRAP  ·  row with wrap: true
+      row(gap="14" flexWrap="true")
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#6366f1" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Alpha
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#8b5cf6" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Beta
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#06b6d4" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Gamma
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#10b981" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Delta
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#f59e0b" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Epsilon
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+        col(backgroundColor="#1e293b" borderRadius="12" padding="16" gap="8" width="148")
+          div(backgroundColor="#ef4444" height="60" borderRadius="8")
+          div(color="#f1f5f9" fontSize="13" fontWeight="bold") Zeta
+          div(color="#64748b" fontSize="11") Subtitle text here
+
+    // ── Bottom padding ────────────────────────────────────────────────────────
+    div(height="24")

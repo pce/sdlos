@@ -1,0 +1,74 @@
+// android/app/build.gradle
+// Copied into deps/SDL3/android-project/app/build.gradle by config/config-android.sh
+// or the CI workflow before running Gradle.
+//
+// Key differences from SDL3's default build.gradle:
+//   - applicationId / namespace changed to dev.sdlos.app
+//   - externalNativeBuild.cmake.path points to our android/app/src/main/cpp/CMakeLists.txt
+//     (path is relative to THIS file's location after being copied into
+//      deps/SDL3/android-project/app/build.gradle, i.e. 4 levels up to project root)
+//   - minSdk 26 (SDL3 GPU API requires API 26+)
+//   - abiFilters: arm64-v8a + x86_64 (covers all modern phones + emulator)
+
+apply plugin: 'com.android.application'
+
+android {
+    compileSdk 34
+    namespace 'dev.sdlos.app'
+
+    defaultConfig {
+        applicationId   'dev.sdlos.app'
+        minSdk          26
+        targetSdk       34
+        versionCode     1
+        versionName     '0.1.0'
+
+        externalNativeBuild {
+            cmake {
+                // Path relative to this file once copied into
+                // deps/SDL3/android-project/app/build.gradle:
+                //   app/ -> android-project/ -> SDL3/ -> deps/ -> <root>
+                //   -> android/app/src/main/cpp/CMakeLists.txt
+                arguments "-DANDROID_STL=c++_shared",
+                          "-DSDLTTF_VENDORED=ON",
+                          "-DSDLTTF_FREETYPE_VENDORED=ON",
+                          "-DSDLTTF_HARFBUZZ_VENDORED=ON",
+                          "-DSDLOS_ENABLE_TESTS=OFF",
+                          // Tell our CMakeLists where the sdlos source root is.
+                          "-DSDLOS_ROOT=../../../../"
+                abiFilters 'arm64-v8a', 'x86_64'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable         true
+            jniDebuggable      true
+            minifyEnabled      false
+        }
+        release {
+            minifyEnabled      false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                          'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            // Relative from deps/SDL3/android-project/app/ to our CMakeLists.txt.
+            path    "../../../../android/app/src/main/cpp/CMakeLists.txt"
+            version "3.25"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // No extra AAR dependencies — SDL3 is built from source by CMake.
+}
+

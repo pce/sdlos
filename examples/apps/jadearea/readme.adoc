@@ -1,0 +1,22 @@
+==  Jade Editor behaviour
+
+jadearea_behavior.cxx
+
+Events:
+   jade:load  - load a named jade, render on the canvas
+   jade:save  - save the current jade
+
+The Input Text Area node (id="jade-texted") carries _shader / _shader_param* style
+attrs; the engine reads them every frame and calls drawImageWithShader().
+
+
+=== Node shader pipeline cache
+
+
+=== Style Import
+
+head link(rel="stylesheet" href="/css/main.css")
+
+head style. @import url('/css/extra.css');
+
+Not CSS compatible, atm we apply the styles when the render tree is built.

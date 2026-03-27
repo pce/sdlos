@@ -1,0 +1,613 @@
+= sdlos
+:toc:
+:toclevels: 2
+
+C++23 / SDL3 GPU framework for building native applications with a declarative
+scene graph, CSS-driven styling, and a Jade-like **retained-mode** UI description language.
+Not a browser. Not Electron. A render tree that runs directly on the GPU.
+
+
+
+== Design Principles
+
+The render tree is data-oriented, not a classical node hierarchy. Three
+structural choices make every pass fast and predictable.
+
+
+Clean up Contract: Zombie Preventation => no stale pointers, no GPU crashes, no zombies.
+
+---
+
+== Render Tree
+
+Left-Child Right-Sibling (LCRS) topology stored in a `slot_map<RenderNode>`.
+
+[source,cpp]
+----
+struct RenderNode {
+    NodeHandle parent, child, sibling;   // LCRS links — all stable SlotIDs
+    float x, y, w, h;                   // physical pixels, written by layout
+
+    bool dirty_layout;                   // propagates upward; consumed by update()
+    bool dirty_render;                   // propagates upward; consumed by render()
+
+    LayoutKind  layout_kind;
+    LayoutProps layout_props;
+    VisualProps visual_props;
+
+    std::function<void(RenderContext&)> draw;
+    std::function<void()>              update;
+    std::any                           state;
+};
+----
+Press kbd:[F1] at runtime for the layout debug overlay.
+
+---
+
+== Layout
+
+Single-pass preorder cascade: a parent resolves its own geometry, then writes
+`x/y/w/h` on its direct children and sets their `dirty_layout`.
+The traversal picks this up immediately — no fixpoint loop, O(n).
+
+[cols="1,1,3",options="header"]
+|===
+| LayoutKind   | F1 colour | Algorithm
+| `None`       | gray      | Caller-managed, no automatic positioning.
+| `Block`      | orange    | Vertical stack, children get full parent width.
+| `FlexRow`    | blue      | Three-pass: base sizes → flex-grow → justify + align.
+| `FlexColumn` | green     | Same, vertical main axis.
+| `Grid`       | purple    | Reserved — Phase 3.
+|===
+
+`flexLayout` scratch span (`std::span<RenderNode*>`) is allocated from the
+`frame_arena` per call — zero heap traffic during layout.
+
+*Tradeoff 1* — no size-to-content (<<tradeoffs>>).
+
+*Dirty propagation is root-wide in practice:* `markLayoutDirty(h)` walks
+upward and sets `dirty_layout` on every ancestor up to the root.
+Because the root is always marked dirty, the preorder traversal in `update()`
+re-runs `resolveLayout()` on the full tree every frame a change occurs.
+The flag infrastructure supports subtree-bounded re-layout — it is not yet
+exploited.
+
+*External layout engines (Yoga, Clay):* worth the dependency cost when
+`flex-shrink` or content-driven sizing is required. When crossing a C-API
+boundary, batch the whole tree in one call — per-node crossings kill
+inlining and optimizer visibility.
+
+*Physics as layout:* makes sense only when elements must physically collide
+(game inventory, physics playground). For fling, overscroll, and transitions
+seed `spring_vel` from gesture velocity — no collision detection needed.
+
+*Grid requires two passes:* track sizing needs item sizes before placement,
+but placement depends on track sizes. The single-pass cascade cannot satisfy
+this bidirectional dependency. Out of scope.
+
+---
+
+== Frame Pipeline
+
+....
+ 1  AcquireCommandBuffer / AcquireSwapchainTexture
+ 2  sync root w/h to swapchain → markLayoutDirty if changed
+ 3  TextRenderer::flushUploads()          (copy pass — must precede render pass)
+ 4  wallpaper shader                      (render pass)
+ 5  scene3d_hook() if set                 (3D pre-pass, LOADOP_LOAD)
+ 6  beginFrame / update / render          (2D UI, LOADOP_LOAD)
+ 7  SubmitGPUCommandBuffer
+....
+
+`SDL_EVENT_WINDOW_RESIZED` carries *logical* pixels.
+Physical pixel dimensions come from `SDL_AcquireGPUSwapchainTexture` every
+frame — always correct on HiDPI displays, never stale.
+
+---
+
+== CSS
+
+`css::load()` parses a CSS file and returns a `StyleSheet`.
+`@import "relative/path.css"` is supported; circular imports are silently
+skipped by tracking visited paths.
+
+CSS property names are translated kebab→camelCase to match jade attribute
+names (`background-color` → `backgroundColor`).
+
+Supported selectors: tag, `.class`, `#id`, `:hover`, `:active`.
+
+Usage sequence — order matters:
+
+[source,cpp]
+----
+auto sheet = css::load("app.css");
+sheet.applyTo(tree, root);          // write base styles to StyleMap, once
+// ... bindDrawCallbacks() ...
+sheet.buildHover(tree, root);       // snapshot base styles for hover delta
+sheet.buildActive(tree, root);      // build radio-group toggle entries
+// per MOUSE_MOTION:
+sheet.tickHover(tree, phys_x, phys_y);
+// on click:
+sheet.activateNode(tree, clicked);  // radio deactivate siblings, activate one
+----
+
+`buildHover()` snapshots the *CSS base values* for each property that a
+`:hover` rule overrides — never runtime state — so `tickHover()` restores
+exactly what the stylesheet declared, not whatever the behavior may have set.
+
+`buildActive()` scans children of every node carrying a `toggle-group`
+attribute and wires `:active` rules as a radio group.
+
+*Tradeoff 2* — CSS applied once at load (<<tradeoffs>>).
+
+*Tradeoff 3* — no cascade, no inheritance, no `var()` (<<tradeoffs>>).
+
+---
+
+== JadeLite
+
+Single-pass, indentation-sensitive UI description language.
+Not a full Pug implementation.
+The parser allocates `RenderNode`s directly into the target `RenderTree`
+with no intermediate representation.
+
+[source]
+----
+row.toolbar
+  button.key(onclick="calc:press" data-value="7") 7
+  div.timer(interval-ms="1000" ontick="clock:tick")
+  div.card(onreveal="anim:enter")
+----
+
+Tag-to-layout defaults:
+
+[cols="2,1",options="header"]
+|===
+| Tags                                          | LayoutKind
+| `div section main header footer article`      | `Block`
+| `row hbox toolbar`                            | `FlexRow`
+| `col column vbox stack`                       | `FlexColumn`
+| `span p label button h1–h6 img a` …           | `None`
+|===
+
+`flexDirection="row\|column"` on any tag overrides the default.
+
+Events route through the `EventBus`:
+
+....
+SDL_EVENT_MOUSE_BUTTON_DOWN → dispatchClick → hitTest
+  → node.style("onclick") → bus.publish(topic, data-value)
+
+interval-ms / ontick  → update() callback → bus.publish(ontick, "")
+onreveal              → fires once on first update()
+....
+
+*Tradeoff 4* — EventBus subscriptions outlive nodes (<<tradeoffs>>).
+
+---
+
+== Signal<T>
+
+Reactive value cell. `set(v)` stores the new value and synchronously notifies
+all observers.
+
+[source,cpp]
+----
+Signal<bool> visible{false};
+tree.bind(visible, overlay_h);   // markDirty(overlay_h) on every change
+visible.set(true);               // observers fire immediately, inline
+----
+
+`observe()` uses C++23 deducing-this — one template covers lvalue and rvalue
+Signals. The Signal must outlive the `RenderTree` (observers hold a raw
+`this` pointer).
+
+---
+
+== Animated<T>
+
+Value type for interpolated transitions.  Stored inside widget state structs,
+not registered in any system.
+
+[source,cpp]
+----
+Animated<float> opacity;
+
+// start a transition (picks up from current position if called mid-flight):
+opacity.transition(1.f, 300.f, easing::easeOut);
+
+// in update() — keep the node dirty while animating:
+if (!state->opacity.finished())
+    tree.markDirty(handle);
+
+// in draw() — pure, no side effects:
+ctx.drawRect(ax, ay, w, h, r, g, b, state->opacity.current());
+----
+
+Clock: `SDL_GetTicks()`. Dirty-marking is the caller's responsibility.
+
+---
+
+== Shader Nodes
+
+Any node can run a fragment shader by setting `_shader` in its StyleMap.
+The engine binds a fixed uniform struct to `fragment buffer(0)`:
+
+[source,cpp]
+----
+struct NodeShaderParams {   // 8 × float32 = 32 bytes
+    float u_width, u_height;
+    float u_focusX, u_focusY;
+    float u_param0, u_param1, u_param2;
+    float u_time;
+};
+----
+
+Shader entry point is always `main0`.
+The `_shader_param0..2` style keys map to `u_param0..2`.
+
+*Tradeoff 5* — fixed 8-float shader uniforms (<<tradeoffs>>).
+
+Reference shader apps in `examples/apps/cam/` and `examples/apps/shade/`
+demonstrate the full Metal + GLSL + WGSL implementations of tilt-blur,
+Perlin noise, vignette, and cinematic colour grading.
+
+---
+
+== 3D Scene
+
+Attach `.glb` models to any `scene3d` node in jade and drive transforms and
+PBR material uniforms via CSS:
+
+[source]
+----
+scene3d(src="data/models/altar.glb" mesh-id="altar")
+----
+
+[source,css]
+----
+#altar {
+    --translate-z: -1;
+    --scale: 1;
+    --roughness: 0.35;
+    --metallic: 0.15;
+    --emissive: #ffcc66;
+}
+#altar:hover { border-color: #ffd700; border-width: 3; }
+----
+
+Wire hooks in `jade_app_init`:
+
+[source,cpp]
+----
+renderer.setScene3DHook(
+    [](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap,
+       float vw, float vh) noexcept {
+        g_scene.render(cmd, swap, vw, vh);
+    });
+renderer.setGpuPreShutdownHook([]() noexcept { g_scene.shutdown(); });
+----
+
+*Tradeoff 6* — `GltfScene` shutdown ordering (<<tradeoffs>>).
+
+---
+
+== Widgets
+
+`TextBox`, `TextArea`, `SelectBox`, `NumberDragger`, `RangeSlider` via
+`WidgetView<StateT>`:
+
+[source,cpp]
+----
+auto box = makeTextBox(tree, {.placeholder = "Name", .w = 280.f});
+tree.appendChild(parent, box.root);
+box.setText("Alice");
+box.focus();
+----
+
+---
+
+== Custom Containers
+
+All four containers live in `src/core/` and serve the engine's hot paths.
+
+[cols="1,2,3",options="header"]
+|===
+| Container | Replaces | Notes
+
+| `slot_map<T>`
+| —
+| Index + generation; free-list reuse; O(1) insert / erase / lookup.
+  Backing store for `RenderTree`.
+
+| `frame_arena`
+| `std::pmr::monotonic_buffer_resource`
+| 1 MB bump allocator. Trivially-destructible types only — no destructor
+  calls. O(1) `reset()` at the top of every frame.
+  Used in `flexLayout` scratch spans and text-renderer upload queues.
+
+| `small_flat_map<K,V,N=8>`
+| `std::flat_map` (C++23)
+| N pairs inline on the stack; spills to heap beyond N.
+  `std::flat_map` provides no inline storage — even a 1-entry map heap-allocates.
+  Used in `RenderContext::pipelines` and `StyleMap`.
+
+| `small_vector<T,N>`
+| `std::inplace_vector` _(C++26)_
+| N elements inline; heap spill on overflow.
+  Used in widget state and various scratch collections.
+|===
+
+---
+
+== GPU Backends
+
+[cols="1,1,1,2",options="header"]
+|===
+| Platform       | Backend        | Shader format | Source location
+| macOS / iOS    | Metal          | MSL           | `assets/shaders/msl/*.metal`
+| Linux          | Vulkan         | SPIR-V        | `assets/shaders/glsl/` → `spv/`
+| Windows        | Vulkan / D3D12 | SPIR-V / DXIL | same
+|===
+
+Metal and SPIR-V source files are maintained separately.
+There is no shader transpiler in the pipeline.
+
+*Tradeoff 7* — dual shader maintenance (<<tradeoffs>>).
+
+PBR mesh shaders are engine-level resources placed by
+`sdlos_copy_resource_to(sdlos_engine …)` at build time, not per-app.
+
+---
+
+== Standalone App (cmake)
+
+`sdlos_jade_app()` produces a self-contained binary from a single `.jade`
+scene. Source code and runtime assets live in separate trees:
+
+[source,cmake]
+----
+sdlos_jade_app(myapp
+    examples/apps/myapp/myapp.jade
+    BEHAVIOR examples/apps/myapp/myapp_behavior.cxx
+    DATA_DIR examples/apps/myapp/data
+    WIN_W 1280  WIN_H 800)
+----
+
+[cols="1,2,3",options="header"]
+|===
+| Key | Compile-time effect | Runtime effect
+
+| `<jade_file>`
+| `SDLOS_JADE_ENTRY="<abs_path>"`
+| Binary always knows its scene path.
+
+| `BEHAVIOR`
+| `SDLOS_APP_BEHAVIOR="<abs_path>"` — `#include`d into `jade_host.cxx`
+| One translation unit, no linker seams.
+  Behavior changes require a recompile.
+
+| `DATA_DIR`
+| `POST_BUILD copy_directory`
+| `examples/apps/<name>/data/` lands at `<binary_dir>/data/`.
+  Loaded at runtime via `SDL_GetBasePath() + "data/"`.
+
+| `WIN_W / WIN_H`
+| `SDLOS_WIN_W / SDLOS_WIN_H` compile definitions
+| Debug window size only. Omit to use engine defaults (375 × 667, resizable).
+  Release builds are always `SDL_WINDOW_FULLSCREEN`.
+|===
+
+*Tradeoff 8* — window size is compile-time (<<tradeoffs>>).
+
+The root `CMakeLists.txt` auto-discovers apps via:
+
+[source,cmake]
+----
+file(GLOB _app_cmake_files "examples/apps/*/*.cmake")
+foreach(_f ${_app_cmake_files})
+    include(${_f})
+endforeach()
+----
+
+To register an app: create it. To remove an app: delete its directory.
+No shared file is ever edited by either operation.
+
+By design: no dynamic loading or linking. The behavior is `#include`d at compile time — replacing a no-op stub with the app's real code, zero linker seams.
+
+---
+
+
+== Known Issues
+
+. *EventBus leaks on node removal* — `bus.subscribe()` lambdas are never
+  automatically unregistered when a node is removed from the tree.
+  Captured `shared_ptr<AppState>` prevents crashes; dead entries accumulate.
+
+. *No size-to-content* — single-pass layout: parent size cannot depend on
+  child size.
+
+. *CSS applied once at load* — dynamically inserted nodes are not covered by
+  `applyTo()` unless it is called again.
+
+. *Approximate text metrics* — `char_width ≈ 0.55 × fontSize` is a heuristic.
+  No measurement pass; multi-line or variable-width text will misalign.
+
+. *Fixed 8-float shader uniforms* — `NodeShaderParams` is a fixed 32-byte
+  struct. Custom shaders needing more parameters require an engine change.
+
+. *`jade_app_init` compiled in* — one translation unit, `#include`d at
+  compile time via `SDLOS_APP_BEHAVIOR`. A behavior change recompiles exactly
+  one TU; on a warm cache that takes a few seconds.
+  `sdlos run my_viz` (build + relaunch) is the intended iteration loop.
+  True hot-reload atm skipped - compiles fast -  via https://github.com/fungos/cr[cr.h] is compatible with the small scale single-TU design (Translation Unit) adding dylib output is a cmake option change.
+
+. *Dual shader maintenance* — Metal + SPIR-V written separately.
+
+. *`GltfScene` shutdown ordering* — see §3D Scene above and
+  `architecture.md §App State and GltfScene Lifecycle`.
+
+---
+
+[#tradeoffs]
+== Tradeoffs
+
+Deliberate design decisions with known downsides.
+
+[cols="1,1,3",options="header"]
+|===
+| # | Area | Description
+
+| 1 | Layout
+| *No size-to-content.* Parent dimensions must be known before children are
+  laid out. Children cannot push a parent's size.
+
+| 2 | CSS
+| *CSS applied once at load.* `applyTo()` is not called for dynamically
+  inserted nodes. Use `setStyle()` or call `applyTo()` again.
+
+| 3 | CSS
+| *No cascade, inheritance, `var()`, or `@media`.* Styles are flat key-value
+  per node. A parent property does not propagate to children.
+
+| 4 | JadeLite EventBus
+| *EventBus subscriptions outlive nodes.* `bus.subscribe()` callbacks are not
+  cancelled on node removal. Dead entries accumulate;
+  `shared_ptr<AppState>` prevents crashes. Don't Touch The Driver!
+
+| 5 | Shader Nodes
+| *Fixed 8-float uniform interface.* `NodeShaderParams` is 32 bytes.
+  More parameters require changing the struct and all pipelines.
+
+| 6 | 3D Scene
+| *`GltfScene` shutdown ordering.* A global `GltfScene` destructor races
+  SDL's GPU teardown. Use `setGpuPreShutdownHook` or move state into a
+  `shared_ptr<AppState>`. See `architecture.md §App State and GltfScene Lifecycle`.
+
+| 7 | GPU Backends
+| *Dual shader maintenance.* Every effect needs a `.metal` source and a
+  `.glsl`/`.wgsl` source. No transpiler in the pipeline.
+
+| 8 | Standalone App
+| *Window size is compile-time.* `WIN_W` / `WIN_H` are baked into the
+  binary. Debug window size changes require a rebuild.
+|===
+
+---
+
+== Build
+
+=== First-time setup
+
+[source,sh]
+----
+./pre_cmake.sh                 # clone SDL3 + SDL_image/mixer/ttf into deps/
+----
+
+=== sdlos CLI  _(recommended)_
+
+The `tooling/` Python package wraps every cmake step.
+Bootstrap once, then use `uv run sdlos` from anywhere in the project:
+
+[source,sh]
+----
+cd tooling && uv sync && cd ..
+
+# Scaffold a new app (interactive on a TTY)
+uv run sdlos create                          # fully interactive
+uv run sdlos create hello                    # name given, prompts for the rest
+uv run sdlos create viz --template shader --win-w 1280 --win-h 800 --no-interactive
+uv run sdlos create mycam --template camera --data-dir --with-model assets/model.glb
+
+# Build and run a specific app (incremental — only that target is rebuilt)
+uv run sdlos run styleguide                  # build + launch
+uv run sdlos run styleguide --watch          # rebuild + relaunch on source change
+uv run sdlos run styleguide --clean          # cmake --clean-first, then launch
+uv run sdlos run styleguide -j 8             # parallel build
+uv run sdlos run styleguide --no-build       # just launch the last binary
+
+# After creating a new app on an already-configured build tree
+uv run sdlos run my_new_app --reconfigure    # picks up the new .cmake glob entry
+uv run sdlos run my_new_app --reconfigure --preset macos-debug
+----
+
+The auto-discovery glob (`examples/apps/*/*.cmake`) runs at *configure time*.
+`sdlos run --reconfigure` re-runs configure so a freshly scaffolded app becomes visible
+without wiping the build directory.
+
+[cols="2,5",options="header"]
+|===
+| Command | What it does
+| `sdlos run <name>`                | Incremental `cmake --build --target <name>` then launch
+| `sdlos run <name> --watch`        | Build + launch + auto-rebuild on every source file change
+| `sdlos run <name> --clean`        | `cmake --build --clean-first` then launch
+| `sdlos run <name> --reconfigure`  | Re-configure (picks up new `.cmake` glob entries)
+| `sdlos run <name> --no-build`     | Skip build, just find and launch the existing binary
+| `sdlos create <name>`             | Scaffold jade + css + behavior_cxx + auto-cmake into `examples/apps/<name>/`
+| `sdlos templates`                 | List available scaffold templates
+| `sdlos pipeline <name>`           | Visualise a `pipeline.pug` render graph
+|===
+
+=== Manual CMake — macOS / Linux / Windows
+
+[source,sh]
+----
+# Configure (pick one)
+cmake --preset macos-debug           # Debug, vendored SDL_ttf deps
+cmake --preset macos-release         # Release
+cmake -B build -S .                  # bare configure (no preset)
+
+# Build everything
+cmake --build build --parallel
+
+# Build a single app target
+cmake --build build --target styleguide
+cmake --build build --target calculator
+cmake --build build --target pug
+
+# Build with sanitizers
+cmake --preset asan-system           # ASan + UBSan via system clang
+cmake --build build --parallel
+
+# OR set options inline without a preset
+cmake -B build -DSDLOS_ENABLE_ASAN=ON -DSDLOS_ENABLE_UBSAN=ON
+cmake --build build --target styleguide
+
+# Wipe and reconfigure from scratch
+rm -rf build && cmake --preset macos-debug
+----
+
+[cols="1,3",options="header"]
+|===
+| Target name | What it builds
+| `sdlos`          | Full desktop shell (macOS/Linux/Windows only)
+| `styleguide`     | Standalone jade app — UI style showcase
+| `calculator`     | Standalone jade app — calculator
+| `pug`            | Standalone jade app — FrameGraph / shader pipeline demo
+| `flatshader`     | Standalone jade app — shader canvas demo
+| `viz`            | Standalone jade app — visualisation demo
+| `vfs`            | Standalone jade app — VFS / audio demo
+| `test_jade`      | Catch2 unit tests — jade parser + render tree
+| `test_frame_graph` | Catch2 unit tests — FrameGraph pipeline
+| `test_render_tree` | Catch2 unit tests — layout dirty propagation
+| `format`         | clang-format all sources in-place
+| `format-check`   | CI: exit non-zero if any source is misformatted
+|===
+
+
+
+== Tests
+
+[source,sh]
+----
+cmake --build build --target test_jade
+./build/test_jade --reporter compact
+
+cd tooling && uv run pytest
+----
+
+---
+
+== License
+
+MIT

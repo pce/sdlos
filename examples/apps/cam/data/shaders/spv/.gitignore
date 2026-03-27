@@ -1,0 +1,20 @@
+# Compiled SPIR-V shader blobs — generated build output, do not commit.
+#
+# These files are produced by glslc from the GLSL sources in ../glsl/:
+#
+#   glslc ../glsl/ui_rect.vert.glsl  -o ui_rect.vert.spv
+#   glslc ../glsl/ui_rect.frag.glsl  -o ui_rect.frag.spv
+#   glslc ../glsl/ui_sdf.frag.glsl   -o ui_sdf.frag.spv
+#   glslc ../glsl/ui_text.frag.glsl  -o ui_text.frag.spv
+#
+# To regenerate, run:
+#   cmake --build <build-dir> --target shaders
+# or invoke glslc directly from this directory.
+#
+# See also: userspace/docs/shaders.md for the full compilation workflow.
+
+*.spv
+
+# Keep this directory tracked in git even when empty.
+!.gitignore
+!.gitkeep

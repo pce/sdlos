@@ -1,0 +1,85 @@
+// =============================================================================
+// pug/data/pipeline.pug  —  data-driven render pipeline
+//
+// Loaded automatically by SDLRenderer::SetDataBasePath() when present.
+// Replaces the built-in FBM wallpaper with a three-pass pipeline:
+//
+//   pass#bg       — animated FBM noise background  (rgba16f)
+//   pass#vignette — radial vignette + edge pulse    (rgba16f)
+//   pass#grade    — colour grading → swapchain      (final)
+//
+// CSS control (pipeline.css or app.css):
+//   #bg       { speed: 0.4; scale: 1.5; }
+//   #vignette { intensity: 0.6; }
+//   #grade    { enabled: false; }          ← zero GPU cost when disabled
+//
+// EventBus topics (wired by <name>_behavior.cxx):
+//   pipeline:param  "bg:speed:0.8"    → tweak bg speed live
+//   theme:add       "night"           → apply night-scoped CSS rules
+//   theme:remove    "night"           → revert night rules
+//   quality:low     ""                → disables vignette (low-power CSS)
+//
+// Bucket taxonomy
+// ---------------
+//   Bucket A  compile-time   shader_key selects the PSO
+//   Bucket B  pipeline-time  SDL specialisation constants (unused here)
+//   Bucket C  runtime floats attrs below excluding meta-keys
+//                            meta-keys: shader reads writes enabled
+//
+// Shader convention
+// -----------------
+//   Vertex stage:   data/shaders/msl/fullscreen.vert.metal  (shared)
+//   Fragment stage: data/shaders/msl/<shader_key>.frag.metal
+//   Entry point:    main0 (both stages)
+//   Uniforms:       fragment buffer(0) — packed floats, ALPHABETICAL key order
+//                   The shader cbuffer struct must match the key order below.
+// =============================================================================
+
+// ── Resources ─────────────────────────────────────────────────────────────────
+// bg_color:         HDR intermediate render target (rgba16f, swapchain-sized).
+// vignette_buffer:  Post-vignette buffer           (rgba16f, swapchain-sized).
+// The final grade pass writes directly to the swapchain.
+
+resource#bg_color(format="rgba16f" size="swapchain")
+resource#vignette_buffer(format="rgba16f" size="swapchain")
+
+// ── Passes ────────────────────────────────────────────────────────────────────
+
+// Pass 1 — animated FBM background
+//   No reads (generates colour from UV + time).
+//   Bucket-C params (alphabetical → cbuffer slots 0, 1, 2):
+//     scale  [0]  noise frequency / zoom level
+//     speed  [1]  animation speed multiplier
+//     time   [2]  wall-clock seconds (auto-injected each frame by execute())
+pass#bg(shader="bg"
+        writes="bg_color"
+        scale="1.5"
+        speed="0.4"
+        time="0.0")
+
+// Pass 2 — radial vignette + edge pulse
+//   Reads bg_color; writes vignette_buffer.
+//   Bucket-C params (alphabetical → cbuffer slots 0, 1):
+//     intensity  [0]  vignette strength  (0 = off, 1 = strong)
+//     time       [1]  wall-clock seconds (auto-injected)
+//   Disable via CSS:  pipeline.low-power #vignette { enabled: false; }
+pass#vignette(shader="vignette"
+              reads="bg_color"
+              writes="vignette_buffer"
+              enabled="true"
+              intensity="0.6"
+              time="0.0")
+
+// Pass 3 — colour grade (exposure / gamma / saturation)
+//   Reads vignette_buffer; writes to the swapchain (final output).
+//   Bucket-C params (alphabetical → cbuffer slots 0, 1, 2):
+//     exposure    [0]  EV offset      (1.0 = neutral)
+//     gamma       [1]  display gamma  (2.2 = sRGB)
+//     saturation  [2]  colour saturation (1.0 = neutral)
+pass#grade(shader="grade"
+           reads="vignette_buffer"
+           writes="swapchain"
+           enabled="true"
+           exposure="1.0"
+           gamma="2.2"
+           saturation="1.05")

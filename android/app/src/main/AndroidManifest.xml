@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/AndroidManifest.xml -->
+<!-- Copied into deps/SDL3/android-project/app/src/main/ by config/config-android.sh -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.sdlos.app">
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Hardware features — declared as not required so the APK
+         installs on devices without a physical gamepad / camera. -->
+    <uses-feature android:name="android.hardware.touchscreen"
+                  android:required="false" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:supportsRtl="true">
+
+        <!-- MainActivity delegates to SDL3's SDLActivity.
+             The shared library "main" (libmain.so) is loaded automatically
+             by SDLActivity.getMainSharedObject(). -->
+        <activity
+            android:name="dev.sdlos.app.MainActivity"
+            android:label="@string/app_name"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
+

@@ -1,0 +1,65 @@
+// =============================================================================
+// viz/data/pipeline.pug  —  data-driven render pipeline for the viz app
+//
+// Loaded automatically by SDLRenderer::SetDataBasePath() when present.
+// Replaces the built-in FBM wallpaper with a two-pass pipeline:
+//
+//   pass#bg      — animated background (FBM noise, time-driven)
+//   pass#grade   — color grading post-process (CSS-toggleable)
+//
+// CSS control (pipeline.css or app.css):
+//   #bg    { speed: 0.4; scale: 1.5; }
+//   #grade { enabled: false; }          ← disable entirely (zero GPU cost)
+//   #grade { exposure: 1.2; gamma: 2.2; saturation: 1.1; }
+//
+// EventBus topics (wire_bus):
+//   pipeline:pass:toggle   "grade:false"    → disable grade pass
+//   pipeline:param         "bg:speed:0.8"   → speed up background
+//   theme:add              "night"          → triggers night-scoped CSS rules
+//
+// Shader convention
+// -----------------
+//   Vertex stage:   data/shaders/msl/fullscreen.vert.metal  (shared)
+//   Fragment stage: data/shaders/msl/<shader_key>.frag.metal
+//   Entry point:    main0  (both stages)
+//   Uniforms:       fragment buffer(0) — packed floats, alphabetical key order
+//
+// Bucket taxonomy
+// ---------------
+//   Bucket A  (compile-time variant)  → shader_key selects the PSO
+//   Bucket B  (pipeline-time)         → SDL specialisation constants (unused here)
+//   Bucket C  (runtime floats)        → attrs below excluding meta-keys
+//                                       meta-keys: shader reads writes enabled
+// =============================================================================
+
+// ── Resources ────────────────────────────────────────────────────────────────
+// bg_color is an HDR intermediate buffer.
+// All intermediate passes are rgba16f; the final swapchain pass uses the
+// swapchain's native format (resolved at compile() time).
+
+resource#bg_color(format="rgba16f" size="swapchain")
+
+// ── Passes ───────────────────────────────────────────────────────────────────
+
+// Pass 1 — animated background
+//   Writes the full scene into bg_color.
+//   Bucket-C params:  scale, speed, time
+//   "time" is special: execute() injects the current wall-clock time each
+//   frame via a stack copy so the shader animates without per-frame CPU calls.
+pass#bg(shader="bg"
+        writes="bg_color"
+        scale="1.5"
+        speed="0.4"
+        time="0.0")
+
+// Pass 2 — color grade
+//   Reads bg_color, applies exposure / gamma / saturation, writes to swapchain.
+//   Disabled via CSS or EventBus (zero GPU cost when disabled).
+//   Bucket-C params:  exposure, gamma, saturation
+pass#grade(shader="grade"
+           reads="bg_color"
+           writes="swapchain"
+           enabled="true"
+           exposure="1.0"
+           gamma="2.2"
+           saturation="1.05")

@@ -1,0 +1,192 @@
+/* scene.css — Crystal Altar composition: 3D scene layout
+ *
+ * Loaded explicitly in automat.cxx after GltfScene::attach():
+ *   auto css = pce::sdlos::css::load(base_path + "scene.css");
+ *   css.applyTo(tree, root);
+ *
+ * Each rule targets the proxy RenderNode id assigned via mesh-id= on the
+ * scene3d source node.  The properties are read by GltfScene::buildModelMatrix()
+ * every frame — no reloading needed when values change at runtime.
+ *
+ * Coordinate system: perspective camera, Y-up, metre scale (Blender export).
+ *   Default orbit: pitch 15°, yaw 0°, distance 6 m, pivot (0, 1.5, 0).
+ *   Visible range roughly ±5 m in X/Z, Y 0–4 m.
+ *
+ * Transform property reference
+ *   --scale          uniform scale (all axes)
+ *   --scale-x/y/z    per-axis scale; each falls back to --scale when absent
+ *   --translate-x/y/z  world-space offset in metres
+ *   --rotation-x/y/z   Euler degrees, applied X → Y → Z
+ *
+ * Material property reference (consumed by GltfScene::drawEntry each frame)
+ *   color            albedo tint (hex)
+ *   --roughness      PBR roughness  [0..1]
+ *   --metallic       PBR metallic   [0..1]
+ *   --emissive       self-illumination hex colour
+ *   --emissive-intensity  multiplier (default 1.0)
+ *   border-width     > 0 activates rim highlight in shader
+ *   border-color     rim highlight colour
+ */
+
+/* Floor tiles — wide flat base
+ *
+ * Floor_Tiles_Large.glb is a flat XZ plane in Blender (Y-up).
+ * Scale to 5 m so it fills the ground under the composition.
+ * No rotation needed — Blender XZ floor maps directly to the 3D ground.
+ */
+
+#floor {
+    color: #b0a890;
+    --roughness: 0.9;
+    --metallic: 0;
+}
+
+/* Desert sand dune — background fill
+ *
+ * Dune_Sand.glb — organic dune shape.  Pushed back and scaled up to act as
+ * a soft backdrop behind the altar without competing with it visually.
+ */
+
+#dune-sand {
+    --translate-z: -3;
+    --translate-y: -0.2;
+    color: #d4b483;
+    --roughness: 0.95;
+    --metallic: 0;
+}
+
+/* Flower altar — centrepiece
+ *
+ * Altar01_Art.glb — the main focal object.  Placed at origin, unit scale.
+ * Slight emissive warmth makes it read as the scene's light source.
+ */
+
+#altar {
+    color: #fff0e0;
+    --roughness: 0.35;
+    --metallic: 0.15;
+    --emissive: #ffcc66;
+    --emissive-intensity: 0.4;
+}
+
+#altar:hover {
+    border-color: #ffd700;
+    border-width: 3;
+}
+
+/* Crystal base — left pillar
+ *
+ * Crystal_Base.glb — low pedestal or crystal formation.
+ * Offset left and slightly forward from the altar.
+ */
+
+#crystal-base {
+    --translate-x: 1.5;
+    --translate-z: 0.5;
+    color: #a0d8ef;
+    --roughness: 0.08;
+    --metallic: 0.1;
+    --emissive: #80c0ff;
+    --emissive-intensity: 0.2;
+}
+
+#crystal-base:hover {
+    border-color: #5ffff2;
+    border-width: 2;
+}
+
+/* Crystal cluster — right wing
+ *
+ * Crystal_Cluster.glb — larger grouping of crystals.
+ * Mirrored right of the altar, slightly larger than the base.
+ */
+
+#crystal-cluster {
+    --translate-x: -1.5;
+    --translate-z: 0.5;
+    color: #c8a0ff;
+    --roughness: 0.06;
+    --metallic: 0.1;
+    --emissive: #9966ff;
+    --emissive-intensity: 0.25;
+}
+
+#crystal-cluster:hover {
+    border-color: #bf5fff;
+    border-width: 2;
+}
+
+/* Crystal fragment — foreground accent
+ *
+ * Crystal_Small_03.glb — small shard, placed in the foreground to add
+ * depth layering.  Warm tint contrasts the cooler altar crystals.
+ */
+
+#crystal-small {
+    --translate-x: 0.8;
+    --translate-z: 1.5;
+    color: #ffe0c0;
+    --roughness: 0.1;
+    --metallic: 0.05;
+    --emissive: #ffaa44;
+    --emissive-intensity: 0.15;
+}
+
+/* Arc — ancient archway framing the altar
+ *
+ * Arc.glb — large arch placed behind the altar.  Scaled up so it frames
+ * the composition as a natural backdrop.
+ */
+
+#arc {
+    --translate-z: -1.5;
+    color: #d0c8b8;
+    --roughness: 0.75;
+    --metallic: 0;
+}
+
+#arc:hover {
+    border-color: #c8a060;
+    border-width: 2;
+}
+
+/*  Sci-Fi screen — side panel
+ *
+ * SciFi_GlassScreen.glb — a modern contrast element offset to the right.
+ * Rotated 30° toward the viewer.  Strong emissive glow.
+ */
+
+#screen {
+    --translate-x: 3;
+    --translate-y: 0.5;
+    --rotation-y: -30;
+    color: #80ffee;
+    --roughness: 0.05;
+    --metallic: 0.6;
+    --emissive: #00ffcc;
+    --emissive-intensity: 0.5;
+}
+
+#screen:hover {
+    border-color: #00ffcc;
+    border-width: 3;
+}
+
+/* debug display hotspot */
+.hotspot {
+    background-color: rgba(255, 255, 0, 0.2);  /* Yellow semi-transparent */
+    border: 2px solid yellow;
+    display: block;  /* Must not be display: none */
+}
+
+/* Make proxy nodes visible */
+#floor, #altar, #dune-sand, #crystal-base,
+#crystal-cluster, #crystal-small, #arc, #screen {
+    display: block !important;
+}
+
+/* Debug overlay (optional, remove after testing) */
+.hotspot {
+    background-color: rgba(255, 255, 0, 0.2);
+    border: 2px solid yellow;
+}

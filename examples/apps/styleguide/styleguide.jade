@@ -1,0 +1,61 @@
+// Style Guide: 4-slide Keynote-style presentation
+//
+// Tree overview
+//   app.sg-root  (FlexColumn via CSS .sg-root)
+//     scene3d#sg-3d            (LayoutKind::None; zero 2-D size)
+//                               src is overridden in styleguide.cxx before
+//                               GltfScene.attach() to point at binary-dir model.
+//     col.sg-main              (flex-grow:1 via CSS .sg-main → fills window)
+//       col#page-container.sg-page   (flex-grow:1 → all space above nav)
+//       col#nav-bar.sg-nav           (height:0 overflow:hidden → collapsed)
+//         row.sg-nav-row             (flex-grow:1; justify:center align:center)
+//           ❮ prev  ● dots  ▶ play  ❯ next
+//
+// Behavior:  styleguide.cxx
+//   - Loads data/pages/{index,style,layout,scene3d}.jade at runtime.
+//   - Nav bar auto-show (mouse / key) → auto-hide after 3 s.
+//   - Left / Right arrow keys and ❮ ❯ navigate pages.
+//   - Space / ▶ toggles auto-advance (5 s per slide).
+//   - Page 3 activates scene3d#sg-3d so the Crystal Cluster GLB renders
+//     in the GPU pre-pass behind this 2-D overlay.
+//
+// CSS:  styleguide.css  (auto-loaded by jade_host)
+//       scene.css       (manually loaded by styleguide.cxx for PBR overrides)
+
+app.sg-root
+
+  // 3D scene node
+  // LayoutKind::None → 0×0 in 2-D layout; 3-D renders via GPU pre-pass.
+  // src is replaced in jade_app_init() before GltfScene.attach() runs.
+  scene3d#sg-3d(src="data/models/Crystal_Small_03.glb" mesh-id="sg-crystal" display="none")
+
+  // Main layout column
+  col.sg-main
+
+    // Page content — children replaced by loadPage() on each navigation
+    // col (FlexColumn) so flex-grow:1 on the page root distributes height.
+    col#page-container.sg-page
+
+    // Navigation HUD — auto-show/hide
+    // Starts collapsed (height=0, overflow=hidden → clips to 0 px).
+    // styleguide.cxx sets layout_props.height + markLayoutDirty to reveal.
+    col#nav-bar.sg-nav(height="0" overflow="hidden")
+
+      // Inner row: ❮  dots  ▶  ❯  centred in the nav bar
+      row.sg-nav-row(justifyContent="center" alignItems="center" gap="24" flexGrow="1")
+
+        // Prev button — inline text so dispatchClick fires on this node
+        div#nav-prev.sg-nav-btn(onclick="sg:prev" data-value="") ❮
+
+        // Page-indicator dots (explicit width+height for stable flex sizing)
+        row#nav-dots.sg-dots(height="44" width="96" justifyContent="center" alignItems="center" gap="10")
+          div#dot-0.sg-dot
+          div#dot-1.sg-dot
+          div#dot-2.sg-dot
+          div#dot-3.sg-dot
+
+        // Play / Pause toggle — inline text
+        div#nav-play.sg-nav-btn(onclick="sg:playpause" data-value="") ▶
+
+        // Next button — inline text
+        div#nav-next.sg-nav-btn(onclick="sg:next" data-value="") ❯

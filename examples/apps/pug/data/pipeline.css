@@ -1,0 +1,92 @@
+/* =============================================================================
+   data/pipeline.css  —  CSS rules for the FrameGraph render pipeline.
+   Loaded by the app behaviour and applied via FrameGraph::apply_css().
+
+   Selectors target pass ids directly:
+     #bg       { ... }     ← Bucket-C params for the background pass
+     #vignette { ... }     ← Bucket-C params for the vignette pass
+     #grade    { ... }     ← Bucket-C params for the colour grade pass
+
+   Scoped rules apply only when the pipeline root has the matching class:
+     pipeline.night   #grade { ... }     ← active when class "night" is set
+     pipeline.vivid   #bg    { ... }     ← active when class "vivid" is set
+     pipeline.low-power #vignette { ... } ← active on quality:low event
+
+   EventBus wiring (see <name>_behavior.cxx):
+     bus.publish("theme:add",    "night")    → add_class("night", ...)
+     bus.publish("theme:remove", "night")    → remove_class("night", ...)
+     bus.publish("quality:low",  "")         → add_class("low-power", ...)
+   ============================================================================= */
+
+/* ── Base styles ──────────────────────────────────────────────────────────── */
+
+#bg {
+    scale: 1.5;
+    speed: 0.4;
+    time:  0.0;
+}
+
+#vignette {
+    enabled:   true;
+    intensity: 0.6;
+    time:      0.0;
+}
+
+#grade {
+    enabled:    true;
+    exposure:   1.0;
+    gamma:      2.2;
+    saturation: 1.05;
+}
+
+/* ── Night theme ──────────────────────────────────────────────────────────── */
+/* Applied when bus.publish("theme:add", "night") is called.                  */
+/* Slower animation, stronger vignette, darker and cooler colour grade.       */
+
+pipeline.night #bg {
+    scale: 1.2;
+    speed: 0.2;
+}
+
+pipeline.night #vignette {
+    intensity: 0.85;
+}
+
+pipeline.night #grade {
+    enabled:    true;
+    exposure:   0.75;
+    gamma:      2.4;
+    saturation: 0.80;
+}
+
+/* ── Vivid theme ──────────────────────────────────────────────────────────── */
+/* Applied when bus.publish("theme:add", "vivid") is called.                  */
+/* Faster, brighter, more saturated — high-energy look.                       */
+
+pipeline.vivid #bg {
+    scale: 2.0;
+    speed: 0.7;
+}
+
+pipeline.vivid #vignette {
+    intensity: 0.3;
+}
+
+pipeline.vivid #grade {
+    enabled:    true;
+    exposure:   1.2;
+    gamma:      1.9;
+    saturation: 1.45;
+}
+
+/* ── Low-power mode ───────────────────────────────────────────────────────── */
+/* Applied by bus.publish("quality:low", "").                                  */
+/* Disables the vignette pass entirely — zero fragment work, zero GPU cost.   */
+
+pipeline.low-power #vignette {
+    enabled: false;
+}
+
+pipeline.low-power #bg {
+    speed: 0.1;
+}

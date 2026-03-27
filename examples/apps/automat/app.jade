@@ -1,0 +1,77 @@
+// app.jade — Crystal Altar composition (sequential reveal demo)
+//
+// Tree overview
+//   app.automat-root
+//     scene3d#scene-floor   (display="none")  Floor_Tiles_Large.glb
+//     scene3d#scene-dune    (display="none")  Dune_Sand.glb
+//     scene3d#scene-altar   (display="none")  Altar01_Art.glb
+//     scene3d#scene-crystal-base    (display="none")  Crystal_Base.glb
+//     scene3d#scene-crystal-cluster (display="none")  Crystal_Cluster.glb
+//     scene3d#scene-crystal-small   (display="none")  Crystal_Small_03.glb
+//     scene3d#scene-arc     (display="none")  Arc.glb
+//     scene3d#scene-screen  (display="none")  SciFi_GlassScreen.glb
+//     div.ui-overlay
+//       div.hud
+//       div#stage-label.stage-label
+//       div#modal.modal
+//       div.controls
+//
+// 3D layer
+// All models are loaded into GPU memory at startup by GltfScene::attach().
+// They start hidden (display="none" on the scene3d node).  automat.cxx
+// reveals them one by one on a timer by setting display="block" on the
+// scene3d RenderNode.  GltfScene::drawEntry() and tick() both skip nodes
+// whose scene3d parent has display="none".
+//
+// mesh-id sets the proxy RenderNode id so scene.css rules (#floor, #altar …)
+// and findById() both resolve to the correct proxy node.  The scene3d
+// container nodes carry their own ids (scene-floor, scene-altar …) so the
+// reveal code can locate them independently without colliding with proxy ids.
+//
+// CSS files
+//   scene.css    — loaded explicitly in automat.cxx (3D transforms + PBR)
+//   automat.css  — loaded explicitly in automat.cxx (2D UI styles)
+//
+// Camera
+//   Perspective, 45° FOV.  Right-mouse drag orbits; scroll zooms.
+//   Default: pitch 15°, yaw 0°, distance 6 m, pivot (0, 1.5, 0).
+
+app.automat-root
+
+  // 3D scene nodes (all hidden at startup)
+  // automat.cxx reveals them in order, one every ~2.5 s.
+
+  scene3d#scene-floor(src="data/models/Floor_Tiles_Large.glb" mesh-id="floor" display="none")
+  scene3d#scene-dune(src="data/models/Dune_Sand.glb" mesh-id="dune-sand" display="none")
+  scene3d#scene-altar(src="data/models/Altar01_Art.glb" mesh-id="altar" display="none")
+  scene3d#scene-crystal-base(src="data/models/Crystal_Base.glb" mesh-id="crystal-base" display="none")
+  scene3d#scene-crystal-cluster(src="data/models/Crystal_Cluster.glb" mesh-id="crystal-cluster" display="none")
+  scene3d#scene-crystal-small(src="data/models/Crystal_Small_03.glb" mesh-id="crystal-small" display="none")
+  scene3d#scene-arc(src="data/models/Arc.glb" mesh-id="arc" display="none")
+  scene3d#scene-screen(src="data/models/SciFi_GlassScreen.glb" mesh-id="screen" display="none")
+
+  // 2D overlay
+  div.ui-overlay
+
+    // HUD — top bar
+    div.hud
+      span.star ✨
+      h1.hud-title Crystal Altar
+      span.star 🌸
+
+    // Stage progress label
+    // automat.cxx updates "text" here after each reveal step.
+    div#stage-label.stage-label Loading scene…
+
+    //  Hotspot info modal
+    // Collapsed by default (height=0, overflow=hidden).
+    // automat.cxx opens it by writing height + overflow via setStyle().
+    div#modal.modal(height="0" overflow="hidden")
+      div.modal-header
+        div Object Info
+        button#modal-close.btn(onclick="modal:close" data-value="") ×
+      div#modal-body.modal-body
+
+    // Controls hint — bottom bar
+    div.controls
+      span RMB drag: orbit  •  Wheel: zoom  •  Click: inspect

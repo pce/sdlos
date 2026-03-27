@@ -1,0 +1,42 @@
+/* cam.css — visual styles only; all layout is in jade inline attributes */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    font-family: system-ui, sans-serif;
+}
+
+.section-title {
+    fontsize: 11;
+    fontweight: bold;
+    color: rgba(255, 255, 255, 0.45);
+    marginbottom: 4;
+}
+
+.divider {
+    height: 1;
+    backgroundcolor: #ffffff18;
+    marginbottom: 8;
+}
+
+.preset {
+    border-radius: 6;
+    font-size: 13;
+}
+
+.preset:hover {
+    background-color: #ffffff26;
+}
+
+.preset:active {
+    background-color: #6366f133;
+    color: #ffffff;
+}
+
+.param-btn {
+    border-radius: 6;
+}
+
+.param-btn:hover {
+    background-color: #ffffff40;
+}

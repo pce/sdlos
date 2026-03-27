@@ -1,3 +1,7 @@
+
+examples/apps/*/*.cmake
 build/
-docs/
+deps/
 .DS_Store
+.github/
+.idea/

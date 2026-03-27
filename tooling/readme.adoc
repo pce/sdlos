@@ -1,0 +1,317 @@
+= sdlos tooling
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+:source-highlighter: rouge
+:icons: font
+
+Scaffolding, static analysis, and dev-loop tooling for sdlos jade apps.
+Managed with https://docs.astral.sh/uv/[uv] — no virtualenv setup required.
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Bootstrap
+// ─────────────────────────────────────────────────────────────────────────────
+
+[source,sh]
+----
+cd tooling
+uv sync          # resolves deps, creates .venv, installs sdlos-tooling (editable)
+----
+
+No `pip install`, no `activate`.  Every subsequent command is prefixed with
+`uv run` and uses the managed venv automatically.
+
+[source,sh]
+----
+uv run sdlos version      # sdlos-tooling 0.1.0
+uv run sdlos templates    # lists: camera  minimal  shader
+uv run pytest             # all tests green
+----
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Create
+// ─────────────────────────────────────────────────────────────────────────────
+
+[source,sh]
+----
+uv run sdlos create                  # fully interactive (TTY prompts)
+uv run sdlos create hello            # name given, prompts for the rest
+uv run sdlos create viz --template shader --win-w 1280 --win-h 800 --no-interactive
+uv run sdlos create mycam --template camera --data-dir --with-model ../assets/model.glb
+uv run sdlos create myapp --template minimal --dry-run
+----
+
+Each app is a self-contained directory under `examples/apps/<name>/`: jade scene,
+CSS, behaviour `.cxx`, and an auto-discovered `.cmake` — no manual `CMakeLists.txt`
+edits required.  The root cmake glob picks up new `.cmake` files at *configure time*;
+run `sdlos run <name> --reconfigure` after `sdlos create` on an already-configured build.
+
+=== Options
+
+[cols="2,1,4"]
+|===
+|Flag |Default |Description
+
+|`-t / --template`      |`minimal`   |`minimal` \| `shader` \| `camera`
+|`--win-w / --win-h`    |engine default |Debug window size (px)
+|`--data-dir`           |off         |Create `data/shaders msl spirv img models` skeleton
+|`--with-model PATH`    |—           |Copy `.glb/.gltf` into `data/models/`
+|`--overwrite`          |off         |Re-scaffold; user-region code is preserved verbatim
+|`--dry-run`            |off         |Print actions without writing
+|`--config YAML`        |—           |Seed options from a YAML file (CLI flags win)
+|`--save-config YAML`   |—           |Write resolved config for reuse
+|===
+
+=== User regions and `--overwrite`
+
+Generated `.cc` files contain region markers:
+
+[source,cpp]
+----
+// --- enter the forrest ---
+// your code here
+// --- back to the sea ---
+----
+
+`sdlos create <name> --overwrite` re-renders the scaffold, splices your code back
+in by position, writes atomically, and keeps a `.bak` sibling.  Safe after any
+template upgrade.
+
+
+
+=== Templates
+
+[cols="1,4"]
+|===
+|`minimal`  |Empty `jade_app_init` stub with state struct and commented examples.
+|`shader`   |Three-column layout: preset chips \| shader canvas \| param steppers.
+|`camera`   |Three-column layout: filter chips \| live video canvas \| dragnums.
+|===
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Build & Watch
+// ─────────────────────────────────────────────────────────────────────────────
+
+`sdlos run` handles configure → build → launch → (optional) watch.
+Only the named app target is rebuilt; shared engine and vendored deps are never touched.
+cmake configure runs automatically when the build dir is absent or has no `CMakeCache.txt`.
+
+[source,sh]
+----
+uv run sdlos run calc                          # build + launch
+uv run sdlos run calc --watch                  # rebuild + relaunch on file change
+uv run sdlos run calc --clean                  # clean-first build (no dep re-fetch)
+uv run sdlos run viz --reconfigure             # force cmake configure (after sdlos create)
+uv run sdlos run viz --reconfigure --preset macos-debug --watch
+uv run sdlos run viz --no-build                # relaunch last binary
+uv run sdlos run viz --build-dir ../build-asan --watch
+----
+
+[cols="2,1,4"]
+|===
+|Flag |Default |Description
+
+|`-b / --build-dir`   |`<root>/build`  |cmake binary directory
+|`--clean`            |off             |`cmake --build --clean-first` (no dep re-fetch)
+|`-w / --watch`       |off             |Rebuild + relaunch on `examples/apps/<name>/` changes
+|`-j / --jobs N`      |cmake default   |Parallel build jobs
+|`--no-build`         |off             |Skip cmake; launch the last compiled binary
+|`-r / --reconfigure` |off             |Force cmake configure before building
+|`--preset`           |none            |cmake preset (e.g. `macos-debug`, `macos-release`)
+|`-q / --quiet`       |off             |Suppress sdlos status lines
+|===
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Analyze
+// ─────────────────────────────────────────────────────────────────────────────
+
+`sdlos analyze` runs any combination of static analysis, linting, formatting,
+docblock insertion, and code metrics on a single file or a directory tree.
+All output is rendered with Rich.  Errors use a unified error panel.
+
+[source,sh]
+----
+sdlos analyze src/render_tree.cxx              # single file, dry-run
+sdlos analyze src/                             # entire tree, dry-run
+sdlos analyze src/ --no-tidy --metrics         # lizard metrics only
+sdlos analyze src/ --sca 1 --no-tidy -q        # level-1 SCA, quiet
+sdlos analyze src/ --format --write            # reformat in place (safe)
+sdlos analyze src/ --tidy --fix-tidy --write   # apply tidy fixes (safe)
+sdlos analyze src/ --fail-on-issues            # CI mode — exit 1 on findings
+----
+
+PATH is always optional; when omitted the engine `src/` is auto-resolved from
+`CMakeLists.txt` walking up from the current directory.
+
+=== Path resolution
+
+The tool tries the given path in three passes before failing:
+
+1. Relative to cwd (standard).
+2. Ancestors of cwd up to 6 levels — so `src/render_tree.cxx` typed from
+   `tooling/` resolves to `../src/render_tree.cxx` automatically.
+3. Project root / given path.
+
+When all candidates are exhausted a Rich error panel shows the cwd and
+the most likely candidate path.
+
+=== Options
+
+[cols="2,1,4"]
+|===
+|Flag |Default |Description
+
+|`--sca LEVEL`          |`2`   |libclang SCA depth: `0`=off `1`=critical `2`=+ownership `3`=+lifetime
+|`--tidy / --no-tidy`   |on    |Pure libclang lint pass (no `clang-tidy` binary required)
+|`--format / --no-format` |off |clang-format (combine with `--write` to apply)
+|`--docblocks / --no-docblocks` |on |Insert Doxygen docblocks for undocumented functions
+|`--metrics / --no-metrics` |off |lizard + radon: NLOC, cyclomatic complexity, A–F grade
+|`--write / -w`         |off   |Apply modifications in place
+|`--safe / --no-safe`   |auto  |Snapshot→process→verify→revert guard; auto-on with `--write`
+|`--fix-tidy`           |off   |Implies `--write`; reserved for future tidy fix application
+|`--compile-commands JSON` |—  |`compile_commands.json` for accurate include resolution
+|`-I / --include-dir DIR` |—   |Extra include dir forwarded to libclang (repeatable)
+|`--engine-root DIR`    |auto  |Project root for locating engine `src/` include paths
+|`--python / --no-python` |off |Include `.py` files (metrics only; SCA/tidy skipped)
+|`--fail-on-issues`     |off   |Exit 1 on any level-1 SCA issue, revert, or processor error
+|`-q / --quiet`         |off   |Suppress per-processor progress; print summary only
+|===
+
+=== Safety model
+
+With `--write` (or `--safe`), every file runs inside a transaction:
+
+1. *Snapshot* — SHA-256 the file before touching it.
+2. *Run* — execute all processors in order.
+3. *Verify* — parse the result with libclang (bracket-balance fallback).
+4. *Idempotency* — run clang-format a second time; confirm no further changes.
+5. *Revert* — if verification fails, restore the snapshot and report the reason.
+
+Pass `--no-safe` to skip the guard (useful for scripted pipelines where you
+control the environment).
+
+=== Lint profiles (`ClangLint`)
+
+Two passes run entirely in-process via the `libclang` Python bindings —
+no `clang-tidy` binary is required.
+
+*Pass 1 — Diagnostics:* parse with a curated set of `-W` flags covering
+`bugprone-*`, `modernize-*`, `readability-*`, `performance-*`, and
+`clang-analyzer-*` checks.
+
+*Pass 2 — AST checks:* targeted patterns not covered by `-W` flags:
+`cstyle_cast`, `null_macro` (NULL → nullptr), `large_val_param`
+(pass `std::string`/`vector`/`map` by const ref), `endl_perf`
+(`<< std::endl` → `'\n'`), `strcmp_eq`, `mutable_global`.
+
+Profiles: `LintProfile.OFF` · `LintProfile.SDLOS` (default) · `LintProfile.STRICT`
+(`SDLOS` + `-Wpedantic -Wcast-qual -Wformat=2`).
+
+[source,python]
+----
+from pathlib import Path
+from sdlos.features.tidy import ClangLint, LintProfile
+
+lint   = ClangLint(profile=LintProfile.SDLOS)
+issues = lint.analyze(Path("src/render_tree.cxx"))
+for i in issues:
+    print(f"[{i.level}] L{i.line} [{i.check}] {i.message}")
+----
+
+=== Processors and pipeline
+
+`PostProcessPipeline` chains any combination of:
+
+[cols="1,4"]
+|===
+|`ClangFormatProcessor`  |Format via `clang-format` binary (reads `.clang-format`)
+|`SCAProcessor`          |libclang SCA at the requested level
+|`ClangTidyProcessor`    |Calls `clang-tidy` binary with the sdlos check profile
+|`ClangLint` (tidy pass) |Pure libclang in-process lint (no binary needed)
+|`DocblocksProcessor`    |AST-reflection Doxygen insertion
+|`MetricsProcessor`      |lizard (C++/Python) + radon (Python) metrics
+|===
+
+`PostProcessResult` carries `processor`, `modified`, `issues`, `error`,
+and `metadata` (metrics stored under `"metrics"` key).
+`TransactionReport` bundles the result, the snapshot, the verification
+outcome, and an idempotency flag for each file.
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Release
+// ─────────────────────────────────────────────────────────────────────────────
+
+=== Bundle
+
+[source,python]
+----
+from sdlos.features import Bundler
+bundler = Bundler(format="zip", include_data=True)
+bundler.apply({"cfg": cfg, "app_dir": app_dir, "build_dir": build_dir, "root_dir": root_dir})
+# context["bundle_path"] → build/dist/<name>-<date>.zip
+----
+
+Formats: `zip` · `tar.gz` · `dir`.
+Binary discovery: `<build>/<name>` → macOS `.app` bundle → `bin/` → `Debug/Release/` →
+recursive scan.
+
+=== Auto-updater
+
+[source,yaml]
+----
+# config/app.yaml
+updater_url: https://updates.example.com/my_app
+updater_channel: stable
+updater_binary: tools/updater/bin/updater   # optional
+----
+
+[source,python]
+----
+from sdlos.features.updater import Updater, UpdaterContext
+updater = Updater.from_cfg(cfg)
+if updater.is_active():
+    ctx = UpdaterContext.from_cfg(cfg, app_dir)
+    updater.apply(ctx)   # writes data/updater.json; ctx.cmake_lines ready to append
+----
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Testing
+// ─────────────────────────────────────────────────────────────────────────────
+
+[source,sh]
+----
+uv run pytest                                       # full suite
+uv run pytest -v                                    # verbose
+uv run pytest tests/test_run.py -v                 # single module
+uv run pytest --cov=sdlos --cov-report=term-missing
+----
+
+Tests run in `tmp_path` fixtures — no cmake, C++ compiler, or SDL required.
+`run` command tests mock `subprocess.run` / `subprocess.Popen`.
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Reference
+// ─────────────────────────────────────────────────────────────────────────────
+
+=== `sdlos.core.cmake`
+
+`find_project_root(start)` — walk upward until `CMakeLists.txt` contains
+`project(sdlos`; falls back to the package ancestor chain. +
+`cmake_snippet(name, win_w, win_h, has_data)` — render `sdlos_jade_app()` block. +
+`write_app_cmake(app_dir, snippet, cfg)` — write `<name>.cmake` into the app dir.
+
+=== `sdlos.core.fs`
+
+`write_atomic(path, data)` — temp file + `os.replace()`, parents auto-created. +
+`backup_file(path)` — `<name>.bak` sibling; returns `None` if source absent. +
+`extract_user_regions(text)` / `splice_user_regions(generated, existing)` — region splice.
+
+=== `sdlos.config.schema.AppConfig`
+
+[source,python]
+----
+cfg = AppConfig.from_cli(name="my_app", template="shader", win_w=1280, win_h=800,
+                          data_dir=True, config_path=Path

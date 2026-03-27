@@ -1,0 +1,78 @@
+==  Shader Editor behaviour
+
+shade_behavior.cc
+
+Events:
+   shade:preset  — activate a named shader preset on the canvas
+   shade:inc     — increment a named numeric param
+   shade:dec     — decrement a named numeric param
+
+The canvas node (id="shader-canvas") carries _shader / _shader_param* style
+attrs; the engine reads them every frame and calls drawImageWithShader().
+
+
+=== Node shader pipeline cache
+
+Lazily compiled per-node fragment shader pipelines.
+Each entry reuses ui_rect_vert_ + a custom fragment shader loaded from  data/shaders/{platform}/{name}.frag.{ext}.
+
+A null pipeline value means the shader failed to load — logged once, then every call returns nullptr (no retry spam).
+
+=== Style Import
+
+head link(rel="stylesheet" href="/css/main.css")
+
+head style. @import url('/css/extra.css');
+
+Not CSS compatible, atm we apply the styles when the render tree is built.
+
+
+== Shaders
+
+=== Tilt Blur
+
+Depth of Field by focusing point sharp surrounded by blurred background.
+
+how looks a Tilt Blur (HIgh QUality not just bliurred rectangles) with FocusPoint and Blur Factor like  Depth of Field
+?
+
+How to use and tune parameters
+
+- u_blurScale: roughly how many pixels of blur per unit depth difference. Tune experimentally. If depth is view-space meters and you want small blur: 10..100 depending on projected scale.
+- u_maxRadius: controls performance — larger radius uses same SAMPLE_COUNT but effectively spreads sampling. For very large blur radii you may use a prefilter mipmap pass and sample lower LOD textures instead (see fallback).
+- SAMPLE_COUNT: increase to reduce noise (32 or 64 give smoother results), but cost grows linearly.
+- u_nearFalloff / u_farFalloff (not used above): you can apply asymmetric blur by scaling coc differently for near vs far (e.g., multiply coc by a factor when depth < focusDepth).
+
+
+=== Faster alternative — mipmap / textureLod trick (cheap)
+
+Build a pyramid of downsampled textures (mipmaps or explicit gaussian pyramid).
+Compute desired radius r in pixels. Convert to LOD level: lod = log2(r). Sample using textureLod(u_color, uv, lod) to use prefiltered blur. Blend between two LODs for fractional radius. This is much faster and suits large-area blur, but it smears across edges (no depth awareness) unless you add depth-aware heuristics or prefilter with depth separation.
+Tilt-shift (focal plane rotated)
+
+=== Replace the depth difference metric with a distance to a 2D focal line or 3D plane
+
+For screen-space tilt-shift: define a focus line by point p0 and normal n2D in screen pixels, then distance = abs(dot(n2D, (pixelPos - p0))). Map that distance → coc.
+For camera-space tilt (Scheimpflug): define a 3D focal plane in view-space and compute signed distance of world/view*
+
+
+=== Perlin noise
+
+
+// Domain warping
+
+        fbm(nUV + warp)
+
+avoids "cloud texture look",  gives fluid / marble / ink motion
+
+// Radial distortion ≠ vignette
+
+        normalize(delta) * pow(dist, falloff)
+
+That's basically: camera lens, black hole, glass sphere
+
+// Quantization trick
+
+        floor(color * steps) / steps
+
+This gives: comic shading, topo-map bands, water ink layers, pixel style, etc. Adjust steps for more/less bands.
