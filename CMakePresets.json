@@ -1,0 +1,114 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (System Toolchain)",
+      "description": "Standard build using system-provided C++23 compiler",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "BUILD_PYTHON_BINDINGS": "OFF"
+      }
+    },
+    {
+      "name": "llvm22-custom",
+      "displayName": "LLVM 22 Custom Toolchain",
+      "description": "Uses the local LLVM 22.1.1 toolchain for C++23 development",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "$env{HOME}/toolchains/llvm-22/bin/clang",
+        "CMAKE_CXX_COMPILER": "$env{HOME}/toolchains/llvm-22/bin/clang++",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I$env{HOME}/toolchains/llvm-22/include/c++/v1",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -L$env{HOME}/toolchains/llvm-22/lib -Wl,-rpath,$env{HOME}/toolchains/llvm-22/lib",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -L$env{HOME}/toolchains/llvm-22/lib -Wl,-rpath,$env{HOME}/toolchains/llvm-22/lib",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "llvm22-asan",
+      "displayName": "LLVM 22 with ASan/UBSan",
+      "description": "LLVM 22 with Address and Undefined Behavior Sanitizers",
+      "inherits": "llvm22-custom",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I$env{HOME}/toolchains/llvm-22/include/c++/v1 -fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -L$env{HOME}/toolchains/llvm-22/lib -Wl,-rpath,$env{HOME}/toolchains/llvm-22/lib -fsanitize=address,undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -L$env{HOME}/toolchains/llvm-22/lib -Wl,-rpath,$env{HOME}/toolchains/llvm-22/lib -fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "asan-system",
+      "displayName": "System Clang with ASan/UBSan",
+      "description": "Standard build with Sanitizers using system toolchain",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "ci-ubuntu",
+      "displayName": "CI Ubuntu Configuration",
+      "description": "Configuration for GitHub Actions Ubuntu 24.04 with Clang 22 from apt.llvm.org",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-22",
+        "CMAKE_CXX_COMPILER": "clang++-22",
+        "DISABLE_ONNX": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "build-llvm22",
+      "configurePreset": "llvm22-custom"
+    },
+    {
+      "name": "build-llvm22-asan",
+      "configurePreset": "llvm22-asan"
+    },
+    {
+      "name": "build-asan-system",
+      "configurePreset": "asan-system"
+    },
+    {
+      "name": "build-ci",
+      "configurePreset": "ci-ubuntu"
+    },
+    {
+      "name": "build-ci-test",
+      "configurePreset": "ci-ubuntu",
+      "targets": ["all"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-ci",
+      "configurePreset": "ci-ubuntu",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
