@@ -71,27 +71,21 @@ void sdlos_log(std::string_view msg)
 }
 
 // ---------------------------------------------------------------------------
-// Behavior raw-event hook.
-//
-// Assigned by jade_app_init() implementations that need to receive SDL events
-// directly (e.g. to route keyboard / mouse input to a TextArea widget).
-// Called for every SDL event BEFORE the host keyboard-shortcut handlers.
-// Return true to signal the event was consumed (host shortcuts are skipped);
-// return false to let the host process it as normal.
-//
-// Reset to nullptr inside loadScene() so stale closures from the previous
-// scene never fire after the old RenderTree has been destroyed.
-// ---------------------------------------------------------------------------
-static std::function<bool(const SDL_Event&)> g_behavior_event_handler;
-
-// ---------------------------------------------------------------------------
 // jade_app_init — per-app behaviour hook.
 //
 // Signature contract:
-//   tree     — fully-parsed, style-bound RenderTree (safe to query / mutate)
-//   root     — handle to the virtual root returned by jade::parse()
-//   bus      — live EventBus; call bus.subscribe() here, not at global scope
-//   renderer — the active SDLRenderer; call SetFontPath() etc. when needed
+//   tree        — fully-parsed, style-bound RenderTree (safe to query / mutate)
+//   root        — handle to the virtual root returned by jade::parse()
+//   bus         — live EventBus; call bus.subscribe() here, not at global scope
+//   renderer    — the active SDLRenderer; call SetFontPath() etc. when needed
+//   out_handler — assign a raw-SDL-event handler here when you need to receive
+//                 mouse / keyboard events directly (e.g. to drive a TextArea or
+//                 NumberDragger).  The host stores it in SceneState; it is
+//                 cleared automatically at the start of every loadScene() call
+//                 so stale closures from the old tree can never fire.
+//                 Return true from the handler to consume the event (host
+//                 shortcuts are skipped); return false to let normal processing
+//                 continue.
 //
 // Called once per scene load: on startup AND after every sdlos:navigate event.
 // Do NOT call SDL_PollEvent or render from here.
@@ -106,10 +100,11 @@ static std::function<bool(const SDL_Event&)> g_behavior_event_handler;
 #ifdef SDLOS_APP_BEHAVIOR
 #  include SDLOS_APP_BEHAVIOR
 #else
-void jade_app_init(pce::sdlos::RenderTree&  /*tree*/,
-                   pce::sdlos::NodeHandle   /*root*/,
-                   pce::sdlos::IEventBus&   /*bus*/,
-                   pce::sdlos::SDLRenderer& /*renderer*/) {}
+void jade_app_init(pce::sdlos::RenderTree&               /*tree*/,
+                   pce::sdlos::NodeHandle                 /*root*/,
+                   pce::sdlos::IEventBus&                 /*bus*/,
+                   pce::sdlos::SDLRenderer&               /*renderer*/,
+                   std::function<bool(const SDL_Event&)>& /*out_handler*/) {}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -208,6 +203,12 @@ struct SceneState {
     pce::sdlos::NodeHandle console_h{pce::sdlos::k_null_handle};
 
     pce::sdlos::css::StyleSheet css_sheet;
+
+    // Raw SDL event hook set by jade_app_init() via the out_handler parameter.
+    // Stored here (not as a global) so its lifetime is exactly the scene's
+    // lifetime — cleared at the top of every loadScene() before the old tree
+    // is destroyed, so captured references can never dangle.
+    std::function<bool(const SDL_Event&)> raw_event_handler;
 };
 
 // Attach the two host-owned overlay nodes (layout debug + console) on top
@@ -310,7 +311,11 @@ static bool loadScene(const std::string&       jade_path,
     events.reset();
 
     // 2b. Clear the raw-event hook — it may capture refs into the old tree.
-    g_behavior_event_handler = nullptr;
+    scene.raw_event_handler = nullptr;
+
+    // 2c. Clear 3D hooks — lambdas may capture old app state.
+    renderer.setScene3DHook(nullptr);
+    renderer.setGpuPreShutdownHook(nullptr);
 
     // 3. Re-subscribe the host navigation handler on the fresh bus.
     //    The new behaviour can now call:
@@ -366,13 +371,17 @@ static bool loadScene(const std::string&       jade_path,
     // 6. Bind draw callbacks and node-event wiring, then call the behaviour.
     pce::sdlos::bindDrawCallbacks(*scene.tree, scene.root);
     pce::sdlos::bindNodeEvents(*scene.tree, scene.root, events);
-    jade_app_init(*scene.tree, scene.root, events, renderer);
+    jade_app_init(*scene.tree, scene.root, events, renderer, scene.raw_event_handler);
 
     if (!scene.css_sheet.empty()) {
         scene.css_sheet.buildHover(*scene.tree, scene.root);
         if (!scene.css_sheet.hover.empty())
             sdlos_log("[jade_host] css hover: "
                       + std::to_string(scene.css_sheet.hover.size()) + " entries");
+        scene.css_sheet.buildActive(*scene.tree, scene.root);
+        if (!scene.css_sheet.active_entries.empty())
+            sdlos_log("[jade_host] css active: "
+                      + std::to_string(scene.css_sheet.active_entries.size()) + " entries");
     }
 
     // 7. _font / _font_size jade attributes — behaviour has the last word.
@@ -416,7 +425,7 @@ int main(int argc, char* argv[])
     // ---- SDL init --------------------------------------------------------
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_CAMERA)) {
         std::cerr << "[jade_host] SDL_Init failed: " << SDL_GetError() << "\n";
         return EXIT_FAILURE;
     }
@@ -528,7 +537,7 @@ int main(int argc, char* argv[])
             // focused TextArea absorbed a KEY_DOWN).  Mouse events return false
             // so dispatchClick always runs below.
             const bool behavior_consumed =
-                g_behavior_event_handler && g_behavior_event_handler(event);
+                scene.raw_event_handler && scene.raw_event_handler(event);
 
             // Mouse clicks — SDL logical coords → physical layout coords.
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -539,7 +548,7 @@ int main(int argc, char* argv[])
 
                 const pce::sdlos::NodeHandle hit =
                     pce::sdlos::dispatchClick(*scene.tree, scene.root,
-                                              px, py, events);
+                                              px, py, events, &scene.css_sheet);
 
                 // When the console is open, log what was hit for debugging.
                 if (g_console.visible && hit.valid()) {

@@ -1,6 +1,7 @@
 #include "render_tree.hh"
 #include "text_renderer.hh"
 #include "image_cache.hh"
+#include "video_texture.hh"
 
 #include <algorithm>
 #include <cassert>
@@ -345,6 +346,91 @@ void RenderContext::drawImageWithShader(std::string_view src,
     SDL_GPUTextureSamplerBinding sb{};
     sb.texture = img.texture;
     sb.sampler = image_cache->sampler();
+    SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
+void RenderContext::drawVideo(float x, float y, float w, float h, float opacity)
+{
+    if (!video_texture || !pass || !cmd) return;
+    SDL_GPUTexture* tex = video_texture->texture();
+    SDL_GPUSampler* smp = video_texture->sampler();
+    if (!tex || !smp) return;
+
+    SDL_GPUGraphicsPipeline* pipe = pipeline("text");
+    if (!pipe) return;
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{ x, y, w, h, viewport_w, viewport_h,
+                          0.f, 0.f, 1.f, 1.f, 0.f, 0.f };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    struct alignas(4) TintUniform { float r, g, b, a; };
+    const TintUniform fu{ 1.f, 1.f, 1.f, opacity };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    SDL_GPUTextureSamplerBinding sb{};
+    sb.texture = tex;
+    sb.sampler = smp;
+    SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
+void RenderContext::drawVideoWithShader(std::string_view shader_name,
+                                        float x, float y, float w, float h,
+                                        float opacity,
+                                        const NodeShaderParams& shader_params)
+{
+    if (!video_texture || !pass || !cmd) return;
+    SDL_GPUTexture* tex = video_texture->texture();
+    SDL_GPUSampler* smp = video_texture->sampler();
+
+    // No frame yet — draw a dark placeholder rect so the node isn't invisible.
+    if (!tex || !smp) {
+        drawRect(x, y, w, h, 0.05f, 0.05f, 0.05f, opacity);
+        return;
+    }
+
+    if (!nodeShaderPipeline) {
+        drawVideo(x, y, w, h, opacity);
+        return;
+    }
+
+    SDL_GPUGraphicsPipeline* pipe = nodeShaderPipeline(shader_name);
+    if (!pipe) {
+        drawVideo(x, y, w, h, opacity);
+        return;
+    }
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{ x, y, w, h, viewport_w, viewport_h,
+                          0.f, 0.f, 1.f, 1.f, 0.f, 0.f };
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    // Fragment buffer(0) = NodeShaderParams (32 bytes)
+    SDL_PushGPUFragmentUniformData(cmd, 0, &shader_params, sizeof(shader_params));
+
+    SDL_GPUTextureSamplerBinding sb{};
+    sb.texture = tex;
+    sb.sampler = smp;
     SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
 
     SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);

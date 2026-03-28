@@ -1,0 +1,43 @@
+row(id="root" flexGrow="1" backgroundColor="#0d0d12")
+
+  col(width="180" gap="4" padding="12" backgroundColor="#ffffff0a" toggle-group="1")
+
+    div(height="16" color="#6366f1" fontSize="11") FILTERS
+    div(height="1" backgroundColor="#ffffff20")
+
+    div.preset(height="34" onclick="cam:filter" data-value="cinematic"    color="#cccccc" active="1") Cinematic
+    div.preset(height="34" onclick="cam:filter" data-value="vignette"     color="#cccccc") Vignette
+    div.preset(height="34" onclick="cam:filter" data-value="tiltblur"     color="#cccccc") Tilt Blur
+    div.preset(height="34" onclick="cam:filter" data-value="contrast"     color="#cccccc") Contrast
+    div.preset(height="34" onclick="cam:filter" data-value="perlin_noise" color="#cccccc") Distort
+    div.preset(height="34" onclick="cam:filter" data-value="none"         color="#cccccc") None
+
+  col(flexGrow="1" padding="8")
+    div#camera-canvas(_video="camera://0" _shader="cinematic" flexGrow="1" backgroundColor="#111111")
+
+  col(width="200" gap="2" padding="12" backgroundColor="#ffffff0a")
+
+    div(id="active-name" height="18" color="#a5b4fc" fontSize="13") cinematic
+    div(height="1" backgroundColor="#ffffff20")
+
+    div(id="lbl-p0" height="18" color="#ffffff66" fontSize="11") Intensity
+    row(height="28" gap="4")
+      div.param-btn(id="btn-p0-dec" width="28" height="28" onclick="cam:dec" data-value="p0" backgroundColor="#ffffff1a" color="#ffffff") -
+      input.param-val(type="dragnum" id="val-p0" flexGrow="1" height="28" min="0" max="1"   step="0.05"  value="1.0")
+      div.param-btn(id="btn-p0-inc" width="28" height="28" onclick="cam:inc" data-value="p0" backgroundColor="#ffffff1a" color="#ffffff") +
+
+    div(id="lbl-p1" height="18" color="#ffffff66" fontSize="11") Grain
+    row(height="28" gap="4")
+      div.param-btn(id="btn-p1-dec" width="28" height="28" onclick="cam:dec" data-value="p1" backgroundColor="#ffffff1a" color="#ffffff") -
+      input.param-val(type="dragnum" id="val-p1" flexGrow="1" height="28" min="0" max="0.3" step="0.005" value="0.04")
+      div.param-btn(id="btn-p1-inc" width="28" height="28" onclick="cam:inc" data-value="p1" backgroundColor="#ffffff1a" color="#ffffff") +
+
+    div(id="lbl-p2" height="18" color="#ffffff66" fontSize="11") Warmth
+    row(height="28" gap="4")
+      div.param-btn(id="btn-p2-dec" width="28" height="28" onclick="cam:dec" data-value="p2" backgroundColor="#ffffff1a" color="#ffffff") -
+      input.param-val(type="dragnum" id="val-p2" flexGrow="1" height="28" min="0" max="2"   step="0.1"   value="1.0")
+      div.param-btn(id="btn-p2-inc" width="28" height="28" onclick="cam:inc" data-value="p2" backgroundColor="#ffffff1a" color="#ffffff") +
+
+    div(height="1" backgroundColor="#ffffff20")
+    div(height="18" color="#ffffff44" fontSize="11") DEVICE
+    div(id="cam-device-name" height="18" color="#888888" fontSize="12") —

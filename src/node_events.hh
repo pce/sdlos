@@ -23,11 +23,16 @@
 
 namespace pce::sdlos {
 
+namespace css { struct StyleSheet; }   // forward — avoids pulling in full css_loader
+
+
 // hitTest → read onclick style → bus.publish(topic, data-value).
-// No-op publish when the hit node has no onclick style.
+// When css is non-null and the hit node (or an ancestor) is a child of a
+// toggle-group parent, activates it radio-style before publishing the event.
 [[nodiscard]]
 NodeHandle dispatchClick(RenderTree& tree, NodeHandle root,
-                         float px, float py, IEventBus& bus);
+                         float px, float py, IEventBus& bus,
+                         css::StyleSheet* css = nullptr);
 
 // bus.publish(onselect, data-value) on the given node. No-op when onselect is absent.
 void dispatchSelect(RenderTree& tree, NodeHandle handle, IEventBus& bus);

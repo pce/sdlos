@@ -1,6 +1,7 @@
 #include "jade_lexer.hh"
 
 #include <cctype>
+#include <climits>
 #include <stack>
 
 // JadeLite — Lexer implementation
@@ -22,21 +23,129 @@ static bool isIdentChar(char c)
     return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_';
 }
 
-// ── Indent counting ───────────────────────────────────────────────────────────
-// Tabs count as 4 spaces (common Jade/Pug convention).
+// ── Indent-style detection ────────────────────────────────────────────────────
+//
+// First pass over the source to determine the indent unit (spaces per level).
+//
+// Algorithm — GCD of all observed positive leading-space column counts:
+//
+//   Indents at 2, 4, 6     → GCD 2 → unit 2
+//   Indents at 4, 8, 12    → GCD 4 → unit 4
+//   Indents at 2, 4        → GCD 2 → unit 2  (mixed depth, 2-space file)
+//   Quirky file: 2 and 3   → GCD 1 → fall back: min indent < 3 → unit 2
+//   Quirky file: 3 and 6   → GCD 3 → snap to 4 (nearest of {2,4})
+//   Pure-tab file          → unit unused; each tab = one level
+//
+// The unit is snapped to the nearest member of {2, 4} after GCD computation
+// so pathological values (unit=3, unit=7, …) never reach the tokenizer.
 
-static int countIndent(std::string_view line)
+struct IndentStyle {
+    int  unit      = 2;    // spaces per indent level: 2 or 4
+    bool uses_tabs = false;
+};
+
+static int gcd_int(int a, int b) noexcept
 {
-    int n = 0;
-    for (char c : line) {
-        if      (c == ' ')  ++n;
-        else if (c == '\t') n += 4;
-        else                break;
-    }
-    return n;
+    while (b) { const int t = b; b = a % b; a = t; }
+    return a;
 }
 
-// ── Attribute list parser ─────────────────────────────────────────────────────
+static IndentStyle detectIndent(std::string_view src) noexcept
+{
+    IndentStyle style;
+    int running_gcd = 0;
+    int min_spaces  = INT_MAX;
+
+    std::string_view s = src;
+    while (!s.empty()) {
+        const auto       nl   = s.find('\n');
+        std::string_view line = (nl == std::string_view::npos) ? s : s.substr(0, nl);
+        s = (nl == std::string_view::npos) ? std::string_view{} : s.substr(nl + 1);
+
+        int sp = 0, tb = 0;
+        for (char c : line) {
+            if      (c == ' ')  ++sp;
+            else if (c == '\t') ++tb;
+            else                break;
+        }
+
+        if (tb > 0) style.uses_tabs = true;
+        if (sp > 0) {
+            if (sp < min_spaces) min_spaces = sp;
+            running_gcd = (running_gcd == 0) ? sp : gcd_int(running_gcd, sp);
+        }
+    }
+
+    // No space-indented lines found, pure-tab or flat; unit stays at 2
+    if (min_spaces == INT_MAX) return style;
+
+    if (running_gcd >= 4) {
+        style.unit = 4;
+    } else if (running_gcd >= 2) {
+        style.unit = 2;
+    } else {
+        style.unit = (min_spaces >= 3) ? 4 : 2;
+    }
+
+    return style;
+}
+
+// Raw indent counter
+//
+// Returns the leading-whitespace breakdown of a line:
+//   spaces — count of ' ' characters
+//   tabs   — count of '\t' characters
+//   chars  — total raw characters consumed (used to strip indent from content)
+//
+// Separating `chars` from the logical column count fixes a pre-existing bug:
+// the old code did line.substr(indent) where indent was space + tab*4, but a
+// tab is only ONE character — so a tab-indented line had content eaten.
+
+struct RawIndent {
+    int         spaces = 0;
+    int         tabs   = 0;
+    std::size_t chars  = 0;  // raw chars to skip for content stripping
+};
+
+static RawIndent countRawIndent(std::string_view line) noexcept
+{
+    RawIndent r;
+    for (char c : line) {
+        if      (c == ' ')  { ++r.spaces; ++r.chars; }
+        else if (c == '\t') { ++r.tabs;   ++r.chars; }
+        else                 break;
+    }
+    return r;
+}
+
+// Level normalisation
+//
+// Converts raw leading whitespace to a nesting level integer.
+//
+// Tabs contribute one full level each, independently of the space unit.
+// This makes tabs interoperable with either space convention.
+//
+// Spaces are divided by `unit` and rounded to the nearest integer using
+// standard round-half-up:  level = (spaces + unit/2) / unit
+//
+// Rounding table for unit=2:
+//   raw  0 → 0    1 → 1    2 → 1    3 → 2    4 → 2    5 → 3 …
+//
+// Rounding table for unit=4:
+//   raw  0 → 0    1 → 0    2 → 1    3 → 1    4 → 1    5 → 1
+//        6 → 2    7 → 2    8 → 2    9 → 2   10 → 3 …
+//
+// So a user who writes 3 spaces in a 2-space file is rounded to level 2
+// (child), and 1 space rounds to level 1 (same as 2 spaces — same child).
+// Quirky files are silently tolerated rather than rejected.
+
+static int rawToLevel(int spaces, int tabs, int unit) noexcept
+{
+    const int space_levels = (unit > 0) ? (spaces + unit / 2) / unit : spaces;
+    return tabs + space_levels;
+}
+
+// Attribute list parser
 // Called with i pointing to the char *after* the opening '('.
 // Advances i past the closing ')'.
 // Emits AttrKey / AttrValue pairs; forgiving on malformed input.
@@ -68,7 +177,7 @@ static void parseAttrs(std::string_view s, std::size_t& i,
 
             if (i < n && (s[i] == '"' || s[i] == '\'')) {
                 // quoted value
-                const char q      = s[i++];
+                const char        q      = s[i++];
                 const std::size_t vstart = i;
                 while (i < n && s[i] != q) ++i;
                 val = std::string(s.substr(vstart, i - vstart));
@@ -152,15 +261,27 @@ static void tokenizeLine(std::string_view s, std::vector<Token>& out)
 
 } // anonymous namespace
 
-// ── Lexer::tokenize ───────────────────────────────────────────────────────────
 
 std::vector<Token> Lexer::tokenize() const
 {
+    // ── Pass 1: detect indent style ───────────────────────────────────────
+    //
+    // Scans the entire source once, reads leading whitespace on each line, and
+    // computes the GCD of all positive space-indent column counts.  The result
+    // is the `unit` used for level normalisation in Pass 2.
+    const IndentStyle style = detectIndent(source_);
+
+    // ── Pass 2: tokenize ──────────────────────────────────────────────────
+
     std::vector<Token> tokens;
     tokens.reserve(64);
 
-    // Indent stack: tracks the column depth of each open indent level.
+    // Indent stack: stores the *normalised level* of each open indent scope.
     // Bottom element is always 0 (root level).
+    //
+    // Using levels (not raw column counts) makes the comparisons below unit-
+    // and tab-independent: level 1 is "one indent in" regardless of whether
+    // the file uses 2 spaces, 4 spaces, or tabs.
     std::stack<int> indent_stack;
     indent_stack.push(0);
 
@@ -187,30 +308,48 @@ std::vector<Token> Lexer::tokenize() const
             if (blank) continue;
         }
 
-        const int indent = countIndent(line);
+        // ── Measure leading whitespace ────────────────────────────────────
+        //
+        // `ri.chars` is the number of raw characters to skip for content
+        // stripping — NOT the same as the logical column count when tabs are
+        // present.  Using ri.chars instead of the old `indent` value fixes the
+        // bug where a tab-indented line had content characters accidentally
+        // consumed by line.substr(4).
+        const RawIndent ri      = countRawIndent(line);
+        const int       level   = rawToLevel(ri.spaces, ri.tabs, style.unit);
+        const std::string_view content = line.substr(ri.chars);
 
         // ── Skip comment lines before emitting any indent tokens ─────────
         // A comment must not disturb the indent stack or emit Newline.
-        {
-            const std::string_view content = line.substr(static_cast<std::size_t>(indent));
-            if (content.size() >= 2 && content[0] == '/' && content[1] == '/')
-                continue;
-        }
+        if (content.size() >= 2 && content[0] == '/' && content[1] == '/')
+            continue;
 
         // ── Emit Indent / Dedent ──────────────────────────────────────────
-        if (indent > indent_stack.top()) {
-            indent_stack.push(indent);
+        //
+        // Comparisons use normalised levels so the thresholds are consistent
+        // regardless of the raw whitespace in the source.
+        //
+        // Orphaned / over-dedented levels:
+        //   If, after popping all levels below `level`, the stack top is still
+        //   below `level` (i.e. the author jumped back to an intermediate depth
+        //   that was never pushed), we do NOT emit an extra Indent.  The line
+        //   is silently snapped to the nearest ancestor level — the same
+        //   behaviour as the old column-based code.  This avoids a spurious
+        //   Dedent + Indent pair that would misattach the node in the parser.
+        if (level > indent_stack.top()) {
+            indent_stack.push(level);
             tokens.push_back({TokenType::Indent, {}});
         } else {
-            while (indent < indent_stack.top()) {
+            while (level < indent_stack.top()) {
                 indent_stack.pop();
                 tokens.push_back({TokenType::Dedent, {}});
             }
-            // If indent == top: same level, no token needed.
+            // level == stack.top()  →  same depth, no token.
+            // level >  stack.top()  →  orphaned quirky line, snap silently.
         }
 
-        // ── Tokenize the line content (after stripping indent) ────────────
-        tokenizeLine(line.substr(static_cast<std::size_t>(indent)), tokens);
+        // ── Tokenize the line content (indent already stripped) ───────────
+        tokenizeLine(content, tokens);
 
         tokens.push_back({TokenType::Newline, {}});
     }

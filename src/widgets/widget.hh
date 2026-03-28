@@ -2,10 +2,32 @@
 
 #include "../render_tree.hh"   // NodeHandle, RenderTree, Signal
 
+#include <any>
+#include <memory>
+
 #include <cstdint>
 #include <string>
 
 namespace pce::sdlos::widgets {
+
+template<typename StateT>
+struct WidgetView {
+    RenderTree& tree;
+    NodeHandle  handle;
+
+    [[nodiscard]] bool valid() const noexcept { return handle.valid(); }
+    /* implicit */ operator NodeHandle() const noexcept { return handle; }
+
+protected:
+    [[nodiscard]] StateT* getState(this auto& self) noexcept
+    {
+        RenderNode* n = self.tree.node(self.handle);
+        if (!n) [[unlikely]] return nullptr;
+        auto* sp = std::any_cast<std::shared_ptr<StateT>>(&n->state);
+        return (sp && *sp) ? sp->get() : nullptr;
+    }
+};
+
 
 // Named alias (not a distinct type) keeps assignment-compatible with plain
 // NodeHandle — tree manipulation APIs accept widgets without a cast.

@@ -5,33 +5,16 @@
 
 #include <SDL3/SDL.h>
 
-#include <any>
 #include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace pce::sdlos { class TextRenderer; }
 
 namespace pce::sdlos::widgets {
 
-template<typename StateT>
-struct WidgetView {
-    RenderTree& tree;
-    NodeHandle  handle;
-
-    [[nodiscard]] bool valid() const noexcept { return handle.valid(); }
-    /* implicit */ operator NodeHandle() const noexcept { return handle; }
-
-protected:
-    [[nodiscard]] StateT* getState(this auto& self) noexcept
-    {
-        RenderNode* n = self.tree.node(self.handle);
-        if (!n) [[unlikely]] return nullptr;
-        auto* sp = std::any_cast<std::shared_ptr<StateT>>(&n->state);
-        return (sp && *sp) ? sp->get() : nullptr;
-    }
-};
 
 
 /// Unified config for single-line (multiline=false) and multi-line (multiline=true) input.
@@ -90,6 +73,25 @@ struct TextFieldState {
     std::string  text;
     std::size_t  cursor_pos = 0; // byte offset; UTF-8-safe
     bool         focused    = false;
+
+    // ── Selection (byte offsets) ──────────────────────────────────────────
+    // sel_start = anchor end (fixed);  sel_end = active end (tracks cursor).
+    // normalizedSel() always returns [min, max] regardless of anchor direction.
+    std::size_t  sel_start  = 0;
+    std::size_t  sel_end    = 0;
+    bool         sel_active = false;
+
+    // ── IME preedit / composition ─────────────────────────────────────────
+    std::string  composition;            // UTF-8 preedit text from TEXT_EDITING
+    int          composition_cursor = 0; // byte offset of caret inside composition
+
+    // ── Undo ─────────────────────────────────────────────────────────────
+    std::vector<std::string>          undo_stack;
+    static constexpr std::size_t      kUndoLimit = 64;
+
+    // ── Mouse click / drag tracking ───────────────────────────────────────
+    Uint64 last_click_ms    = 0;     // SDL_GetTicks() at last MOUSE_BUTTON_DOWN
+    bool   text_drag_active = false; // true while LMB held for drag-select
 
     float scroll_offset_y = 0.f;
     float scroll_offset_x = 0.f;

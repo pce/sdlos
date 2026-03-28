@@ -67,6 +67,23 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
     }
 
     sdl_window_ = window;
+
+    // Query the device for the actual supported shader format and cache it.
+    // GetShaderFormat() returns this value; callers such as GltfScene::init()
+    // depend on it being non-zero.  Without this assignment it stays at the
+    // default SDL_GPU_SHADERFORMAT_INVALID (0) and all 3D pipeline creation fails.
+    const SDL_GPUShaderFormat avail = SDL_GetGPUShaderFormats(device_);
+    if (avail & SDL_GPU_SHADERFORMAT_MSL) {
+        shader_format_ = SDL_GPU_SHADERFORMAT_MSL;
+    } else if (avail & SDL_GPU_SHADERFORMAT_SPIRV) {
+        shader_format_ = SDL_GPU_SHADERFORMAT_SPIRV;
+    } else if (avail & SDL_GPU_SHADERFORMAT_DXIL) {
+        shader_format_ = SDL_GPU_SHADERFORMAT_DXIL;
+    } else {
+        std::cerr << "SDLRenderer::CreateDeviceForWindow - no recognised shader format in "
+                  << avail << "\n";
+    }
+
     return true;
 }
 
@@ -325,6 +342,14 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform &u [[buffer(
         image_cache_.reset();
     }
 
+    // VideoTexture — camera / video frame source.
+    video_texture_ = std::make_unique<VideoTexture>();
+    if (!video_texture_->init(device_)) {
+        std::cerr << "[SDLRenderer] VideoTexture init failed (no camera support?)\n";
+        // Non-fatal: camera may not be available on all platforms.
+        video_texture_.reset();
+    }
+
     // Capture the logical→physical pixel ratio for the window that was just
     // claimed.  sdl_window_ is valid at this point (set by CreateDeviceForWindow).
     UpdatePixelScale();
@@ -512,6 +537,13 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
 }
 
 void SDLRenderer::Shutdown() noexcept {
+    // Run GPU resource cleanup before the device is destroyed.
+    if (gpu_pre_shutdown_hook_) {
+        gpu_pre_shutdown_hook_();
+        gpu_pre_shutdown_hook_ = nullptr;
+    }
+    scene3d_hook_ = nullptr;
+
     if (!device_) {
         initialized_.store(false);
         return;
@@ -550,6 +582,8 @@ void SDLRenderer::Shutdown() noexcept {
             SDL_ReleaseGPUGraphicsPipeline(device_, entry.pipeline);
     }
     node_shader_cache_.clear();
+
+    if (video_texture_) { video_texture_->shutdown(); video_texture_.reset(); }
 
     // Release window claim before destroying the device.
     if (sdl_window_) {
@@ -846,14 +880,19 @@ void SDLRenderer::Render(double timeSeconds) {
     // single copy pass and drain both queues — SDL3 GPU guarantees that
     // upload commands recorded here complete before the render pass begins.
     {
+        // Pull the latest camera frame (CPU-side) before opening the copy pass.
+        if (video_texture_) video_texture_->updateFrame();
+
         const bool needText  = text_renderer_ && text_renderer_->hasPendingUploads();
         const bool needImage = image_cache_   && image_cache_->hasPendingUploads();
+        const bool needVideo = video_texture_ && video_texture_->hasPendingUpload();
 
-        if (needText || needImage) {
+        if (needText || needImage || needVideo) {
             SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
             if (cp) {
                 if (needText)  text_renderer_->flushUploads(cp);
                 if (needImage) image_cache_->flushUploads(cp);
+                if (needVideo) video_texture_->flushUpload(cp);
                 SDL_EndGPUCopyPass(cp);
             }
         }
@@ -925,6 +964,7 @@ void SDLRenderer::Render(double timeSeconds) {
                 ctx.arena         = &scene_tree_->arena();
                 ctx.text_renderer = text_renderer_.get();
                 ctx.image_cache   = image_cache_.get();
+                ctx.video_texture  = video_texture_.get();
 
                 ctx.pipelines["rect"]  = ui_rect_pipeline_;
                 ctx.pipelines["text"]  = ui_text_pipeline_;
@@ -970,57 +1010,76 @@ void SDLRenderer::Render(double timeSeconds) {
     SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+    SDL_EndGPURenderPass(pass);
+    pass = nullptr;
 
-    // ---- 3b. UI composite (fullscreen quad sampling ui_texture_) --------
+    // ---- 3b. 3D scene pre-pass (optional) ─────────────────────────────
+    // The hook begins its own render pass (LOADOP_LOAD on swap) with a
+    // depth buffer. Runs after the wallpaper but before UI composite.
+    if (scene3d_hook_) {
+        scene3d_hook_(cmd, swap,
+                      static_cast<float>(width),
+                      static_cast<float>(height));
+    }
+
+    // ---- 3c. UI composite (re-open swapchain pass, LOADOP_LOAD) ────────
     // Reuses the text/image pipeline: samples a texture and multiplies by a
     // tint uniform.  Tint {1,1,1,1} preserves the UI texture's RGBA exactly.
     // The pipeline has straight-alpha blending enabled so transparent UI
     // regions correctly reveal the wallpaper underneath.
     if (ui_texture_ && ui_text_pipeline_) {
-        SDL_BindGPUGraphicsPipeline(pass, ui_text_pipeline_);
+        SDL_GPUColorTargetInfo ct2{};
+        ct2.texture   = swap;
+        ct2.load_op   = SDL_GPU_LOADOP_LOAD;   // preserve wallpaper + 3D scene
+        ct2.store_op  = SDL_GPU_STOREOP_STORE;
+        ct2.cycle     = false;
 
-        // Must be 48 bytes — matches struct RectUniform in the vertex shader
-        // { x, y, w, h, vw, vh, uv_x, uv_y, uv_w, uv_h, _p0, _p1 }.
-        // Previously only 32 bytes were pushed (uv_x/y/w/h missing), causing
-        // Metal to read zeros for uv_w/uv_h → all 6 vertices sampled UV (0,0)
-        // → the entire UI texture collapsed to one transparent pixel → clouds only.
-        struct alignas(4) RectUniform {
-            float x, y, w, h;
-            float vw, vh;
-            float uv_x, uv_y;
-            float uv_w, uv_h;
-            float _p0, _p1;
-        };
-        static_assert(sizeof(RectUniform) == 48,
-                      "RectUniform must be 48 bytes to match the vertex shader");
-        const RectUniform vu{
-            0.f, 0.f,
-            static_cast<float>(width), static_cast<float>(height),
-            static_cast<float>(width), static_cast<float>(height),
-            0.f, 0.f, 1.f, 1.f,   // uv_x=0, uv_y=0, uv_w=1, uv_h=1 — full texture
-            0.f, 0.f
-        };
-        SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+        pass = SDL_BeginGPURenderPass(cmd, &ct2, 1, nullptr);
+        if (pass) {
+            SDL_BindGPUGraphicsPipeline(pass, ui_text_pipeline_);
 
-        struct alignas(4) TintUniform { float r, g, b, a; };
-        const TintUniform tu{ 1.f, 1.f, 1.f, 1.f };
-        SDL_PushGPUFragmentUniformData(cmd, 0, &tu, sizeof(tu));
+            // Must be 48 bytes — matches struct RectUniform in the vertex shader
+            // { x, y, w, h, vw, vh, uv_x, uv_y, uv_w, uv_h, _p0, _p1 }.
+            // Previously only 32 bytes were pushed (uv_x/y/w/h missing), causing
+            // Metal to read zeros for uv_w/uv_h → all 6 vertices sampled UV (0,0)
+            // → the entire UI texture collapsed to one transparent pixel → clouds only.
+            struct alignas(4) RectUniform {
+                float x, y, w, h;
+                float vw, vh;
+                float uv_x, uv_y;
+                float uv_w, uv_h;
+                float _p0, _p1;
+            };
+            static_assert(sizeof(RectUniform) == 48,
+                          "RectUniform must be 48 bytes to match the vertex shader");
+            const RectUniform vu{
+                0.f, 0.f,
+                static_cast<float>(width), static_cast<float>(height),
+                static_cast<float>(width), static_cast<float>(height),
+                0.f, 0.f, 1.f, 1.f,   // uv_x=0, uv_y=0, uv_w=1, uv_h=1 — full texture
+                0.f, 0.f
+            };
+            SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
-        // Prefer image_cache sampler; fall back to text_renderer sampler.
-        // Both are bilinear / clamp-to-edge — identical result at 1:1 mapping.
-        SDL_GPUSampler* samp = image_cache_   ? image_cache_->sampler()
-                             : text_renderer_ ? text_renderer_->sampler()
-                             : nullptr;
-        if (samp) {
-            SDL_GPUTextureSamplerBinding sb{};
-            sb.texture = ui_texture_;
-            sb.sampler = samp;
-            SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
-            SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+            struct alignas(4) TintUniform { float r, g, b, a; };
+            const TintUniform tu{ 1.f, 1.f, 1.f, 1.f };
+            SDL_PushGPUFragmentUniformData(cmd, 0, &tu, sizeof(tu));
+
+            // Prefer image_cache sampler; fall back to text_renderer sampler.
+            // Both are bilinear / clamp-to-edge — identical result at 1:1 mapping.
+            SDL_GPUSampler* samp = image_cache_   ? image_cache_->sampler()
+                                 : text_renderer_ ? text_renderer_->sampler()
+                                 : nullptr;
+            if (samp) {
+                SDL_GPUTextureSamplerBinding sb{};
+                sb.texture = ui_texture_;
+                sb.sampler = samp;
+                SDL_BindGPUFragmentSamplers(pass, 0, &sb, 1);
+                SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+            }
+            SDL_EndGPURenderPass(pass);
         }
     }
-
-    SDL_EndGPURenderPass(pass);
 
     // Do NOT call SDL_ReleaseGPUTexture on `swap` — swapchain textures are
     // non-owning views; releasing them corrupts the Metal pending-destroy queue.

@@ -24,7 +24,6 @@
 // ---------------------------------------------------------------------------
 
 #include "widget.hh"
-#include "input_text_box.hh"   // WidgetView<StateT>
 #include "../render_tree.hh"
 
 #include <SDL3/SDL.h>

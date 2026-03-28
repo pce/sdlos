@@ -1,0 +1,584 @@
+= sdlos tooling
+:toc: left
+:toc-title: Contents
+:toclevels: 3
+:source-highlighter: rouge
+:icons: font
+
+Scaffolding, resource management, and release tooling for sdlos jade apps.
+
+Managed with https://docs.astral.sh/uv/[uv] — no manual virtualenv setup required.
+
+== Quick start
+
+[source,sh]
+----
+# Install (editable, with dev deps)
+cd tooling
+uv sync
+
+# Create a new minimal app
+uv run sdlos create hello
+
+# Create a shader app with data directory, auto-patch CMake
+uv run sdlos create viz --template shader --win-w 1280 --win-h 800 \
+    --data-dir --patch-cmake
+
+# Create a camera app with a model, dry-run first
+uv run sdlos create mycam --template camera --data-dir \
+    --with-model ../assets/Crystal_Cluster.glb --dry-run
+
+# Run tests
+uv run pytest
+----
+
+== Directory layout
+
+----
+tooling/
+├── pyproject.toml              uv project definition, entry points, deps
+├── readme.adoc                 this file
+├── .gitignore                  excludes .venv/, __pycache__/, etc.
+├── config/
+│   └── app.yaml                annotated example config file
+├── tests/
+│   ├── test_naming.py          pascal() and validate_name()
+│   ├── test_fs.py              write_atomic, backup, user-region splice
+│   ├── test_cmake.py           cmake_snippet and patch_cmake strategies
+│   └── test_templates.py       render all three templates, delimiter safety
+└── src/sdlos/
+    ├── cli.py                  Click CLI — sdlos create / templates / version
+    ├── core/
+    │   ├── fs.py               atomic writes, backup, user-region markers
+    │   ├── cmake.py            project-root detection, snippet gen, patching
+    │   └── naming.py           pascal(), validate_name()
+    ├── config/
+    │   └── schema.py           AppConfig dataclass — YAML + CLI merge
+    ├── templates/
+    │   ├── renderer.py         Jinja2 env ({$ $} delimiters), render_template()
+    │   ├── minimal/            empty jade_app_init stub
+    │   ├── shader/             shader canvas + preset sidebar + +/– steppers
+    │   └── camera/             live video canvas + filter chips + dragnum inputs
+    ├── features/
+    │   ├── bundler.py          Bundler — zip / tar.gz / dir release archives
+    │   └── updater.py          Updater — updater.json + binary copy
+    └── commands/
+        └── create.py           create_app(cfg, root_dir) implementation
+----
+
+== CLI reference
+
+=== `sdlos create`
+
+Scaffold a new sdlos jade app under `examples/apps/<name>/`.
+
+[source,sh]
+----
+sdlos create NAME [OPTIONS]
+----
+
+.Arguments
+[cols="1,3"]
+|===
+|`NAME`
+|App name in `snake_case`. Hyphens are converted to underscores automatically.
+Must match `[a-z][a-z0-9_]*`.
+|===
+
+.Options
+[cols="2,1,4"]
+|===
+|Flag |Default |Description
+
+|`-t / --template`
+|`minimal`
+|Starter template: `minimal` \| `shader` \| `camera`.
+
+|`--win-w W`
+|`800`
+|Window width in logical pixels. Passed to `SDLOS_WIN_W` at compile time.
+
+|`--win-h H`
+|`600`
+|Window height in logical pixels. Passed to `SDLOS_WIN_H` at compile time.
+
+|`--data-dir`
+|off
+|Create a `data/` skeleton: `shaders/msl/`, `shaders/spirv/`, `img/`, `models/`.
+
+|`--with-model PATH`
+|—
+|Copy a `.glb` or `.gltf` file into `data/models/` during scaffold.
+Also emits `sdlos_copy_resource_to(...)` in the CMake snippet.
+
+|`--patch-cmake`
+|off
+|Auto-insert the `sdlos_jade_app()` block into `CMakeLists.txt`.
+A `.bak` backup is written before any modification.
+If omitted, the snippet is printed to stdout for manual insertion.
+
+|`--overwrite`
+|off
+|Re-generate scaffold files. Code between user-region markers is
+preserved verbatim (see <<user-regions>>).
+
+|`--dry-run`
+|off
+|Print what _would_ happen without touching the filesystem or `CMakeLists.txt`.
+
+|`-q / --quiet`
+|off
+|Suppress per-file log lines.
+
+|`--config YAML`
+|—
+|Seed options from a YAML config file. CLI flags always take priority.
+See <<config-file>>.
+
+|`--save-config YAML`
+|—
+|After merging CLI + file options, write the resolved config to a YAML file.
+Useful for capturing a repeatable scaffold invocation.
+|===
+
+.Examples
+[source,sh]
+----
+# Simplest possible — creates examples/apps/hello/
+sdlos create hello
+
+# Shader app — custom window, auto-patch CMake
+sdlos create viz --template shader --win-w 1280 --win-h 800 --patch-cmake
+
+# Camera app — data skeleton, copy a model in
+sdlos create mycam --template camera --data-dir \
+    --with-model ../assets/Cluster.glb --patch-cmake
+
+# Re-generate scaffold but preserve user code
+sdlos create viz --template shader --overwrite
+
+# Check what would be generated/changed without writing anything
+sdlos create myapp --config config/app.yaml --dry-run
+
+# Save resolved config for later reuse
+sdlos create myapp --template shader --win-w 1920 --win-h 1080 \
+    --save-config config/myapp.yaml
+----
+
+=== `sdlos templates`
+
+List the scaffold templates that have all required file kinds present.
+
+[source,sh]
+----
+sdlos templates
+# Available templates:
+#   camera
+#   minimal
+#   shader
+----
+
+=== `sdlos version`
+
+Print the tooling package version.
+
+[source,sh]
+----
+sdlos version
+# sdlos-tooling 0.1.0
+----
+
+[[config-file]]
+== Config file
+
+All `create` options can be set in a YAML file and passed with `--config`.
+CLI flags always override file values.
+
+[source,yaml]
+----
+# config/app.yaml
+name: my_app
+template: shader
+win_w: 1280
+win_h: 800
+data_dir: true
+patch_cmake: true
+with_model: ../assets/Crystal_Cluster.glb
+overwrite: false
+dry_run: false
+verbose: true
+
+# Feature: Updater (keys land in AppConfig.extra)
+# updater_url: https://updates.example.com/my_app
+# updater_channel: stable
+# updater_binary: tools/updater/bin/updater
+----
+
+[source,sh]
+----
+sdlos create --config config/app.yaml
+# NAME can be omitted when set in the file.
+# Override just one field from the CLI:
+sdlos create --config config/app.yaml --dry-run
+----
+
+== Templates
+
+Each template generates three files:
+
+[cols="1,3"]
+|===
+|File |Description
+
+|`<name>.jade`
+|Scene layout — `col` / `row` containers, widgets, event bindings.
+
+|`<name>.css`
+|Visual styles — jade_host converts kebab-case properties to camelCase attrs.
+Inline jade attributes always override CSS.
+
+|`<name>_behavior.cxx`
+|`jade_app_init()` stub — compiled into the executable via
+`-DSDLOS_APP_BEHAVIOR=`.
+|===
+
+=== minimal
+
+An empty `jade_app_init` stub with the correct signature, a state struct,
+commented-out examples for node lookup, bus subscriptions, and the SDL event
+hook.  The starting point for any app that doesn't fit the shader or camera
+patterns.
+
+[source,sh]
+----
+sdlos create hello
+sdlos create hello --win-w 1440 --win-h 900
+----
+
+=== shader
+
+Three-column layout: preset chip list | shader canvas (`img` with `_shader`
+attrs) | `+`/`-` parameter steppers.
+
+Generated behaviour wires:
+
+* `<name>:preset` bus event → `applyPreset()` — swaps `_shader` and default
+  param values on the canvas, highlights the active chip.
+* `<name>:inc` / `<name>:dec` bus events → clamp-and-refresh a named param.
+
+Customise by editing `kNamePresets[]` and the `Param` list in `NameState`.
+
+[source,sh]
+----
+sdlos create viz --template shader --win-w 1280 --win-h 800 --data-dir
+----
+
+=== camera
+
+Three-column layout: filter chips | live video `div` with `_video="camera://0"`
+and `_shader` | dragnum parameter inputs.
+
+Generated behaviour wires:
+
+* `<name>:filter` → `applyFilter()` — swaps shader, default param, highlights chip.
+* Dragnum `on_change` callbacks → push float value to `_shader_param0` on the canvas.
+* Raw SDL event hook → scales logical→physical coordinates and forwards to
+  all `NumberDragger` widgets.
+* On init: enumerates camera devices, opens index 0, writes device name to the
+  status div.
+
+[source,sh]
+----
+sdlos create mycam --template camera --data-dir --patch-cmake
+----
+
+[[user-regions]]
+== User regions and `--overwrite`
+
+Generated files contain _user region_ markers:
+
+[source,cpp]
+----
+// --- enter the forrest ---
+
+// your code here
+
+// --- back to the sea ---
+----
+
+When you run `sdlos create <name> --overwrite`, the tooling:
+
+1. Renders the scaffold fresh from the template.
+2. Reads the _existing_ file.
+3. Splices every user-region body from the existing file into the
+   corresponding position in the newly rendered template.
+4. Writes the merged result atomically (rename on POSIX).
+
+This means you can safely re-run `create --overwrite` after upgrading a
+template — your business logic is preserved and the scaffold framing is
+refreshed.
+
+Rules:
+
+* Regions are matched by position (first-to-first, second-to-second, …).
+* If the template gains a new region, the extra region keeps its default
+  placeholder until you fill it in.
+* The markers must appear verbatim in the file — do not rename them.
+
+== CMake integration
+
+`sdlos_jade_app()` block format:
+
+[source,cmake]
+----
+sdlos_jade_app(my_app
+    examples/apps/my_app/my_app.jade
+    BEHAVIOR examples/apps/my_app/my_app_behavior.cxx
+    DATA_DIR  examples/apps/my_app/data          # only with --data-dir
+    WIN_W 1280
+    WIN_H 800
+)
+----
+
+=== Auto-patch strategies
+
+When `--patch-cmake` is set, the tooling inserts the block using the first
+matching strategy:
+
+[cols="1,1,3"]
+|===
+|Priority |Strategy |Condition
+
+|1
+|Before `# Tests`
+|File contains a `# ===…` / `# Tests` section marker.
+
+|2
+|After last `sdlos_jade_app()` block
+|At least one existing `sdlos_jade_app(` is present.
+
+|3
+|Append at end-of-file
+|Neither of the above apply.
+|===
+
+The patch is *idempotent* — re-running will not insert a duplicate block.
+A `.bak` backup is always written before any change.
+
+== Features
+
+Features are optional post-scaffold steps that add runtime support files
+and CMake copy rules.  They are invoked by passing their config keys via
+`AppConfig.extra` (i.e. YAML `extra:` map or programmatic use).
+
+=== Bundler
+
+Packs a built app into a distributable archive.
+
+[source,python]
+----
+from sdlos.features import Bundler
+
+bundler = Bundler(format="zip", include_data=True)
+bundler.apply({
+    "cfg":       cfg,
+    "app_dir":   app_dir,
+    "build_dir": Path("build"),
+    "root_dir":  root_dir,
+})
+# context["bundle_path"] → Path to the produced archive
+----
+
+.Formats
+[cols="1,3"]
+|===
+|`zip` |Default — compressed ZIP archive.
+|`tar.gz` |Gzipped tar archive — better for Linux/macOS distribution.
+|`dir` |Plain directory copy — useful for inspection or packaging pipelines.
+|===
+
+Binary lookup searches common CMake output locations
+(`build/`, `build/bin/`, `build/Debug/`, macOS `.app` bundle, …) and falls
+back to a recursive search.
+
+=== Updater
+
+Writes `data/updater.json` and optionally copies a pre-built updater binary
+into the app data directory.
+
+Config keys (in `AppConfig.extra` / YAML):
+
+[cols="2,1,3"]
+|===
+|Key |Default |Description
+
+|`updater_url`
+|`""`
+|Base URL of the update server.  Feature is a no-op if empty.
+
+|`updater_channel`
+|`stable`
+|Release channel written into `updater.json`.
+
+|`updater_binary`
+|—
+|Path to a pre-built updater binary to copy into `data/`.
+|===
+
+[source,yaml]
+----
+# In app.yaml
+updater_url: https://updates.example.com/my_app
+updater_channel: stable
+updater_binary: tools/updater/bin/updater
+----
+
+[source,python]
+----
+from sdlos.features import Updater
+from sdlos.features.updater import UpdaterContext
+
+updater = Updater.from_cfg(cfg)
+if updater.is_active():
+    ctx = UpdaterContext.from_cfg(cfg, app_dir)
+    updater.apply(ctx)
+    # ctx.cmake_lines contains sdlos_copy_resource lines to append
+----
+
+== Core modules
+
+=== `sdlos.core.fs`
+
+[cols="2,4"]
+|===
+|Symbol |Description
+
+|`write_atomic(path, data)`
+|Write `data` to `path` via a temp file + `os.replace()`.
+Parent directories are created automatically. Safe against partial writes.
+
+|`backup_file(path) → Path \| None`
+|Copy `path` to a unique `<name>.bak` (`.bak1`, `.bak2`, …) sibling.
+Returns `None` if the source does not exist.
+
+|`write_file_safe(path, data, overwrite, dry_run, verbose)`
+|High-level writer used by all commands. Handles skip / backup / atomic write
+with per-file log output.
+
+|`extract_user_regions(text) → list[str]`
+|Return the body of every user region in `text`, in document order.
+
+|`splice_user_regions(generated, existing) → str`
+|Graft user-region bodies from `existing` into `generated` by position.
+|===
+
+=== `sdlos.core.cmake`
+
+[cols="2,4"]
+|===
+|Symbol |Description
+
+|`find_project_root(start) → Path`
+|Walk upward from `start` until a `CMakeLists.txt` containing
+`project(sdlos` is found. Falls back to the package's own ancestor chain.
+
+|`cmake_snippet(name, win_w, win_h, has_data, extra_resources) → str`
+|Render a formatted `sdlos_jade_app()` block.
+
+|`patch_cmake(path, name, snippet) → bool`
+|Idempotent insertion with backup. Returns `True` if the file was changed.
+|===
+
+=== `sdlos.core.naming`
+
+[cols="2,4"]
+|===
+|Symbol |Description
+
+|`pascal(snake) → str`
+|`my_app` → `MyApp`.  Also handles kebab-case input.
+
+|`validate_name(value) → str`
+|Lower-case, convert hyphens to underscores, reject invalid characters.
+Raises `click.BadParameter` on failure.
+|===
+
+=== `sdlos.config.schema.AppConfig`
+
+Dataclass that is the single source of truth for every tooling command.
+
+[source,python]
+----
+from sdlos.config.schema import AppConfig
+
+# From CLI arguments (with optional YAML seed)
+cfg = AppConfig.from_cli(
+    name="my_app",
+    template="shader",
+    win_w=1280, win_h=800,
+    data_dir=True,
+    patch_cmake=False,
+    overwrite=False,
+    dry_run=True,
+    config_path=Path("config/app.yaml"),   # optional seed
+)
+
+# From YAML only
+cfg = AppConfig.from_yaml(Path("config/app.yaml"))
+
+cfg.validate()          # raises ValueError on bad fields
+print(cfg.to_yaml())    # serialise back to YAML string
+----
+
+== Adding a new template
+
+1. Create `src/sdlos/templates/<name>/` with three files:
+   `jade.j2`, `css.j2`, `behavior_cxx.j2`.
+
+2. Use `{$ name $}` for the app name and `{$ pascal_name $}` for PascalCase.
+   All other Jinja2 variables available in the context:
+
+[cols="1,3"]
+|===
+|Variable |Value
+
+|`name`        | App name in `snake_case`
+|`pascal_name` | App name in `PascalCase`
+|`win_w`       | Window width (int)
+|`win_h`       | Window height (int)
+|`data_dir`    | `True` if `--data-dir` was set
+|`with_model`  | Path string or `None`
+|===
+
+3. For control flow use `<% if condition %>` … `<% endif %>`.
+   C++ braces `{ }`, aggregate initialisers `{ "a", 1.f }`, and template
+   arguments `std::shared_ptr<MyState>` all pass through as plain text —
+   no escaping needed.
+
+4. Run `sdlos templates` to verify the template is detected, then:
++
+[source,sh]
+----
+sdlos create smoke --template <name> --dry-run
+uv run pytest tests/test_templates.py
+----
+
+== Testing
+
+[source,sh]
+----
+# All tests
+uv run pytest
+
+# Verbose
+uv run pytest -v
+
+# Single module
+uv run pytest tests/test_templates.py -v
+
+# With coverage report
+uv run pytest --cov=sdlos --cov-report=term-missing
+----
+
+Tests are pure-Python and run entirely in `tmp_path` fixtures — no build
+system, no C++ compiler, no SDL required.

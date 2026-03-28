@@ -28,7 +28,8 @@ namespace {
         tag == "aside"   || tag == "nav"        || tag == "layout" ||
         tag == "panel"   || tag == "calculator" || tag == "keypad" ||
         tag == "form"    || tag == "fieldset"   || tag == "ul"     ||
-        tag == "ol"      || tag == "li"         || tag == "dl")
+        tag == "ol"      || tag == "li"         || tag == "dl"     ||
+        tag == "video")
     {
         return LayoutKind::Block;
     }

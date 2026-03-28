@@ -1,0 +1,139 @@
+// style.jade — Design Tokens: colors, typography, spacing, components
+//
+// Page 1 of 3 in the Style Guide presentation.
+// All styles are inline (no external CSS dependency).
+//
+// Sections:
+//   Brand colors  — 6 swatches
+//   Surface scale — 5 dark surface steps
+//   Typography    — 6 size/weight variants
+//   Components    — button variants
+
+col(flexGrow="1" overflow="hidden" backgroundColor="#0a0a0f")
+
+  // ── Header bar ────────────────────────────────────────────────────────────
+  row(height="48" backgroundColor="#0f172a" paddingLeft="24" paddingRight="24" alignItems="center")
+    div(color="#94a3b8" fontSize="11" fontWeight="bold") DESIGN TOKENS
+    div(flexGrow="1")
+    div(color="#334155" fontSize="11") 01 / 03
+
+  // ── Scrollable content ────────────────────────────────────────────────────
+  col(flexGrow="1" overflow="scroll" padding="24" gap="32")
+
+    // ── Brand colors ─────────────────────────────────────────────────────────
+    col(gap="12")
+      div(color="#475569" fontSize="10" fontWeight="bold") BRAND COLORS
+      row(gap="14" flexWrap="true")
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#6366f1" width="64" height="64" borderRadius="12")
+          div(color="#6366f1" fontSize="10") Indigo
+          div(color="#334155" fontSize="9") #6366f1
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#8b5cf6" width="64" height="64" borderRadius="12")
+          div(color="#8b5cf6" fontSize="10") Purple
+          div(color="#334155" fontSize="9") #8b5cf6
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#06b6d4" width="64" height="64" borderRadius="12")
+          div(color="#06b6d4" fontSize="10") Cyan
+          div(color="#334155" fontSize="9") #06b6d4
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#10b981" width="64" height="64" borderRadius="12")
+          div(color="#10b981" fontSize="10") Emerald
+          div(color="#334155" fontSize="9") #10b981
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#f59e0b" width="64" height="64" borderRadius="12")
+          div(color="#f59e0b" fontSize="10") Amber
+          div(color="#334155" fontSize="9") #f59e0b
+
+        col(gap="6" alignItems="center")
+          div(backgroundColor="#ef4444" width="64" height="64" borderRadius="12")
+          div(color="#ef4444" fontSize="10") Red
+          div(color="#334155" fontSize="9") #ef4444
+
+    // ── Surface scale ─────────────────────────────────────────────────────────
+    col(gap="12")
+      div(color="#475569" fontSize="10" fontWeight="bold") SURFACE SCALE
+      row(gap="10")
+
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#0a0a0f" width="70" height="44" borderRadius="8" borderColor="#1e293b" borderWidth="1")
+          div(color="#334155" fontSize="9") 900
+          div(color="#475569" fontSize="8") #0a0a0f
+
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#0f172a" width="70" height="44" borderRadius="8")
+          div(color="#334155" fontSize="9") 800
+          div(color="#475569" fontSize="8") #0f172a
+
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#1e293b" width="70" height="44" borderRadius="8")
+          div(color="#475569" fontSize="9") 700
+          div(color="#475569" fontSize="8") #1e293b
+
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#334155" width="70" height="44" borderRadius="8")
+          div(color="#64748b" fontSize="9") 600
+          div(color="#64748b" fontSize="8") #334155
+
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#475569" width="70" height="44" borderRadius="8")
+          div(color="#94a3b8" fontSize="9") 500
+          div(color="#94a3b8" fontSize="8") #475569
+
+    // ── Typography ────────────────────────────────────────────────────────────
+    col(gap="12")
+      div(color="#475569" fontSize="10" fontWeight="bold") TYPOGRAPHY SCALE
+      col(gap="10" backgroundColor="#0f172a" borderRadius="12" padding="20")
+        div(color="#f8fafc" fontSize="36" fontWeight="bold") Display  36 Bold
+        div(color="#f1f5f9" fontSize="24" fontWeight="bold") Heading  24 Bold
+        div(color="#e2e8f0" fontSize="18") Title  18  Regular
+        div(color="#cbd5e1" fontSize="15") Body  15  —  the quick brown fox
+        div(color="#94a3b8" fontSize="12") Caption  12  —  secondary text
+        div(color="#475569" fontSize="10") Label  10  —  metadata  &  tags
+
+    // ── Component buttons ─────────────────────────────────────────────────────
+    col(gap="12")
+      div(color="#475569" fontSize="10" fontWeight="bold") COMPONENTS — BUTTONS
+      row(gap="10" flexWrap="true")
+        div(backgroundColor="#6366f1" color="#ffffff" height="40" width="112" borderRadius="10" fontSize="13" fontWeight="bold") Primary
+        div(backgroundColor="#0f172a" color="#a5b4fc" height="40" width="112" borderRadius="10" fontSize="13" borderColor="#6366f1" borderWidth="1") Outline
+        div(backgroundColor="#1e293b" color="#94a3b8" height="40" width="112" borderRadius="10" fontSize="13") Secondary
+        div(backgroundColor="#ef4444" color="#ffffff" height="40" width="112" borderRadius="10" fontSize="13" fontWeight="bold") Danger
+        div(backgroundColor="#10b981" color="#ffffff" height="40" width="112" borderRadius="10" fontSize="13") Success
+
+    // ── Spacing scale ─────────────────────────────────────────────────────────
+    col(gap="12")
+      div(color="#475569" fontSize="10" fontWeight="bold") SPACING SCALE
+      row(gap="8" alignItems="center")
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="4" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 4
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="8" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 8
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="12" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 12
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="16" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 16
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="24" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 24
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="32" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 32
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="48" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 48
+        col(gap="4" alignItems="center")
+          div(backgroundColor="#6366f1" width="64" height="32" borderRadius="2")
+          div(color="#475569" fontSize="9") 64
+
+    // ── Bottom padding ────────────────────────────────────────────────────────
+    div(height="24")

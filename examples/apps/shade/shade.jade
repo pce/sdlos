@@ -8,12 +8,12 @@
 row(id="root" flexGrow="1")
 
   // Left: Shader Preset List ─────────────────────────────────────────────
-  col.sidebar(id="sidebar-presets" flexGrow="1")
+  col.sidebar(id="sidebar-presets" flexGrow="1" toggle-group="1")
 
     div.section-title Shaders
     div.divider
 
-    div.preset(onclick="shade:preset" data-value="perlin_noise"  backgroundColor="#6366f133" color="#ffffff") Perlin Noise
+    div.preset(onclick="shade:preset" data-value="perlin_noise" active="1") Perlin Noise
     div.preset(onclick="shade:preset" data-value="tilt_blur") Tilt Blur
     div.preset(onclick="shade:preset" data-value="contrast") Contrast
     div.preset(onclick="shade:preset" data-value="vignette") Vignette

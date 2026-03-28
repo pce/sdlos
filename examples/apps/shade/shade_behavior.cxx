@@ -115,14 +115,10 @@ static void applyPreset(pce::sdlos::RenderTree& tree,
         }
     }
 
-    // Highlight active preset chip
-    for (auto h : presets) {
-        if (pce::sdlos::RenderNode* n = tree.node(h)) {
-            const bool active = (n->style("data-value") == name);
-            n->setStyle("backgroundColor", active ? "#6366f133" : "#ffffff0a");
-            n->dirty_render = true;
-        }
-    }
+    // Active highlight is now handled by CSS :active + toggle-group.
+    // jade_host calls css_sheet.activateNode() before publishing the bus
+    // event, so by the time this handler runs the visual state is already
+    // correct.  No manual backgroundColor manipulation needed here.
 
     // Refresh all param display divs
     for (std::size_t i = 0; i < s.params.size(); ++i)
@@ -140,10 +136,11 @@ static void applyPreset(pce::sdlos::RenderTree& tree,
 } // namespace
 
 
-void jade_app_init(pce::sdlos::RenderTree&  tree,
-                   pce::sdlos::NodeHandle   root,
-                   pce::sdlos::IEventBus&   bus,
-                   pce::sdlos::SDLRenderer& /*renderer*/)
+void jade_app_init(pce::sdlos::RenderTree&               tree,
+                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::SDLRenderer&               /*renderer*/,
+                   std::function<bool(const SDL_Event&)>& /*out_handler*/)
 {
     auto state = std::make_shared<ShadeState>();
 

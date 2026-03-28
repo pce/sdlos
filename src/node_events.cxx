@@ -1,6 +1,7 @@
 #include "node_events.hh"
 #include "hit_test.hh"
 #include "render_tree.hh"
+#include "css_loader.hh"
 
 #include <SDL3/SDL.h>
 
@@ -59,13 +60,32 @@ struct IntervalState {
 
 NodeHandle dispatchClick(RenderTree& tree, NodeHandle root,
                          float px, float py,
-                         IEventBus& bus)
+                         IEventBus& bus,
+                         css::StyleSheet* css)
 {
     const NodeHandle hit = hitTest(tree, root, px, py);
     if (!hit.valid()) return k_null_handle;
 
     RenderNode* n = tree.node(hit);
     if (!n) return k_null_handle;
+
+    // toggle-group radio activation — walk up from the hit node to find a
+    // node whose *parent* carries toggle-group.  This is robust when the hit
+    // is a deep descendant (e.g. a text sub-node inside a .preset div).
+    if (css && !css->active_entries.empty()) {
+        for (NodeHandle cur = hit; cur.valid(); ) {
+            const RenderNode* cn = tree.node(cur);
+            if (!cn) break;
+            if (cn->parent.valid()) {
+                const RenderNode* par = tree.node(cn->parent);
+                if (par && !par->style("toggle-group").empty()) {
+                    css->activateNode(tree, cur);
+                    break;
+                }
+            }
+            cur = cn->parent;
+        }
+    }
 
     const auto topic = n->style("onclick");
     if (!topic.empty()) {

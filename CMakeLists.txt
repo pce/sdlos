@@ -78,6 +78,65 @@ endif()
 
 sdlos_optional_addon(TTF SDL_ttf)
 
+# =============================================================================
+# Third-party text libraries
+# =============================================================================
+
+include(FetchContent)
+
+# simdutf — SIMD-accelerated UTF-8/UTF-16/UTF-32 validation & transcoding
+set(SIMDUTF_TESTS      OFF CACHE BOOL "" FORCE)
+set(SIMDUTF_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(SIMDUTF_TOOLS      OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    simdutf
+    URL https://github.com/simdutf/simdutf/archive/refs/tags/v5.6.4.tar.gz
+)
+FetchContent_MakeAvailable(simdutf)
+
+# utf8cpp — header-only UTF-8/UTF-16/UTF-32 for C++
+# Use a tarball URL (no git required, faster, avoids ALIAS target registration
+# failures that can occur with GIT_REPOSITORY + GIT_TAG on some generators).
+FetchContent_Declare(
+    utfcpp
+    URL      https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.0.4.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(utfcpp)
+
+# utfcpp's CMakeLists creates `utf8cpp` (INTERFACE) and an ALIAS
+# `utf8cpp::utf8cpp`.  Guard against the rare case where FetchContent
+# populates the sources but the ALIAS wasn't registered (e.g. an older
+# generator that skips ALIAS targets for INTERFACE libraries).
+if(NOT TARGET utf8cpp::utf8cpp)
+    if(TARGET utf8cpp)
+        add_library(utf8cpp::utf8cpp ALIAS utf8cpp)
+    else()
+        # Last resort: synthesise a header-only target pointing at the
+        # populated source tree so the build doesn't fail hard.
+        FetchContent_GetProperties(utfcpp SOURCE_DIR utfcpp_SOURCE_DIR)
+        add_library(_utf8cpp_iface INTERFACE)
+        target_include_directories(_utf8cpp_iface INTERFACE
+            "${utfcpp_SOURCE_DIR}/source")
+        add_library(utf8cpp::utf8cpp ALIAS _utf8cpp_iface)
+        message(WARNING
+            "[sdlos] utf8cpp::utf8cpp ALIAS was missing — synthesised a "
+            "fallback INTERFACE target from ${utfcpp_SOURCE_DIR}/source")
+    endif()
+endif()
+
+# fastgltf — fast, modern C++17 glTF 2.0 parser used by gltf_scene.cxx.
+# Loaded as a tarball (no git required, reproducible, fast on CI).
+FetchContent_Declare(
+    fastgltf
+    URL      https://github.com/spnda/fastgltf/archive/refs/tags/v0.8.0.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+# Disable fastgltf's own test targets — we only need the library.
+set(FASTGLTF_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(FASTGLTF_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(fastgltf)
+
 # -----------------------------------------------------------------------------
 # Compiler warning flags  (shared across all targets)
 # -----------------------------------------------------------------------------
@@ -197,12 +256,20 @@ set(SDLOS_ENGINE_SOURCES
     src/jade/jade_lexer.cxx
     src/jade/jade_parser.cxx
 
+    # Video / camera frame source
+    src/video_texture.cxx
+
     # Widgets built on top of RenderTree
     src/widgets/input_text_box.cxx
     src/widgets/select_box.cxx
+    src/widgets/number_dragger.cxx
+    src/widgets/range_slider.cxx
 
     # Debug overlays
     src/debug/layout_debug.cxx
+
+    # 3D glTF render layer (fastgltf + SDL3 GPU pipeline)
+    src/gltf/gltf_scene.cxx
 )
 
 add_library(sdlos_engine STATIC ${SDLOS_ENGINE_SOURCES})
@@ -217,6 +284,14 @@ target_include_directories(sdlos_engine PUBLIC
 
 sdlos_target_compile_options(sdlos_engine)
 sdlos_link_sdl(sdlos_engine)
+
+target_link_libraries(sdlos_engine PUBLIC
+    simdutf
+    utf8cpp::utf8cpp
+    fastgltf
+)
+
+
 
 # =============================================================================
 # sdlos  —  the desktop shell executable.
@@ -357,30 +432,69 @@ function(sdlos_jade_app NAME JADE_FILE)
 endfunction()
 
 # -----------------------------------------------------------------------------
-# Standalone jade apps
-# Each line here is a self-contained binary built from a .jade scene.
+# Standalone jade apps — auto-discovered
+#
+# Each app owns its own <name>.cmake file inside its source directory.
+# To add an app:    sdlos create <name>   (writes examples/apps/<name>/<name>.cmake)
+# To remove an app: delete the directory  (no CMakeLists.txt edit needed)
+#
+# The glob runs at configure time.  Re-run cmake after adding or removing an app.
 # -----------------------------------------------------------------------------
 
-sdlos_jade_app(calculator
-    examples/apps/calc/calculator.jade
-    BEHAVIOR examples/apps/calc/calculator_behavior.cxx
-)
+# -----------------------------------------------------------------------------
+# Helper: copy a single file from the source tree into the binary directory
+# so apps can load it at runtime via SDL_GetBasePath() + filename.
+# Used for CSS layout files that sit next to the .jade / .cxx sources but
+# must be deployed alongside the executable (separate from DATA_DIR / data/).
+# -----------------------------------------------------------------------------
 
-sdlos_jade_app(shade
-    examples/apps/shade/shade.jade
-    BEHAVIOR examples/apps/shade/shade_behavior.cxx
-    DATA_DIR examples/apps/shade/data
-    WIN_W 1280
-    WIN_H 800
-)
+function(sdlos_copy_resource TARGET SRC_RELATIVE)
+    get_filename_component(_fname "${SRC_RELATIVE}" NAME)
+    add_custom_command(TARGET ${TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/${SRC_RELATIVE}"
+            "$<TARGET_FILE_DIR:${TARGET}>/${_fname}"
+        COMMENT "[sdlos] copying ${_fname} for '${TARGET}'"
+        VERBATIM
+    )
+endfunction()
 
-sdlos_jade_app(jadearea
-    examples/apps/jadearea/jadearea.jade
-    BEHAVIOR examples/apps/jadearea/jadearea.cxx
-    DATA_DIR examples/apps/jadearea/data
-    WIN_W 960
-    WIN_H 700
-)
+# sdlos_copy_resource_to(TARGET SRC_RELATIVE DEST_RELATIVE)
+# Like sdlos_copy_resource but lets you specify a destination sub-path
+# (e.g. "data/shaders/msl/foo.metal") relative to the binary directory.
+# Intermediate directories are created automatically.
+function(sdlos_copy_resource_to TARGET SRC_RELATIVE DEST_RELATIVE)
+    get_filename_component(_dname "${DEST_RELATIVE}" DIRECTORY)
+    add_custom_command(TARGET ${TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${TARGET}>/${_dname}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/${SRC_RELATIVE}"
+            "$<TARGET_FILE_DIR:${TARGET}>/${DEST_RELATIVE}"
+        COMMENT "[sdlos] ${SRC_RELATIVE} → ${DEST_RELATIVE} for '${TARGET}'"
+        VERBATIM
+    )
+endfunction()
+
+# PBR mesh shaders — engine-level resources required by GltfScene::init().
+# Placed after the helper function definitions (CMake is top-to-bottom).
+# All app binaries share the same output directory, so copying once on
+# sdlos_engine rebuild makes them available to all app binaries (shared output dir).
+sdlos_copy_resource_to(sdlos_engine
+    "assets/shaders/msl/pbr_mesh.vert.metal"
+    "data/shaders/msl/pbr_mesh.vert.metal")
+sdlos_copy_resource_to(sdlos_engine
+    "assets/shaders/msl/pbr_mesh.frag.metal"
+    "data/shaders/msl/pbr_mesh.frag.metal")
+
+# Include every app that has registered itself with a .cmake file.
+file(GLOB _app_cmake_files "${CMAKE_CURRENT_SOURCE_DIR}/examples/apps/*/*.cmake")
+foreach(_f ${_app_cmake_files})
+    include(${_f})
+endforeach()
+unset(_app_cmake_files)
+
+
 
 # =============================================================================
 # Tests  (optional — enable with -DSDLOS_ENABLE_TESTS=ON)
@@ -389,7 +503,7 @@ sdlos_jade_app(jadearea
 option(SDLOS_ENABLE_TESTS "Build unit tests (requires internet on first configure)" OFF)
 
 if(SDLOS_ENABLE_TESTS)
-    include(FetchContent)
+    # FetchContent already included unconditionally above.
 
     FetchContent_Declare(
         Catch2
@@ -422,7 +536,7 @@ endif()
 # =============================================================================
 
 message(STATUS "")
-message(STATUS "┌─ sdlos ─────────────────────────────────── ── ─ ─")
+message(STATUS "┌─ sdlos ─────────────────────────────────── ──- ─ ─")
 message(STATUS "│  Version     : ${PROJECT_VERSION}")
 message(STATUS "│  Build type  : ${CMAKE_BUILD_TYPE}")
 message(STATUS "│  C++ standard: ${CMAKE_CXX_STANDARD}")
@@ -431,6 +545,10 @@ message(STATUS "│  Compiler bin: ${CMAKE_CXX_COMPILER}")
 message(STATUS "│  SDL_image   : ${SDL_IMAGE_AVAILABLE}")
 message(STATUS "│  SDL_mixer   : ${SDL_MIXER_AVAILABLE}")
 message(STATUS "│  SDL_ttf     : ${SDL_TTF_AVAILABLE}")
+message(STATUS "│  simdutf     : ON (FetchContent v5.6.4)")
+message(STATUS "│  utf8cpp     : ON (FetchContent v4.0.4)")
+message(STATUS "│  fastgltf    : ON (FetchContent v0.8.0)")
+message(STATUS "│  SDL_camera  : (via SDL3 core)")
 message(STATUS "│  Tests       : ${SDLOS_ENABLE_TESTS}")
-message(STATUS "└─────────────────────────────────────────── ── ─ ─")
+message(STATUS "└───────────────────────────────────────── ─ ── ─")
 message(STATUS "")

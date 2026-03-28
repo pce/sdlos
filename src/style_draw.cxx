@@ -1,4 +1,5 @@
 #include "style_draw.hh"
+#include "text_renderer.hh"
 
 #include <charconv>
 #include <cstdint>
@@ -151,12 +152,14 @@ void bindDrawCallbacks(RenderTree& tree, NodeHandle root)
         // True when a custom fragment shader is named at parse/bind time.
         // Enables per-frame re-rendering for time-based animation (jitter etc.).
         const bool hasShader = hasSrc && !n.style("_shader").empty();
+        const bool hasVideo       = !n.style("_video").empty();
+        const bool hasVideoShader = hasVideo && !n.style("_shader").empty();
 
         // Nothing visual and no clip, skip installing callbacks entirely.
-        if (!hasBg && !hasTxt && !hasBorder && !hasClip && !hasSrc) return;
+        if (!hasBg && !hasTxt && !hasBorder && !hasClip && !hasSrc && !hasVideo) return;
 
 
-        n.draw = [&tree, h, hasBg, hasClip, hasSrc, hasShader]
+        n.draw = [&tree, h, hasBg, hasClip, hasSrc, hasShader, hasVideo, hasVideoShader]
                  (RenderContext& ctx)
         {
             const RenderNode* self = tree.node(h);
@@ -228,6 +231,36 @@ void bindDrawCallbacks(RenderTree& tree, NodeHandle root)
                 }
             }
 
+            // video (webcam / camera source)
+            // Draws the current VideoTexture frame each render tick.
+            // _shader applies the same node-shader pipeline as static images.
+            if (hasVideo) {
+                const auto shdr = self->style("_shader");
+                if (hasVideoShader && !shdr.empty()) {
+                    pce::sdlos::NodeShaderParams sp{};
+                    sp.u_width  = self->w;
+                    sp.u_height = self->h;
+                    {
+                        const auto fx = self->style("_shader_focusX");
+                        const auto fy = self->style("_shader_focusY");
+                        sp.u_focusX = fx.empty() ? 0.5f : toFloat(fx);
+                        sp.u_focusY = fy.empty() ? 0.5f : toFloat(fy);
+                    }
+                    {
+                        const auto p0 = self->style("_shader_param0");
+                        const auto p1 = self->style("_shader_param1");
+                        const auto p2 = self->style("_shader_param2");
+                        sp.u_param0 = p0.empty() ? 0.8f : toFloat(p0);
+                        sp.u_param1 = p1.empty() ? 0.0f : toFloat(p1);
+                        sp.u_param2 = p2.empty() ? 1.0f : toFloat(p2);
+                    }
+                    sp.u_time = ctx.time;
+                    ctx.drawVideoWithShader(shdr, ax, ay, self->w, self->h, op, sp);
+                } else {
+                    ctx.drawVideo(ax, ay, self->w, self->h, op);
+                }
+            }
+
             // border
             // Re-read each frame (supports animated border width/color later).
             {
@@ -271,17 +304,31 @@ void bindDrawCallbacks(RenderTree& tree, NodeHandle root)
                 RGBAf fg{1.f, 1.f, 1.f, 1.f};
                 [[maybe_unused]] const bool hasFg = parseHexColor(self->style("color"), fg);
 
-                // Approximate text width — char ≈ 0.55 × fontSize.
-                const float tw = static_cast<float>(utf8Len(txt)) * fs * 0.55f;
+                // Prefer measured dimensions from the text renderer (cached
+                // after the first call — subsequent frames are cheap lookups).
+                // Falls back to the character-width approximation when the
+                // renderer is not ready (e.g. TTF unavailable).
+                float tw = static_cast<float>(utf8Len(txt)) * fs * 0.55f; // fallback
+                float th = fs;                                              // fallback height
+                if (ctx.text_renderer && ctx.text_renderer->isReady()) {
+                    const auto [mw, mh] = ctx.text_renderer->measureText(txt, fs);
+                    if (mw > 0) tw = static_cast<float>(mw);
+                    if (mh > 0) th = static_cast<float>(mh);
+                }
 
                 // Padding-aware content box.
                 const auto& vp      = self->visual_props;
                 const float inner_w = self->w - vp.padding_left - vp.padding_right;
                 const float inner_h = self->h - vp.padding_top  - vp.padding_bottom;
 
-                // Vertical: centred within the padded content area.
+                // Vertical: centred using the actual glyph bounding-box height
+                // (th) rather than the raw fontSize value.  TTF_RenderText
+                // produces a surface taller than fontSize by the font's
+                // ascender + descender + internal leading, so using fontSize
+                // here would leave the glyphs visually below centre ("missing
+                // padding at the bottom" effect).
                 const float ty = ay + vp.padding_top
-                                 + std::max(0.f, inner_h - fs) * 0.5f;
+                                 + std::max(0.f, inner_h - th) * 0.5f;
 
                 // Horizontal: governed by textAlign (default = Center).
                 float tx;
@@ -330,6 +377,14 @@ void bindDrawCallbacks(RenderTree& tree, NodeHandle root)
                     if (!self->style("_shader").empty())
                         self->dirty_render = true;
                 }
+            };
+        }
+
+        // Video canvas: always re-render so each new frame is shown.
+        if (hasVideo) {
+            n.update = [&tree, h]() {
+                if (RenderNode* self = tree.node(h))
+                    self->dirty_render = true;
             };
         }
 

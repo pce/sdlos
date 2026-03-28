@@ -23,6 +23,7 @@ namespace pce::sdlos {
 
 class TextRenderer;
 class ImageCache;
+class VideoTexture;
 
 // ---------------------------------------------------------------------------
 // NodeHandle / k_null_handle
@@ -189,6 +190,7 @@ struct RenderContext {
     core::frame_arena* arena         = nullptr;
     TextRenderer*      text_renderer = nullptr;  // null → drawText no-ops
     ImageCache*        image_cache   = nullptr;  // null → drawImage no-ops
+    VideoTexture*      video_texture = nullptr;  ///< null → drawVideo is a no-op
 
     // Seconds since app start — forwarded to _shader fragment uniforms
     // (u_time) so shaders can use it for jitter, animation, etc.
@@ -233,6 +235,16 @@ struct RenderContext {
                               float opacity,
                               VisualProps::ObjectFit fit,
                               const struct NodeShaderParams& shader_params);
+
+    /// Draw the current webcam/video frame (no shader).
+    void drawVideo(float x, float y, float w, float h, float opacity = 1.f);
+
+    /// Draw the current webcam/video frame through a named node shader.
+    /// Falls back to drawVideo() when the shader pipeline is unavailable.
+    void drawVideoWithShader(std::string_view shader_name,
+                             float x, float y, float w, float h,
+                             float opacity,
+                             const struct NodeShaderParams& shader_params);
 
     [[nodiscard]] SDL_GPUGraphicsPipeline* pipeline(std::string_view name);
 };

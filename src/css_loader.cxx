@@ -6,6 +6,7 @@
 #include <fstream>
 #include <functional>
 #include <sstream>
+#include <unordered_set>
 #include <vector>
 
 namespace pce::sdlos::css {
@@ -39,6 +40,15 @@ namespace {
 
 [[nodiscard]] static std::string kebabToCamel(std::string_view prop)
 {
+    // CSS custom properties (--foo-bar) are stored verbatim in the StyleMap so
+    // that GltfScene can read them with the same key it writes in setStyle():
+    //   CSS:  --rotation-x: -90   →  StyleMap key "--rotation-x"
+    //   C++:  n->style("--rotation-x")  → "−90"
+    // Only standard layout properties (background-color, flex-grow …) get the
+    // camelCase conversion expected by the 2-D layout engine.
+    if (prop.size() >= 2 && prop[0] == '-' && prop[1] == '-')
+        return std::string(prop);
+
     std::string result;
     result.reserve(prop.size());
     bool next_upper = false;
@@ -81,7 +91,7 @@ namespace {
 
     if (colon != std::string_view::npos) {
         const std::string_view pseudo = sel.substr(colon + 1);
-        if (pseudo != "hover" && pseudo != "focus") return false;
+        if (pseudo != "hover" && pseudo != "focus" && pseudo != "active") return false;
     }
 
     return true;
@@ -211,13 +221,72 @@ StyleSheet parse(std::string_view source)
     return sheet;
 }
 
-StyleSheet load(const std::string& path)
+// Forward declaration for recursive @import handling.
+static StyleSheet loadRecursive(const std::string& path,
+                                 std::unordered_set<std::string>& visited);
+
+static StyleSheet loadRecursive(const std::string& path,
+                                 std::unordered_set<std::string>& visited)
 {
+    // Guard against circular @import chains.
+    if (!visited.insert(path).second) return {};
+
     std::ifstream ifs(path);
     if (!ifs) return {};
     std::ostringstream ss;
     ss << ifs.rdbuf();
-    return parse(ss.str());
+    const std::string src = ss.str();
+
+    const std::filesystem::path base_dir =
+        std::filesystem::path(path).parent_path();
+
+    StyleSheet result;
+    std::string remaining;
+    remaining.reserve(src.size());
+
+    // Strip @import directives and collect imported stylesheets first
+    // (imported rules precede the current file's rules in cascade order).
+    for (std::size_t i = 0; i < src.size(); ) {
+        if (src[i] == '@' && src.compare(i, 7, "@import") == 0) {
+            const std::size_t end = src.find(';', i);
+            if (end == std::string::npos) break;  // malformed — stop
+
+            const std::string_view stmt =
+                std::string_view(src).substr(i, end - i + 1);
+
+            const std::size_t q1 = stmt.find_first_of("\"'");
+            if (q1 != std::string_view::npos) {
+                const char q = stmt[q1];
+                const std::size_t q2 = stmt.find(q, q1 + 1);
+                if (q2 != std::string_view::npos) {
+                    const std::string rel(stmt.substr(q1 + 1, q2 - q1 - 1));
+                    const std::string abs =
+                        std::filesystem::path(rel).is_absolute()
+                            ? rel
+                            : (base_dir / rel).string();
+                    const StyleSheet imp = loadRecursive(abs, visited);
+                    for (const auto& r : imp.rules)
+                        result.rules.push_back(r);
+                }
+            }
+            i = end + 1;
+        } else {
+            remaining += src[i++];
+        }
+    }
+
+    // Parse the file content (with @import lines already stripped).
+    StyleSheet main = parse(remaining);
+    for (auto& r : main.rules)
+        result.rules.push_back(std::move(r));
+
+    return result;
+}
+
+StyleSheet load(const std::string& path)
+{
+    std::unordered_set<std::string> visited;
+    return loadRecursive(path, visited);
 }
 
 void StyleSheet::applyTo(RenderTree& tree, NodeHandle root)
@@ -307,6 +376,120 @@ void StyleSheet::tickHover(RenderTree& tree, float phys_x, float phys_y)
         entry.hovered = now;
 
         for (const auto& [attr, val] : (now ? entry.on_enter : entry.on_leave))
+            n->setStyle(attr, val);
+
+        StyleApplier::apply(*n);
+        n->dirty_render = true;
+    }
+}
+
+void StyleSheet::buildActive(RenderTree& tree, NodeHandle root)
+{
+    active_entries.clear();
+
+    bool any_active = false;
+    for (const Rule& r : rules)
+        if (r.pseudo == "active") { any_active = true; break; }
+    if (!any_active) return;
+
+    walkTree(tree, root, [this, &tree](NodeHandle h, RenderNode& n) {
+        if (n.style("toggle-group").empty()) return;
+
+        // h is a toggle-group parent; examine its direct children only.
+        for (NodeHandle c = n.child; c.valid(); ) {
+            RenderNode* cn = tree.node(c);
+            const NodeHandle next_c = cn ? cn->sibling : k_null_handle;
+
+            if (cn) {
+                const std::string_view id_sv    = cn->style("id");
+                const std::string_view class_sv = cn->style("class");
+
+                for (const Rule& rule : rules) {
+                    if (rule.pseudo != "active") continue;
+
+                    const bool matched = rule.is_id
+                        ? (!id_sv.empty()    && id_sv    == rule.selector)
+                        : (!class_sv.empty() && hasClassToken(class_sv, rule.selector));
+                    if (!matched) continue;
+
+                    ActiveEntry entry;
+                    entry.handle       = c;
+                    entry.group_parent = h;
+                    entry.active       = false;
+
+                    for (const auto& [attr, active_val] : rule.props) {
+                        entry.on_enter.emplace_back(attr, active_val);
+
+                        // Derive the "off" value from CSS *base* rules only —
+                        // never snapshot current node state (behaviors may have
+                        // already mutated it by the time buildActive() runs).
+                        std::string base_val;
+                        for (const Rule& base : rules) {
+                            if (!base.pseudo.empty()) continue;
+                            const bool bm = base.is_id
+                                ? (!id_sv.empty()    && id_sv    == base.selector)
+                                : (!class_sv.empty() && hasClassToken(class_sv, base.selector));
+                            if (!bm) continue;
+                            for (const auto& [ba, bv] : base.props)
+                                if (ba == attr) { base_val = bv; break; }
+                            if (!base_val.empty()) break;
+                        }
+                        entry.on_leave.emplace_back(attr, std::move(base_val));
+                    }
+
+                    active_entries.push_back(std::move(entry));
+                    break; // first matching :active rule per node wins
+                }
+            }
+
+            c = next_c;
+        }
+    });
+
+    // Second pass: auto-activate any entry whose jade node carries active="1".
+    // This lets the jade author declare the initial selection without any
+    // behavior C++ code:
+    //   div.preset(onclick="…" data-value="…" active="1") Label
+    // Radio constraint: at most one item per group should be marked; if more
+    // than one is found, each is activated in order (last one wins visually —
+    // document that only one should be set per group).
+    for (ActiveEntry& e : active_entries) {
+        const RenderNode* cn = tree.node(e.handle);
+        if (!cn || cn->style("active").empty()) continue;
+
+        e.active = true;
+        if (RenderNode* nm = tree.node(e.handle)) {
+            for (const auto& [attr, val] : e.on_enter)
+                nm->setStyle(attr, val);
+            StyleApplier::apply(*nm);
+            nm->dirty_render = true;
+        }
+    }
+}
+
+void StyleSheet::activateNode(RenderTree& tree, NodeHandle clicked)
+{
+    if (active_entries.empty()) return;
+
+    // Find which group the clicked node belongs to.
+    NodeHandle group_parent = k_null_handle;
+    for (const auto& e : active_entries)
+        if (e.handle == clicked) { group_parent = e.group_parent; break; }
+    if (!group_parent.valid()) return;
+
+    // Radio-style: exactly one entry active at a time within the group.
+    for (ActiveEntry& entry : active_entries) {
+        if (entry.group_parent != group_parent) continue;
+
+        RenderNode* n = tree.node(entry.handle);
+        if (!n) continue;
+
+        const bool should_activate = (entry.handle == clicked);
+        if (should_activate == entry.active) continue; // no change
+
+        entry.active = should_activate;
+
+        for (const auto& [attr, val] : (should_activate ? entry.on_enter : entry.on_leave))
             n->setStyle(attr, val);
 
         StyleApplier::apply(*n);

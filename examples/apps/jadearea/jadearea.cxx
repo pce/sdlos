@@ -5,7 +5,7 @@
 // This file is #include-d directly into jade_host.cxx via:
 //   -DSDLOS_APP_BEHAVIOR="<abs-path>/jadearea.cxx"
 // so every declaration in jade_host.cxx is visible here:
-//   sdlos_log(), g_behavior_event_handler, SDLOS_WIN_W / SDLOS_WIN_H, etc.
+//   sdlos_log(), SDLOS_WIN_W / SDLOS_WIN_H, etc.
 //
 // Behaviour overview
 // ──────────────────
@@ -14,7 +14,7 @@
 //    the children of #preview-wrap (live preview).
 //  • "▶ Render" button → bus event "jadearea:render"  — explicit re-render.
 //  • "Clear"    button → bus event "jadearea:clear"   — wipe editor + preview.
-//  • g_behavior_event_handler is set so the host event loop can forward raw
+//  • out_handler is set so the host event loop can forward raw
 //    SDL_Events (mouse / keyboard / text) to the TextArea widget.
 // ============================================================================
 
@@ -118,10 +118,11 @@ static void renderToPreview(pce::sdlos::RenderTree& tree,
 // jade_app_init
 // ============================================================================
 
-void jade_app_init(pce::sdlos::RenderTree&  tree,
-                   pce::sdlos::NodeHandle   root,
-                   pce::sdlos::IEventBus&   bus,
-                   pce::sdlos::SDLRenderer& renderer)
+void jade_app_init(pce::sdlos::RenderTree&               tree,
+                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::SDLRenderer&               renderer,
+                   std::function<bool(const SDL_Event&)>& out_handler)
 {
     using namespace pce::sdlos::widgets;
 
@@ -176,26 +177,27 @@ void jade_app_init(pce::sdlos::RenderTree&  tree,
     edcfg.placeholder_color = Color::hex(0x48, 0x4f, 0x58);   // #484f58
     edcfg.cursor_color      = Color::hex(0x58, 0xa6, 0xff);
 
+    // TODO debounce
     // Live preview: re-parse and re-render on every keystroke.
     // The lambda captures by reference — safe because jade_host clears
-    // g_behavior_event_handler (and all bus subscriptions) before the tree
+    // out_handler (and all bus subscriptions) before the tree
     // is destroyed on the next scene load.
     edcfg.on_change =
         [&tree, preview_h, status_h](std::string_view text) {
             renderToPreview(tree, preview_h, status_h, text);
         };
 
-    // ── 4. Create widget, attach, and focus ──────────────────────────────────
+    // Create widget, attach, and focus
     auto editor = makeTextArea(tree, std::move(edcfg));
     tree.appendChild(editor_wrap_h, editor);
     editor.focus();     // starts OS IME; cursor visible from first frame
 
-    // ── 5. Seed editor with starter source ───────────────────────────────────
+    // Seed editor with starter source
     // setText() fires on_change → renderToPreview() automatically, so no
     // explicit renderToPreview() call is needed here.
     editor.setText(kDefaultJade);
 
-    // ── 6. Bus subscriptions ─────────────────────────────────────────────────
+    // Bus subscriptions
 
     // "▶ Render" button — explicit re-render (useful after pasting large text
     // when live-preview might have produced a partial result).
@@ -218,9 +220,10 @@ void jade_app_init(pce::sdlos::RenderTree&  tree,
             }
         });
 
-    // ── 7. Raw-event hook ────────────────────────────────────────────────────
-    // g_behavior_event_handler is declared at file scope in jade_host.cxx
-    // (just before #include SDLOS_APP_BEHAVIOR) so it is directly accessible.
+    // . Raw-event hook
+    // out_handler is the SceneState-owned slot passed in by jade_host.cxx.
+    // Assigning it here routes raw SDL events to the TextArea for the lifetime
+    // of this scene; it is cleared automatically on the next loadScene() call.
     //
     // Routing rules:
     //   MOUSE_BUTTON_DOWN / UP  → scale to physical pixels, forward to TextArea,
@@ -237,7 +240,7 @@ void jade_app_init(pce::sdlos::RenderTree&  tree,
     // carries RenderTree& (a reference) and NodeHandle (a trivial value), both
     // of which remain valid until loadScene() resets this handler.
 
-    g_behavior_event_handler =
+    out_handler =
         [editor, &renderer](const SDL_Event& ev) mutable -> bool
     {
         const float sx = renderer.pixelScaleX();

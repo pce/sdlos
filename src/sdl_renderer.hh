@@ -3,6 +3,7 @@
 #include "render_tree.hh"
 #include "text_renderer.hh"
 #include "image_cache.hh"
+#include "video_texture.hh"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -94,6 +96,9 @@ public:
     /// Non-null only after a successful Initialize().
     [[nodiscard]] ImageCache*           GetImageCache()    const noexcept { return image_cache_.get();   }
 
+    /// Non-null only after a successful Initialize().
+    [[nodiscard]] VideoTexture* GetVideoTexture() const noexcept { return video_texture_.get(); }
+
     // Data base path
     //
     // Set once from SDL_GetBasePath() so both the ImageCache (relative src=
@@ -129,6 +134,37 @@ public:
     // An optional `_font_size` attribute (float, points) is also honoured;
     // it defaults to 17 pt when absent.
     bool SetFontPath(const std::string& path, float pt_size = 17.f) noexcept;
+
+    // 3D scene pre-pass hook ─────────────────────────────────────────────────
+    //
+    // Called once per frame BEFORE the 2D UI pass, inside the same command
+    // buffer that owns the swapchain acquire.
+    //
+    // The hook receives:
+    //   cmd          — active command buffer (do NOT submit or cancel it)
+    //   color_target — the acquired swapchain texture (LOADOP_LOAD preserves wallpaper)
+    //   vw, vh       — physical viewport size in pixels
+    //
+    // The hook is responsible for creating and ending its own SDL_GPURenderPass
+    // (with a depth attachment if needed). After the hook returns, the renderer
+    // continues with the 2D UI pass using LOADOP_LOAD on the same color_target.
+    //
+    // Set by GltfScene::attach() or any other 3D subsystem. Only one hook is
+    // active at a time — set to nullptr to disable.
+    using Scene3DHook = std::function<void(SDL_GPUCommandBuffer* cmd,
+                                            SDL_GPUTexture*       color_target,
+                                            float vw, float vh)>;
+
+    void setScene3DHook(Scene3DHook hook) noexcept { scene3d_hook_ = std::move(hook); }
+
+    // Fired at the top of Shutdown() before the GPU device is destroyed.
+    // Use to call GltfScene::shutdown() from behaviors that own GPU resources
+    // in static-duration objects.  Cleared after first call.
+    using GpuPreShutdownHook = std::function<void()>;
+
+    void setGpuPreShutdownHook(GpuPreShutdownHook hook) noexcept {
+        gpu_pre_shutdown_hook_ = std::move(hook);
+    }
 
 private:
     // Internal helpers
@@ -209,6 +245,7 @@ private:
     // Text renderer
     std::unique_ptr<TextRenderer> text_renderer_;
     std::unique_ptr<ImageCache>   image_cache_;
+    std::unique_ptr<VideoTexture> video_texture_;
 
     // UI scene (non-owning)
     RenderTree* scene_tree_{nullptr};
@@ -231,6 +268,11 @@ private:
 
     // Base path set from SDL_GetBasePath() in jade_host after Initialize().
     std::string data_base_path_;
+
+    // 3D scene pre-pass hook (optional; nullptr by default)
+    Scene3DHook scene3d_hook_;
+
+    GpuPreShutdownHook gpu_pre_shutdown_hook_;
 
     /// Load and compile a node shader pipeline on first use; cache the result.
     /// Returns nullptr on failure (and caches the failure so it is not retried).

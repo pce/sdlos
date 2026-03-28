@@ -153,10 +153,11 @@ struct RpnState {
 } // anonymous namespace
 
 
-void jade_app_init(pce::sdlos::RenderTree&  tree,
-                   pce::sdlos::NodeHandle   root,
-                   pce::sdlos::IEventBus&   bus,
-                   pce::sdlos::SDLRenderer& /*renderer*/)
+void jade_app_init(pce::sdlos::RenderTree&               tree,
+                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::SDLRenderer&               /*renderer*/,
+                   std::function<bool(const SDL_Event&)>& /*out_handler*/)
 {
     const pce::sdlos::NodeHandle display_h = tree.findById(root, "display");
     if (!display_h.valid()) return;

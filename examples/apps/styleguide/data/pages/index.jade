@@ -1,0 +1,48 @@
+// index.jade — Welcome / landing page for the Style Guide
+//
+// Layout:
+//   col (full height, dark bg)
+//     col hero (flex-grow=1, centered)
+//       badge · big title · subtitle · hint
+//     row feature-cards (3 equal-width cards)
+
+col(flexGrow="1" backgroundColor="#0a0a0f")
+
+  // ── Hero ──────────────────────────────────────────────────────────────────
+  col(flexGrow="1" justifyContent="center" alignItems="center" gap="24" padding="48")
+
+    // Badge
+    div(color="#8b5cf6" fontSize="11" fontWeight="bold") ✦  SDLOS  STYLE  GUIDE
+
+    // Big title
+    div(color="#f8fafc" fontSize="44" fontWeight="bold" textAlign="center") Component Library
+
+    // Tagline
+    div(color="#94a3b8" fontSize="15" textAlign="center") SDL3 GPU  ·  Flexbox Layout  ·  PBR 3D
+
+    // Spacer
+    div(height="8")
+
+    // Hint
+    div(backgroundColor="#1e293b" color="#475569" fontSize="12" textAlign="center" borderRadius="8" padding="8")  ← →  arrow keys  ·  nav bar below
+
+  // ── Feature cards ─────────────────────────────────────────────────────────
+  row(gap="16" padding="24" paddingTop="0")
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#6366f1" fontSize="28") ✦
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") Design Tokens
+      div(color="#64748b" fontSize="12") Colors · Typography · Components
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#06b6d4" fontSize="28") ⬡
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") Flexbox Layout
+      div(color="#64748b" fontSize="12") Rows · Columns · flex-grow · wrap
+
+    col(flexGrow="1" backgroundColor="#1e293b" borderRadius="12" padding="20" gap="10")
+      div(color="#a78bfa" fontSize="28") ◈
+      div(color="#f1f5f9" fontSize="14" fontWeight="bold") 3D Scene
+      div(color="#64748b" fontSize="12") glTF 2.0 · PBR materials · Camera
+
+  // ── Bottom rule ───────────────────────────────────────────────────────────
+  div(height="1" backgroundColor="#1e293b")

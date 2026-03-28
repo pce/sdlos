@@ -1,0 +1,102 @@
+/* styleguide.css — Style Guide nav chrome
+ *
+ * Auto-loaded by jade_host from the jade file's directory.
+ * Applied once to the static tree at startup; jade_host also calls
+ * buildHover() and buildActive() after jade_app_init() returns.
+ *
+ * Selector constraint (css_loader.cxx)
+ * ─────────────────────────────────────
+ *   Only .class and #id selectors are supported.
+ *   No tag selectors, no compound selectors (.a.b), no descendant selectors.
+ *   Pseudo-classes: :hover  :active  :focus
+ *
+ * CSS kebab-case → camelCase (css_loader.cxx::kebabToCamel)
+ * ──────────────────────────────────────────────────────────
+ *   background-color → backgroundColor    font-size  → fontSize
+ *   border-radius    → borderRadius        flex-grow  → flexGrow
+ *   flex-direction   → flexDirection       font-weight → fontWeight
+ *   justify-content  → justifyContent      align-items → alignItems
+ */
+
+/* ── App root ─────────────────────────────────────────────────────────────── */
+/* 'app' tag → LayoutKind::None; CSS must set flex-direction to make it a    */
+/* proper column that fills the window.                                       */
+
+.sg-root {
+    flex-direction: column;
+    flex-grow: 1;
+    background-color: #0a0a0f;
+}
+
+/* ── Main content column ─────────────────────────────────────────────────── */
+/* col tag already gives FlexColumn; CSS adds flex-grow so it fills sg-root. */
+
+.sg-main {
+    flex-grow: 1;
+}
+
+/* ── Page container ──────────────────────────────────────────────────────── */
+/* Fills all space above the nav bar; clips any overflowing page content.    */
+
+.sg-page {
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+/* ── Navigation bar (col) ────────────────────────────────────────────────── */
+/* Starts at height=0 set by the jade attribute (CSS cannot override it      */
+/* because jade attrs take precedence when hasStyle() is true).              */
+/* styleguide.cxx sets layout_props.height + markLayoutDirty to show/hide.   */
+
+.sg-nav {
+    background-color: #000000bb;
+    padding: 14;
+}
+
+/* ── Nav inner row ───────────────────────────────────────────────────────── */
+
+.sg-nav-row {
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── Nav dot container ───────────────────────────────────────────────────── */
+
+.sg-dots {
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── Nav buttons ─────────────────────────────────────────────────────────── */
+/* Explicitly sized squares; border-radius stored for future rounded-corner  */
+/* shader support (currently rendered as sharp rectangles).                  */
+
+.sg-nav-btn {
+    background-color: #ffffff18;
+    color: #ffffffff;
+    width: 44;
+    height: 44;
+    border-radius: 22;
+    font-size: 18;
+    font-weight: bold;
+}
+
+.sg-nav-btn:hover {
+    background-color: #ffffff30;
+}
+
+.sg-nav-btn:active {
+    background-color: #ffffff50;
+}
+
+/* ── Page-indicator dots ─────────────────────────────────────────────────── */
+/* Inactive state.  Active state is set programmatically by styleguide.cxx   */
+/* (direct layout_props.width + backgroundColor via setStyle) so it survives */
+/* page transitions without requiring CSS :active rules.                     */
+
+.sg-dot {
+    width: 8;
+    height: 8;
+    border-radius: 4;
+    background-color: #ffffff33;
+}
