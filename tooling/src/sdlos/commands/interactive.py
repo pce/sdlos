@@ -3,6 +3,10 @@ sdlos.commands.interactive
 ==========================
 Interactive prompt flow for ``sdlos create``.
 
+Prompts only for values not already supplied as CLI flags.
+``app_dir`` is always optional — if the user hits Enter on an empty field the
+default (``examples/apps``) is used.
+
 Invoked automatically when no NAME is provided on the command line, or
 explicitly via ``sdlos create --interactive``.  Prompts only for values
 that were not already supplied as CLI flags.
@@ -17,6 +21,7 @@ Usage (from cli.py)
         win_w=win_w,         # None  → will prompt
         win_h=win_h,         # None  → will prompt
         data_dir=data_dir,   # None  → will prompt
+        app_dir=app_dir,     # None  → optional prompt (empty = default path)
     )
     # resolved is a dict with every key filled in.
 """
@@ -60,6 +65,18 @@ _TEMPLATE_CHOICES = [
     questionary.Choice(
         title="camera    — live video canvas + filter chips + dragnum inputs",
         value="camera",
+    ),
+    questionary.Choice(
+        title="pug       — FrameGraph pipeline demo (pipeline.pug + CSS + Metal shaders + HUD)",
+        value="pug",
+    ),
+    questionary.Choice(
+        title="vfs       — VFS explorer + audio player (MemMount, LocalMount, SDL3 audio)",
+        value="vfs",
+    ),
+    questionary.Choice(
+        title="scene3d   — glTF model viewer with orbit camera and floating CSS labels",
+        value="scene3d",
     ),
 ]
 
@@ -179,14 +196,16 @@ def prompt_missing(
     win_w: Optional[int],
     win_h: Optional[int],
     data_dir: Optional[bool],
+    app_dir: Optional[str] = None,
 ) -> dict:
     """Prompt for every argument that is ``None`` (not yet supplied).
 
     Returns a dict with keys:
-        name, template, win_w, win_h, data_dir
+        name, template, win_w, win_h, data_dir, app_dir
 
     All values are guaranteed to be non-None on return (or the process
-    exits if the user aborts with Ctrl-C).
+    exits if the user aborts with Ctrl-C).  ``app_dir`` may be ``None``
+    on return when the user accepts the default output location.
 
     Parameters
     ----------
@@ -198,7 +217,10 @@ def prompt_missing(
         Debug window dimensions, or ``None`` to prompt.
         Both ``None`` on return means "fullscreen / no override".
     data_dir:
-        Whether to scaffold ``examples/data/<name>/``, or ``None`` to prompt.
+        Whether to scaffold a ``data/`` directory, or ``None`` to prompt.
+    app_dir:
+        Base directory for the generated app folder, or ``None`` to prompt.
+        ``None`` on return means use the project-default (``examples/apps``).
     """
     print()  # breathing room after the command line
 
@@ -253,8 +275,10 @@ def prompt_missing(
 
     # ── Data directory ────────────────────────────────────────────────────────
     if data_dir is None:
-        # Shader and camera templates almost always need a data/ folder.
-        default_data = template in ("shader", "camera")
+        # Shader, camera, and pug templates almost always need a data/ folder.
+        # For pug, data_dir is forced True in create_app regardless, but we
+        # default the prompt to True so the UI stays consistent.
+        default_data = template in ("shader", "camera", "pug", "vfs", "scene3d")
         data_dir = questionary.confirm(
             "Scaffold data/ directory?  (shaders · fonts · models · images)",
             default=default_data,
@@ -266,6 +290,23 @@ def prompt_missing(
         if data_dir:
             print("  Data dir  : yes")
 
+    # ── Output directory (optional) ───────────────────────────────────────────
+    # Always shown so the user knows where the app will land.
+    # An empty answer keeps the project default (examples/apps/<name>).
+    if app_dir is None:
+        default_label = f"examples/apps/{name}"
+        raw_dir = questionary.text(
+            "Output directory (base, leave empty for default):",
+            default="",
+            instruction=f"  default → {default_label}",
+            style=_STYLE,
+        ).ask()
+        if raw_dir is None:
+            _abort()
+        app_dir = raw_dir.strip() or None
+    else:
+        print(f"  App dir   : {app_dir}/{name}")
+
     print()  # blank line before the generator output
 
     return {
@@ -274,4 +315,5 @@ def prompt_missing(
         "win_w":    win_w,
         "win_h":    win_h,
         "data_dir": data_dir,
+        "app_dir":  app_dir,
     }

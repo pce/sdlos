@@ -1,0 +1,77 @@
+// {$name$}.jade  —  VFS Explorer + Audio Player
+
+col(id="root" flexGrow="1")
+
+  row(flexGrow="1")
+
+    // Left: mount scheme selector
+    col.sidebar(width="160")
+
+      div.section-title MOUNTS
+      div.divider
+
+      col(id="{$name$}-schemes" flexGrow="1" gap="2")
+
+    // Centre: breadcrumb + file list + content viewer
+    col(flexGrow="1")
+
+      row.breadcrumb(height="32" alignItems="center")
+        div(id="{$name$}-path" flexGrow="1") —
+        div.icon-btn(onclick="{$name$}:refresh") ↺
+
+      div.divider
+
+      row(flexGrow="1")
+
+        col.file-list-panel(width="220")
+          div.file-list-header FILES
+          col(id="{$name$}-file-list" flexGrow="1" gap="2" padding="8")
+
+        div.vdivider
+
+        col.content-panel(flexGrow="1" padding="12")
+          div.section-title CONTENT
+          div(id="{$name$}-content-title" height="18") select a file
+          div.thin-divider
+          div(id="{$name$}-content" flexGrow="1")
+
+    // Right: demo operations + VFS info
+    col.ops-panel(width="180")
+
+      div.section-title DEMO OPS
+      div.divider
+
+      div.op-btn(onclick="{$name$}:demo-write") ✎  write test file
+      div.op-btn(onclick="{$name$}:demo-read")  ↓  read back
+      div.op-btn.danger(onclick="{$name$}:demo-delete") ✕  delete
+
+      div.divider
+
+      div.section-title VFS INFO
+      div.vfs-info(id="{$name$}-vfs-info") —
+
+      div.divider
+
+      div.section-title STATUS
+      div(id="{$name$}-status") ready
+
+  div.audio-divider
+
+  row.audio-bar(height="56" alignItems="center" gap="12")
+
+    // Invisible data node — set src= to a VFS URI here or from the behavior.
+    // jade_host preserves scheme:// URIs unchanged (resolveAssetPaths skips
+    // any src= that contains "://"), so VFS URIs are safe to hardcode:
+    //   audio(id="{$name$}-audio" src="asset://audio/click.wav")
+    audio(id="{$name$}-audio" src="" height="0" width="0")
+
+    div.audio-icon ♪
+
+    col.audio-info(flexGrow="1" gap="2")
+      div(id="{$name$}-audio-title").audio-title — no audio loaded —
+      div.audio-hint Select a .wav in the browser, then press ▶
+
+    div.audio-ctl(onclick="{$name$}:audio-play") ▶
+    div.audio-ctl(onclick="{$name$}:audio-stop") ■
+
+    div(id="{$name$}-audio-badge").audio-badge stopped

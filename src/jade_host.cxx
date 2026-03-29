@@ -143,8 +143,13 @@ static void resolveAssetPaths(pce::sdlos::RenderTree& tree,
 
     const auto src = n->style("src");
     if (!src.empty()) {
+        // Skip VFS URIs (scheme://path) — they are already fully qualified and
+        // must be routed through the mount system, not joined with base_dir.
+        // A bare relative path (no "://") is resolved against the jade file's
+        // directory so that  img(src="data/img/hero.png")  works as before.
+        const bool is_vfs_uri = (src.find("://") != std::string_view::npos);
         const fs::path p(src);
-        if (p.is_relative())
+        if (!is_vfs_uri && p.is_relative())
             n->setStyle("src", (base_dir / p).lexically_normal().string());
     }
 
@@ -306,6 +311,21 @@ static bool loadScene(const std::string&       jade_path,
 {
     // 1. Detach old scene before destroying the tree.
     renderer.SetScene(nullptr, pce::sdlos::k_null_handle);
+
+    // 1b. Release GPU textures that belonged to the previous scene.
+    //
+    // This must happen AFTER SetScene(nullptr) — no draw callbacks are
+    // executing at this point, so it is safe to free the textures.
+    // SDL3 GPU defers the actual GPU-side release until all in-flight
+    // command buffers complete, so there is no GPU/CPU race here.
+    //
+    // Textures tagged with scope "" (permanent — UI icons, shared assets)
+    // are untouched.  Only textures tagged "scene" are released.
+    if (pce::sdlos::ImageCache* ic = renderer.GetImageCache()) {
+        ic->evict_scope("scene");
+        // New textures loaded for this scene will be tagged "scene".
+        ic->set_scope("scene");
+    }
 
     // 2. Drop all subscriptions — old lambdas capture refs into the old tree.
     events.reset();

@@ -17,6 +17,7 @@ template: minimal
 #   minimal   — empty jade_app_init stub with correct signature + TODO markers
 #   shader    — shader canvas + preset sidebar + +/– param controls
 #   camera    — live video canvas + filter chips + dragnum inputs
+#   pug       — pipeline.pug framegraph demo
 
 # ── Window ────────────────────────────────────────────────────────────────────
 
@@ -28,18 +29,24 @@ win_h: 600
 # ── Scaffold options ──────────────────────────────────────────────────────────
 
 data_dir: false
-# If true, create a data/ skeleton at examples/data/<name>/:
-#   shaders/msl/    — Metal shader sources
-#   shaders/spirv/  — SPIR-V shader sources
-#   img/            — images / textures
-#   models/         — glTF / GLB model files
+# If true, create a data/ skeleton colocated with the app source:
 #
-# Source code and runtime assets live in separate trees:
-#   examples/apps/<name>/   — jade, css, cxx, <name>.cmake
-#   examples/data/<name>/   — shaders, fonts, models, images
+#   examples/apps/<name>/
+#   ├── <name>.jade
+#   ├── <name>.css
+#   ├── <name>_behavior.cxx
+#   ├── <name>.cmake
+#   └── data/               ← created when data_dir: true
+#       ├── shaders/msl/    — Metal shader sources
+#       ├── shaders/spirv/  — SPIR-V shader sources
+#       ├── img/            — images / textures
+#       └── models/         — glTF / GLB model files
+#
+# Keeping data/ inside the app directory makes each app self-contained:
+# one folder to copy, move, archive, or delete — no parallel trees.
 #
 # The generated <name>.cmake will include:
-#   DATA_DIR examples/data/<name>
+#   DATA_DIR examples/apps/<name>/data
 # which tells the build to copy the folder next to the binary at POST_BUILD.
 
 with_model: ~
@@ -57,6 +64,17 @@ with_model: ~
 #   foreach(_f ${_app_cmake_files}) include(${_f}) endforeach()
 #
 # To register: create the app.  To unregister: delete the directory.
+
+# ── Build & run ───────────────────────────────────────────────────────────────
+#
+# After scaffolding, iterate with:
+#
+#   sdlos run <name>           build + launch (incremental, no dep re-fetch)
+#   sdlos run <name> --watch   rebuild + relaunch on every source change
+#   sdlos run <name> --clean   cmake --clean-first, then launch
+#
+# sdlos run always calls  cmake --build --target <name>  so only the app
+# target is rebuilt — shared engine libs and FetchContent deps are untouched.
 
 # ── Safety / UX ───────────────────────────────────────────────────────────────
 

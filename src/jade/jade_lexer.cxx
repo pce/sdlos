@@ -145,6 +145,32 @@ static int rawToLevel(int spaces, int tabs, int unit) noexcept
     return tabs + space_levels;
 }
 
+// net_paren_delta — net change in paren nesting depth across a string.
+//
+// Quote-aware: parens that appear inside "..." or '...' values are ignored,
+// so an attribute like  onclick="show()"  does not falsely close the list.
+//
+// Returns:
+//   > 0  — more opens than closes (list is still open at end of string)
+//   = 0  — balanced
+//   < 0  — more closes than opens (malformed, treated as balanced enough)
+static int net_paren_delta(std::string_view s) noexcept
+{
+    int  depth      = 0;
+    bool in_quote   = false;
+    char quote_char = '\0';
+    for (const char c : s) {
+        if (in_quote) {
+            if (c == quote_char) in_quote = false;
+        } else {
+            if      (c == '"' || c == '\'') { in_quote = true; quote_char = c; }
+            else if (c == '(')              { ++depth; }
+            else if (c == ')')              { --depth; }
+        }
+    }
+    return depth;
+}
+
 // Attribute list parser
 // Called with i pointing to the char *after* the opening '('.
 // Advances i past the closing ')'.
@@ -348,8 +374,58 @@ std::vector<Token> Lexer::tokenize() const
             // level >  stack.top()  →  orphaned quirky line, snap silently.
         }
 
+        // ── Multi-line attribute folding ──────────────────────────────────
+        // Real Pug/Jade allows wrapping long attribute lists across lines:
+        //
+        //   div(id="canvas"
+        //       flexGrow="1"
+        //       _shader="preset_a")
+        //
+        // When the opening line has unmatched '(' we consume continuation
+        // lines directly from src until the parens balance.  Those lines are
+        // intentionally NOT processed by the main loop — they produce no
+        // Indent / Dedent / Newline tokens of their own; they are part of the
+        // parent tag declaration.
+        std::string      folded_buf;
+        std::string_view effective_content = content;
+        {
+            int depth = net_paren_delta(content);
+            if (depth > 0) {
+                folded_buf = std::string(content);
+                while (!src.empty() && depth > 0) {
+                    // Pull one raw continuation line out of src.
+                    const auto cont_nl  = src.find('\n');
+                    auto       cont_raw = (cont_nl == std::string_view::npos)
+                                             ? src
+                                             : src.substr(0, cont_nl);
+                    src = (cont_nl == std::string_view::npos)
+                              ? std::string_view{}
+                              : src.substr(cont_nl + 1);
+
+                    if (!cont_raw.empty() && cont_raw.back() == '\r')
+                        cont_raw.remove_suffix(1);
+
+                    // Strip leading indent — we only want the content.
+                    const auto cont_ri      = countRawIndent(cont_raw);
+                    const auto cont_content = cont_raw.substr(cont_ri.chars);
+
+                    // Skip comment-only continuation lines without breaking fold.
+                    if (cont_content.size() >= 2 &&
+                        cont_content[0] == '/' && cont_content[1] == '/')
+                        continue;
+
+                    if (!cont_content.empty()) {
+                        folded_buf += ' ';
+                        folded_buf += std::string(cont_content);
+                        depth += net_paren_delta(cont_content);
+                    }
+                }
+                effective_content = folded_buf;
+            }
+        }
+
         // ── Tokenize the line content (indent already stripped) ───────────
-        tokenizeLine(content, tokens);
+        tokenizeLine(effective_content, tokens);
 
         tokens.push_back({TokenType::Newline, {}});
     }

@@ -77,6 +77,11 @@ constexpr float k_nav_hide_time = 3.f;    ///< seconds until auto-hide
 constexpr float k_auto_advance  = 5.f;    ///< seconds per slide in play mode
 constexpr int   k_3d_page_idx   = k_page_count - 1;  ///< index of scene3d page
 
+// Page-transition fade durations (seconds).
+// k_fade_out: old page fades to black.  k_fade_in: new page revealed.
+constexpr float k_fade_out_dur  = 0.22f;
+constexpr float k_fade_in_dur   = 0.35f;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Module-level state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,6 +91,7 @@ pce::sdlos::RenderTree*      g_tree         = nullptr;
 pce::sdlos::NodeHandle       g_root;
 pce::sdlos::NodeHandle       g_page_container;  ///< #page-container
 pce::sdlos::NodeHandle       g_nav_bar;          ///< #nav-bar
+pce::sdlos::NodeHandle       g_fade_overlay_h;  ///< full-screen LayoutKind::None overlay
 
 pce::sdlos::css::StyleSheet  g_scene_css;        ///< scene.css (3-D materials)
 
@@ -96,6 +102,18 @@ float  g_play_timer = 0.f;    ///< counts down to next auto-advance
 Uint64 g_last_ns    = 0;
 
 std::string g_base_path;
+
+// Page-transition fade state machine
+// ────────────────────────────────────────────────────────────────────────────
+// FadingOut: old page disappears behind a black overlay (k_fade_out_dur s).
+//            When complete, loadPage() swaps the content and FadingIn starts.
+// FadingIn:  black overlay dissolves to reveal the new page (k_fade_in_dur s).
+// Idle:      no transition running; overlay is fully transparent.
+enum class FadeState { Idle, FadingOut, FadingIn };
+
+FadeState g_fade_state       = FadeState::Idle;
+float     g_fade_t           = 0.f;    ///< elapsed time inside current fade phase
+int       g_fade_target_page = -1;     ///< page queued during FadingOut
 
 // Orbit camera state (used on the scene3d page)
 float  g_yaw_deg   =  20.f;
@@ -113,6 +131,73 @@ static std::string readFile(const std::string& path)
     std::ostringstream buf;
     buf << f.rdbuf();
     return buf.str();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setOverlayAlpha  —  drive the full-screen fade overlay
+// ─────────────────────────────────────────────────────────────────────────────
+// `a` is [0, 1].  0 = fully transparent (normal view).  1 = fully opaque black.
+//
+// The overlay is a LayoutKind::None div that was injected into the root by
+// jade_app_init.  It sits on top of all page content and behind nothing.
+// Its x/y/w/h are refreshed here every call so window resizes are handled
+// automatically.
+//
+// Opacity is encoded as the alpha byte of a "#000000XX" hex colour so the
+// existing draw callback (which re-reads backgroundColor each frame) picks
+// it up with no engine changes.
+
+static void setOverlayAlpha(float a)
+{
+    using namespace pce::sdlos;
+    if (!g_tree || !g_fade_overlay_h.valid()) return;
+
+    RenderNode* n = g_tree->node(g_fade_overlay_h);
+    if (!n) return;
+
+    // Keep the overlay sized to the current logical viewport.
+    if (const RenderNode* root = g_tree->node(g_root)) {
+        n->x = 0.f;  n->y = 0.f;
+        n->w = root->w;
+        n->h = root->h;
+    }
+
+    const float clamped = a < 0.f ? 0.f : (a > 1.f ? 1.f : a);
+    const unsigned ab   = static_cast<unsigned>(clamped * 255.f + 0.5f);
+    char buf[12];
+    std::snprintf(buf, sizeof(buf), "#000000%02x", ab);
+    n->setStyle("backgroundColor", buf);
+    n->dirty_render = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// navigatePage  —  animated page change
+// ─────────────────────────────────────────────────────────────────────────────
+// Drop-in replacement for bare loadPage() calls.  When not already in a
+// transition it kicks off a FadingOut phase; when a transition is in flight
+// the target page is updated so the new destination takes effect as soon as
+// the current fade-out completes.
+
+static void navigatePage(int target)
+{
+    target = (target % k_page_count + k_page_count) % k_page_count;
+
+    if (g_fade_state == FadeState::FadingOut) {
+        // Already fading out — just redirect to the new target.
+        g_fade_target_page = target;
+        return;
+    }
+
+    // If a fade-in is running, skip to its end first (instant cut is better
+    // than a half-revealed page vanishing into another fade-out).
+    if (g_fade_state == FadeState::FadingIn) {
+        setOverlayAlpha(0.f);
+        g_fade_state = FadeState::Idle;
+    }
+
+    g_fade_target_page = target;
+    g_fade_state       = FadeState::FadingOut;
+    g_fade_t           = 0.f;
 }
 
 static void clearChildren(pce::sdlos::RenderTree& tree,
@@ -300,6 +385,55 @@ static void loadPage(int page)
               + "  (" + path + ")");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// tickFade  —  called every frame from the root update callback
+// ─────────────────────────────────────────────────────────────────────────────
+// Drives g_fade_state forward, writing to the overlay each tick.
+// Returns true while a transition is active so the caller knows to keep
+// setting dirty_render.
+
+static bool tickFade(float dt)
+{
+    switch (g_fade_state) {
+
+    case FadeState::FadingOut: {
+        g_fade_t += dt;
+        const float raw = g_fade_t / k_fade_out_dur;
+        const float t   = raw < 1.f ? raw : 1.f;
+        // ease-in quadratic: slow start → quick blackout
+        setOverlayAlpha(t * t);
+
+        if (g_fade_t >= k_fade_out_dur) {
+            // Screen is now black — swap the page content invisibly.
+            loadPage(g_fade_target_page);
+            // Keep overlay fully opaque so the new page is hidden on first draw.
+            setOverlayAlpha(1.f);
+            g_fade_state = FadeState::FadingIn;
+            g_fade_t     = 0.f;
+        }
+        return true;
+    }
+
+    case FadeState::FadingIn: {
+        g_fade_t += dt;
+        const float raw = g_fade_t / k_fade_in_dur;
+        const float t   = raw < 1.f ? raw : 1.f;
+        // ease-out quadratic: quick reveal → slow settle
+        const float inv = 1.f - t;
+        setOverlayAlpha(inv * inv);
+
+        if (g_fade_t >= k_fade_in_dur) {
+            setOverlayAlpha(0.f);
+            g_fade_state = FadeState::Idle;
+        }
+        return true;
+    }
+
+    default:
+        return false;
+    }
+}
+
 } // anonymous namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,6 +461,13 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     g_pitch_deg    = 18.f;
     g_dist         =  5.f;
     g_last_ns      = SDL_GetTicksNS();
+
+    // Fade state — always start clean so a hot-reload or sdlos:navigate
+    // never leaves the overlay stuck in a mid-transition state.
+    g_fade_state       = FadeState::Idle;
+    g_fade_t           = 0.f;
+    g_fade_target_page = -1;
+    g_fade_overlay_h   = pce::sdlos::k_null_handle;
 
     const char* bp = SDL_GetBasePath();
     g_base_path    = bp ? bp : "";
@@ -419,7 +560,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     showNav();
     updatePlayBtn();
 
-    // ── 8. Per-frame update: timers + 3D tick ─────────────────────────────
+    // ── 8. Per-frame update: timers + 3D tick + fade ──────────────────────
     if (RenderNode* rn = tree.node(root)) {
         rn->update = []() noexcept {
             if (!g_tree) return;
@@ -441,12 +582,17 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                     hideNav();
             }
 
+            // Page-transition fade (fade-to-black between pages).
+            // tickFade() returns true while animating so we can keep
+            // dirty_render live without touching the nav timers.
+            tickFade(dt);
+
             // Auto-advance slideshow.
             if (g_playing) {
                 g_play_timer -= dt;
                 if (g_play_timer <= 0.f) {
                     g_play_timer = k_auto_advance;
-                    loadPage((g_page + 1) % k_page_count);
+                    navigatePage((g_page + 1) % k_page_count);
                     showNav();
                 }
             }
@@ -456,12 +602,12 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // ── 9. Event bus subscriptions ────────────────────────────────────────
 
     bus.subscribe("sg:prev", [](const std::string&) {
-        loadPage((g_page - 1 + k_page_count) % k_page_count);
+        navigatePage(g_page - 1);
         showNav();
     });
 
     bus.subscribe("sg:next", [](const std::string&) {
-        loadPage((g_page + 1) % k_page_count);
+        navigatePage(g_page + 1);
         showNav();
     });
 
@@ -513,28 +659,28 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             switch (ev.key.scancode) {
 
             case SDL_SCANCODE_LEFT:
-            case SDL_SCANCODE_UP:
-                loadPage((g_page - 1 + k_page_count) % k_page_count);
-                return true;
+                case SDL_SCANCODE_UP:
+                    navigatePage(g_page - 1);
+                    return true;
 
-            case SDL_SCANCODE_RIGHT:
-            case SDL_SCANCODE_DOWN:
-                loadPage((g_page + 1) % k_page_count);
-                return true;
+                case SDL_SCANCODE_RIGHT:
+                case SDL_SCANCODE_DOWN:
+                    navigatePage(g_page + 1);
+                    return true;
 
-            case SDL_SCANCODE_SPACE:
-                g_playing = !g_playing;
-                if (g_playing) g_play_timer = k_auto_advance;
-                updatePlayBtn();
-                return true;
+                case SDL_SCANCODE_SPACE:
+                    g_playing = !g_playing;
+                    if (g_playing) g_play_timer = k_auto_advance;
+                    updatePlayBtn();
+                    return true;
 
-            case SDL_SCANCODE_HOME:
-                loadPage(0);
-                return true;
+                case SDL_SCANCODE_HOME:
+                    navigatePage(0);
+                    return true;
 
-            case SDL_SCANCODE_END:
-                loadPage(k_page_count - 1);
-                return true;
+                case SDL_SCANCODE_END:
+                    navigatePage(k_page_count - 1);
+                    return true;
 
             default:
                 return false;
@@ -545,7 +691,40 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         }
     };
 
+    // ── 11. Fade overlay — full-screen LayoutKind::None black div ─────────
+    //
+    // Created AFTER jade_app_init wires everything up so it sits on top of
+    // all page content in the draw order.  Initial alpha = 0 (invisible).
+    // tickFade() animates backgroundColor alpha on every page transition.
+    //
+    // Render order recap (why this works as a HUD-safe cross-fade):
+    //   Pass 2:  entire UI tree → ui_texture_    (independent offscreen)
+    //   Pass 3a: FrameGraph / FBM → swapchain    (post-processing here)
+    //   Pass 3b: GltfScene  → swapchain          (3-D pre-pass, LOADOP_LOAD)
+    //   Pass 3c: ui_texture_ → swapchain         (alpha-composite, LAST)
+    //
+    // The FrameGraph / post-processing in Pass 3a runs on the swapchain and
+    // NEVER touches ui_texture_, so the UI (including this overlay) is always
+    // crisp, never blurred or colour-graded by any shader effect.
+    {
+        const NodeHandle overlay = tree.alloc();
+        g_fade_overlay_h = overlay;
+        if (RenderNode* n = tree.node(overlay)) {
+            n->layout_kind = LayoutKind::None;
+            n->x = 0.f;
+            n->y = 0.f;
+            n->w = static_cast<float>(SDLOS_WIN_W);
+            n->h = static_cast<float>(SDLOS_WIN_H);
+            // Fully transparent to start; tickFade() writes the alpha byte.
+            n->setStyle("backgroundColor", "#00000000");
+            n->dirty_render = false;
+        }
+        bindDrawCallbacks(tree, overlay);
+        tree.appendChild(root, overlay);
+    }
+
     sdlos_log("[styleguide] init complete — "
               + std::to_string(tree.nodeCount()) + " nodes, "
-              + std::to_string(k_page_count)     + " pages");
+              + std::to_string(k_page_count)     + " pages"
+              + "  [fade overlay active]");
 }

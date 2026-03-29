@@ -19,6 +19,8 @@ from sdlos.templates.renderer import (
     render_template,
 )
 
+# ── Pug template tests ────────────────────────────────────────────────────────
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +36,7 @@ class TestRendererMeta:
         assert "minimal" in available
         assert "shader"  in available
         assert "camera"  in available
+        assert "pug"     in available
 
     def test_output_filename_jade(self) -> None:
         assert output_filename("jade", "my_app") == "my_app.jade"
@@ -202,6 +205,186 @@ class TestCameraTemplate:
             assert "$}" not in text, f"Unrendered delimiter in camera/{kind}"
 
 
+# ── Pug template ─────────────────────────────────────────────────────────────
+
+class TestPugTemplate:
+    @pytest.fixture(scope="class")
+    def renders(self):
+        cfg = _cfg("my_demo", template="pug", win_w=1280, win_h=800)
+        return {k: render_template("pug", k, cfg) for k in KINDS}
+
+    # ── Jade ──────────────────────────────────────────────────────────────────
+
+    def test_jade_contains_name(self, renders) -> None:
+        assert "my_demo" in renders["jade"]
+
+    def test_jade_root_col(self, renders) -> None:
+        assert 'col(id="root"' in renders["jade"]
+
+    def test_jade_hud_panel(self, renders) -> None:
+        assert 'id="hud-panel"' in renders["jade"]
+
+    def test_jade_theme_chips(self, renders) -> None:
+        jade = renders["jade"]
+        assert 'id="chip-default"' in jade
+        assert 'id="chip-night"'   in jade
+        assert 'id="chip-vivid"'   in jade
+
+    def test_jade_quality_chips(self, renders) -> None:
+        jade = renders["jade"]
+        assert 'id="chip-normal"' in jade
+        assert 'id="chip-low"'    in jade
+
+    def test_jade_param_display_nodes(self, renders) -> None:
+        jade = renders["jade"]
+        assert 'id="val-bg-speed"'   in jade
+        assert 'id="val-bg-scale"'   in jade
+        assert 'id="val-grade-exp"'  in jade
+        assert 'id="val-grade-sat"'  in jade
+
+    def test_jade_theme_onclick_events(self, renders) -> None:
+        assert 'onclick="my_demo:theme"' in renders["jade"]
+
+    def test_jade_quality_onclick_events(self, renders) -> None:
+        assert 'onclick="my_demo:quality"' in renders["jade"]
+
+    def test_jade_inc_dec_events(self, renders) -> None:
+        jade = renders["jade"]
+        assert 'onclick="my_demo:inc"' in jade
+        assert 'onclick="my_demo:dec"' in jade
+
+    def test_jade_bg_speed_stepper_payload(self, renders) -> None:
+        assert 'data-value="bg:speed"' in renders["jade"]
+
+    def test_jade_grade_exposure_stepper_payload(self, renders) -> None:
+        assert 'data-value="grade:exposure"' in renders["jade"]
+
+    # ── CSS ───────────────────────────────────────────────────────────────────
+
+    def test_css_contains_name(self, renders) -> None:
+        assert "my_demo" in renders["css"]
+
+    def test_css_root_transparent(self, renders) -> None:
+        # Root background must be transparent so FrameGraph shows through.
+        css = renders["css"]
+        assert "#root" in css
+        assert "#00000000" in css
+
+    def test_css_hud_panel_rule(self, renders) -> None:
+        assert ".hud-panel" in renders["css"]
+
+    def test_css_chip_rule(self, renders) -> None:
+        assert ".chip" in renders["css"]
+
+    def test_css_chip_hover(self, renders) -> None:
+        assert ".chip:hover" in renders["css"]
+
+    def test_css_param_btn_rule(self, renders) -> None:
+        assert ".param-btn" in renders["css"]
+
+    def test_css_param_val_rule(self, renders) -> None:
+        assert ".param-val" in renders["css"]
+
+    # ── Behavior ──────────────────────────────────────────────────────────────
+
+    def test_behavior_contains_name(self, renders) -> None:
+        assert "my_demo" in renders["behavior_cxx"]
+
+    def test_behavior_pascal_struct(self, renders) -> None:
+        assert "struct MyDemoState" in renders["behavior_cxx"]
+
+    def test_behavior_make_shared(self, renders) -> None:
+        assert "std::make_shared<MyDemoState>()" in renders["behavior_cxx"]
+
+    def test_behavior_no_double_angle(self, renders) -> None:
+        # Regression: delimiter conflict must not produce <<TypeName>
+        assert "std::make_shared<<MyDemoState>" not in renders["behavior_cxx"]
+
+    def test_behavior_jade_app_init(self, renders) -> None:
+        assert "void jade_app_init(" in renders["behavior_cxx"]
+
+    def test_behavior_live_param_struct(self, renders) -> None:
+        assert "struct LiveParam" in renders["behavior_cxx"]
+
+    def test_behavior_theme_subscription(self, renders) -> None:
+        assert 'bus.subscribe("my_demo:theme"' in renders["behavior_cxx"]
+
+    def test_behavior_quality_subscription(self, renders) -> None:
+        assert 'bus.subscribe("my_demo:quality"' in renders["behavior_cxx"]
+
+    def test_behavior_inc_subscription(self, renders) -> None:
+        assert 'bus.subscribe("my_demo:inc"' in renders["behavior_cxx"]
+
+    def test_behavior_dec_subscription(self, renders) -> None:
+        assert 'bus.subscribe("my_demo:dec"' in renders["behavior_cxx"]
+
+    def test_behavior_get_frame_graph(self, renders) -> None:
+        assert "GetFrameGraph()" in renders["behavior_cxx"]
+
+    def test_behavior_get_compiled_graph(self, renders) -> None:
+        assert "GetCompiledGraph()" in renders["behavior_cxx"]
+
+    def test_behavior_add_class(self, renders) -> None:
+        assert "add_class(" in renders["behavior_cxx"]
+
+    def test_behavior_remove_class(self, renders) -> None:
+        assert "remove_class(" in renders["behavior_cxx"]
+
+    def test_behavior_patch(self, renders) -> None:
+        assert "->patch(" in renders["behavior_cxx"]
+
+    def test_behavior_pipeline_css_load(self, renders) -> None:
+        # Behavior must load data/pipeline.css at init time.
+        assert "pipeline.css" in renders["behavior_cxx"]
+        assert "css::load(" in renders["behavior_cxx"]
+
+    def test_behavior_sdl_get_base_path(self, renders) -> None:
+        assert "SDL_GetBasePath()" in renders["behavior_cxx"]
+
+    def test_behavior_user_region_markers(self, renders) -> None:
+        assert "--- enter the forrest ---" in renders["behavior_cxx"]
+        assert "--- back to the sea ---"   in renders["behavior_cxx"]
+
+    def test_behavior_param_table_entries(self, renders) -> None:
+        cxx = renders["behavior_cxx"]
+        # Default param table must include bg speed and grade saturation.
+        assert '"bg"' in cxx
+        assert '"speed"' in cxx
+        assert '"grade"' in cxx
+        assert '"saturation"' in cxx
+
+    def test_behavior_resolve_param_helper(self, renders) -> None:
+        assert "resolveParam(" in renders["behavior_cxx"]
+
+    def test_behavior_refresh_theme_chips(self, renders) -> None:
+        assert "refreshThemeChips(" in renders["behavior_cxx"]
+
+    def test_behavior_refresh_quality_chips(self, renders) -> None:
+        assert "refreshQualityChips(" in renders["behavior_cxx"]
+
+    def test_behavior_low_power_class(self, renders) -> None:
+        # Low-power quality must toggle the "low-power" CSS class.
+        assert '"low-power"' in renders["behavior_cxx"]
+
+    def test_behavior_null_guard_compiled_graph(self, renders) -> None:
+        # Safety guard: callbacks must not dereference a null CompiledGraph.
+        cxx = renders["behavior_cxx"]
+        assert "!fg || !cg" in cxx or ("!fg" in cxx and "!cg" in cxx)
+
+    # ── No delimiter leakage ──────────────────────────────────────────────────
+
+    def test_no_delimiter_leakage(self, renders) -> None:
+        for kind, text in renders.items():
+            assert "{$" not in text, f"Unrendered opening delimiter in pug/{kind}"
+            assert "$}" not in text, f"Unrendered closing delimiter in pug/{kind}"
+
+    def test_cpp_braces_intact(self, renders) -> None:
+        # C++ brace syntax must pass through the Jinja2 engine untouched.
+        cxx = renders["behavior_cxx"]
+        assert "{ " in cxx or "{" in cxx   # struct / lambda / init list braces
+        assert "}" in cxx
+
+
 # ── Cross-template: different app names ──────────────────────────────────────
 
 class TestNameSubstitution:
@@ -223,7 +406,7 @@ class TestNameSubstitution:
         jade = render_template("minimal", "jade", cfg)
         assert name in jade
 
-    @pytest.mark.parametrize("template", ["minimal", "shader", "camera"])
+    @pytest.mark.parametrize("template", ["minimal", "shader", "camera", "pug"])
     def test_all_templates_render_for_same_name(self, template: str) -> None:
         cfg = _cfg("smoke_test", template=template)
         for kind in KINDS:

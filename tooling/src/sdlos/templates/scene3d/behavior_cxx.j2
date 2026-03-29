@@ -1,0 +1,572 @@
+// =============================================================================
+// {$name$}_behavior.cxx  —  [scene3d] behaviour for the {$name$} app
+// =============================================================================
+//
+// glTF Orbit Viewer + Floating Label HUD
+// ───────────────────────────────────────
+// Demonstrates GltfScene with an orbit camera and per-mesh CSS label overlay.
+//
+// Features
+// ────────
+//   • GltfScene::init/attach — loads data/models/scene.glb into the GPU
+//   • Orbit camera — drag to rotate, scroll to zoom, sidebar ± buttons
+//   • Per-frame AABB projection — GltfScene::tick() writes proxy x/y/w/h
+//   • Floating labels — one div.mesh-label per object3d proxy, repositioned
+//     each frame as LayoutKind::None nodes appended directly to root
+//   • Five colour themes — cycled by the theme chip or swatch row
+//
+// Architecture
+// ────────────
+//   This file is #include-d into jade_host.cxx at compile time.
+//   All jade_host declarations are visible here without extra #includes.
+//
+//   GltfScene and camera state live in a file-scope struct (g_s) so the
+//   scene3d_hook lambda can reference them without capturing a shared_ptr.
+//   On sdlos:navigate back to this scene, jade_app_init calls
+//   g_s.gltf.shutdown() before re-init to prevent GPU resource leaks.
+//
+// Dropping a different model
+// ──────────────────────────
+//   Copy any .glb into examples/apps/{$name$}/data/models/ and update the
+//   src= attribute in {$name$}.jade (or the override in jade_app_init below).
+//   The behavior normalises each Blender mesh name to a CSS id:
+//     "Teapot Body" → id="teapot-body"   "Lid" → id="lid"
+//
+// Regeneration
+// ────────────
+//   sdlos create {$name$} --overwrite
+//   Code between "enter the forrest" / "back to the sea" is preserved.
+// =============================================================================
+
+#include "gltf/gltf_scene.hh"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+// ── Label colour themes ───────────────────────────────────────────────────────
+//
+// data-value on the swatch divs ("default", "accent", …) is matched against
+// the `name` field so the subscriber can jump to a theme by name as well as
+// cycling with the chip button.
+
+struct Scene3DTheme { const char* bg; const char* fg; const char* name; };
+
+static constexpr Scene3DTheme kThemes[] = {
+    { "#6366f1cc", "#ffffff", "default" },
+    { "#d97706cc", "#fff7ed", "accent"  },
+    { "#475569cc", "#f8fafc", "muted"   },
+    { "#e11d48cc", "#fff1f2", "danger"  },
+    { "#0ea5e9cc", "#f0f9ff", "bright"  },
+};
+static constexpr int kThemeCount =
+    static_cast<int>(sizeof(kThemes) / sizeof(kThemes[0]));
+
+
+// ── File-scope app state ──────────────────────────────────────────────────────
+//
+// pce::sdlos::gltf::GltfScene is non-copyable / non-movable, so it lives as a
+// direct member of this struct.  The struct is a plain static — it outlives
+// the jade_app_init call and all lambda captures, which is required because:
+//
+//   1. renderer.setScene3DHook() stores a std::function that calls gltf.render()
+//      after jade_app_init returns.
+//   2. renderer.setGpuPreShutdownHook() must be able to call gltf.shutdown()
+//      before the GPU device is destroyed at process exit.
+//
+// The user extension region is inside the struct so custom fields (physics
+// state, animation timers, etc.) are conveniently co-located.
+
+struct {$pascal_name$}State {
+    pce::sdlos::gltf::GltfScene gltf;
+    pce::sdlos::RenderTree*     tree_ptr = nullptr;
+    pce::sdlos::NodeHandle      root_h;
+
+    // Orbit camera
+    float yaw   = 20.f;
+    float pitch = 18.f;
+    float dist  =  5.f;
+    bool  drag  = false;
+
+    // Label overlay
+    bool labels_vis = true;
+    int  theme_idx  = 0;
+
+    // proxy_handle → label div handle (both live in the RenderTree)
+    std::vector<std::pair<pce::sdlos::NodeHandle,
+                          pce::sdlos::NodeHandle>> label_pairs;
+
+    // Sidebar node handles (resolved once in jade_app_init)
+    pce::sdlos::NodeHandle yaw_h    = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle pitch_h  = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle dist_h   = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle info_h   = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle lbltog_h = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle tmtog_h  = pce::sdlos::k_null_handle;
+
+    // --- enter the forrest ---
+
+    // --- back to the sea ---
+};
+
+// Static instance — must outlive all renderer hook lambdas.
+static {$pascal_name$}State g_s;
+
+
+// ── Small UI helpers ──────────────────────────────────────────────────────────
+
+static void setLabel(pce::sdlos::RenderTree& tree,
+                     pce::sdlos::NodeHandle   h,
+                     const std::string&       text)
+{
+    if (auto* n = tree.node(h)) {
+        n->setStyle("text", text);
+        n->dirty_render = true;
+    }
+}
+
+static void setStyle(pce::sdlos::RenderTree& tree,
+                     pce::sdlos::NodeHandle   h,
+                     const std::string&       key,
+                     const std::string&       val)
+{
+    if (auto* n = tree.node(h)) {
+        n->setStyle(key, val);
+        n->dirty_render = true;
+    }
+}
+
+
+// ── Tree traversal ────────────────────────────────────────────────────────────
+
+/// DFS collect all nodes whose style("tag") matches `tag`.
+static void collectByTag(pce::sdlos::RenderTree&               tree,
+                          pce::sdlos::NodeHandle                 h,
+                          std::string_view                       tag,
+                          std::vector<pce::sdlos::NodeHandle>&   out)
+{
+    if (!h.valid()) return;
+    const pce::sdlos::RenderNode* n = tree.node(h);
+    if (!n) return;
+    if (n->style("tag") == tag) out.push_back(h);
+    for (pce::sdlos::NodeHandle c = n->child; c.valid(); ) {
+        const pce::sdlos::RenderNode* cn = tree.node(c);
+        if (!cn) break;
+        const pce::sdlos::NodeHandle next = cn->sibling;
+        collectByTag(tree, c, tag, out);
+        c = next;
+    }
+}
+
+
+// ── Orbit camera ──────────────────────────────────────────────────────────────
+
+/// Recompute the eye position from yaw/pitch/dist and call lookAt().
+static void updateCamera()
+{
+    const float kD2R   = 3.14159265f / 180.f;
+    const float pitch_r = g_s.pitch * kD2R;
+    const float yaw_r   = g_s.yaw   * kD2R;
+
+    const float ex = g_s.dist * std::cos(pitch_r) * std::sin(yaw_r);
+    const float ey = g_s.dist * std::sin(pitch_r);
+    const float ez = g_s.dist * std::cos(pitch_r) * std::cos(yaw_r);
+
+    g_s.gltf.camera().lookAt(ex, ey, ez,  0.f, 1.f, 0.f);
+}
+
+/// Push current yaw / pitch / dist values into the sidebar text nodes.
+static void syncParamLabels(pce::sdlos::RenderTree& tree)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.0f°", static_cast<double>(g_s.yaw));
+    setLabel(tree, g_s.yaw_h, buf);
+    std::snprintf(buf, sizeof(buf), "%.0f°", static_cast<double>(g_s.pitch));
+    setLabel(tree, g_s.pitch_h, buf);
+    std::snprintf(buf, sizeof(buf), "%.1f",  static_cast<double>(g_s.dist));
+    setLabel(tree, g_s.dist_h, buf);
+}
+
+
+// ── Label theme ───────────────────────────────────────────────────────────────
+
+/// Apply the current theme's colours to all label nodes and update the chip.
+static void applyTheme(pce::sdlos::RenderTree& tree)
+{
+    const auto& t = kThemes[g_s.theme_idx % kThemeCount];
+
+    for (auto& [ph, lh] : g_s.label_pairs) {
+        if (auto* n = tree.node(lh)) {
+            n->setStyle("backgroundColor", t.bg);
+            n->setStyle("color",           t.fg);
+            n->dirty_render = true;
+        }
+    }
+
+    // Update the theme-toggle chip text to show the active name.
+    setLabel(tree, g_s.tmtog_h,
+             std::string("\xe2\x97\x88  Theme: ") + t.name);
+}
+
+
+// ── Label overlay ─────────────────────────────────────────────────────────────
+
+/// Create one div.mesh-label per object3d proxy and append it to root.
+///
+/// Labels are LayoutKind::None — they live outside the flex layout.  Their
+/// x/y fields are set each frame by the root->update callback from the proxy
+/// AABB written by GltfScene::tick().  Because they are direct children of
+/// root (which has absolute position 0,0), their x/y values map directly to
+/// viewport-space pixels.
+static void buildLabels(pce::sdlos::RenderTree& tree,
+                         pce::sdlos::NodeHandle   root)
+{
+    g_s.label_pairs.clear();
+
+    std::vector<pce::sdlos::NodeHandle> proxies;
+    collectByTag(tree, root, "object3d", proxies);
+    g_s.label_pairs.reserve(proxies.size());
+
+    for (auto proxy_h : proxies) {
+        const auto* proxy = tree.node(proxy_h);
+        if (!proxy) continue;
+
+        // Use the proxy's CSS id as the label text (e.g. "teapot-body").
+        std::string id_str{proxy->style("id")};
+        if (id_str.empty()) id_str = "mesh";
+
+        const auto lh = pce::sdlos::jade::parse(
+            "div.mesh-label(text=\"" + id_str + "\")", tree);
+        if (!lh.valid()) continue;
+
+        if (auto* n = tree.node(lh)) {
+            n->layout_kind = pce::sdlos::LayoutKind::None;
+            // Initial w/h — updated to 0 when labels are hidden,
+            // restored to these values when visible again.
+            n->w = 90.f;
+            n->h = 22.f;
+        }
+
+        pce::sdlos::bindDrawCallbacks(tree, lh);
+        tree.appendChild(root, lh);   // root abs pos == (0,0) → label x/y = screen pos
+        g_s.label_pairs.emplace_back(proxy_h, lh);
+    }
+
+    sdlos_log("[{$name$}] labels: "
+              + std::to_string(g_s.label_pairs.size())
+              + " / " + std::to_string(proxies.size()) + " proxies");
+}
+
+} // namespace
+
+
+// ── jade_app_init ─────────────────────────────────────────────────────────────
+
+void jade_app_init(pce::sdlos::RenderTree&               tree,
+                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::SDLRenderer&               renderer,
+                   std::function<bool(const SDL_Event&)>& out_handler)
+{
+    namespace fs = std::filesystem;
+
+    // ── Release any GPU resources from a previous load ─────────────────────
+    // On sdlos:navigate back to this scene jade_app_init is called again.
+    // Calling shutdown() before re-init prevents GPU resource leaks.
+    if (g_s.gltf.ready()) {
+        g_s.gltf.shutdown();
+    }
+
+    // Reset per-scene state while keeping g_s.gltf (non-movable) in place.
+    g_s.tree_ptr   = &tree;
+    g_s.root_h     = root;
+    g_s.yaw        = 20.f;
+    g_s.pitch      = 18.f;
+    g_s.dist       =  5.f;
+    g_s.drag       = false;
+    g_s.labels_vis = true;
+    g_s.theme_idx  = 0;
+    g_s.label_pairs.clear();
+
+    // ── Locate sidebar nodes ───────────────────────────────────────────────
+    g_s.yaw_h    = tree.findById(root, "{$name$}-yaw");
+    g_s.pitch_h  = tree.findById(root, "{$name$}-pitch");
+    g_s.dist_h   = tree.findById(root, "{$name$}-dist");
+    g_s.info_h   = tree.findById(root, "{$name$}-info");
+    g_s.lbltog_h = tree.findById(root, "{$name$}-labels-toggle");
+    g_s.tmtog_h  = tree.findById(root, "{$name$}-theme-toggle");
+
+    sdlos_log("[{$name$}] nodes — "
+              "yaw="     + std::string(g_s.yaw_h.valid()    ? "ok" : "MISSING")
+              + " info=" + (g_s.info_h.valid()   ? "ok" : "MISSING"));
+
+    // ── GltfScene: init ────────────────────────────────────────────────────
+    const char* base_raw = SDL_GetBasePath();
+    const std::string base = base_raw ? std::string(base_raw) : "";
+
+    const bool init_ok = g_s.gltf.init(
+        renderer.GetDevice(),
+        renderer.GetShaderFormat(),
+        base,
+        SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM);
+
+    if (!init_ok) {
+        sdlos_log("[{$name$}] GltfScene::init() failed — check shader paths");
+        setLabel(tree, g_s.info_h, "3D init failed");
+        return;
+    }
+
+    // Register the 3-D pre-pass hook (renders before the 2-D UI pass).
+    renderer.setScene3DHook(
+        [](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap,
+           float vw, float vh) noexcept {
+            g_s.gltf.render(cmd, swap, vw, vh);
+        });
+
+    // GPU shutdown hook — called at the top of SDLRenderer::Shutdown()
+    // before the GPU device is destroyed.
+    renderer.setGpuPreShutdownHook([]() noexcept {
+        g_s.gltf.shutdown();
+    });
+
+    // ── Override scene3d src= to the binary-dir model path ────────────────
+    //
+    // jade_host's resolveAssetPaths() resolved the jade's  src="data/models/scene.glb"
+    // relative to the JADE SOURCE directory.  We redirect it here to the
+    // binary-dir copy placed there by the CMake post-build step.
+    //
+    // To use a different model: change "scene.glb" below and in {$name$}.jade,
+    // then copy the file to examples/apps/{$name$}/data/models/.
+    {
+        const pce::sdlos::NodeHandle scene3d_h = tree.findById(root, "{$name$}-3d");
+        if (scene3d_h.valid()) {
+            if (auto* n = tree.node(scene3d_h)) {
+                const std::string model_path = base + "data/models/scene.glb";
+                if (fs::exists(model_path)) {
+                    n->setStyle("src", model_path);
+                } else {
+                    sdlos_log("[{$name$}] WARNING: model not found: " + model_path);
+                    sdlos_log("[{$name$}]   copy a .glb to data/models/scene.glb");
+                }
+            }
+        } else {
+            sdlos_log("[{$name$}] WARNING: #{$name$}-3d node not found in tree");
+        }
+    }
+
+    // ── GltfScene: attach (scan tree, load .glb, inject proxy nodes) ──────
+    const int mc = g_s.gltf.attach(tree, root, base);
+
+    sdlos_log("[{$name$}] attached " + std::to_string(mc) + " mesh primitive(s)");
+    setLabel(tree, g_s.info_h,
+             std::to_string(mc) + " mesh" + (mc == 1 ? "" : "es"));
+
+    // ── CSS material overrides ─────────────────────────────────────────────
+    //
+    // Load data/scene.css (if present) to apply per-mesh material properties:
+    //   --scale, --rotation-x/y/z, color, --roughness, --metallic, etc.
+    // Without it, GltfScene uses PBR defaults from the glTF file.
+    //
+    // To add: create examples/apps/{$name$}/data/scene.css and uncomment:
+    //
+    // --- enter the forrest ---
+
+    // {
+    //     const std::string scene_css = base + "scene.css";
+    //     if (fs::exists(scene_css))
+    //         g_s.gltf.applyMapCSS(tree, root, scene_css);
+    // }
+
+    // --- back to the sea ---
+
+    g_s.gltf.applyCSS(tree);   // flush any CSS already applied to proxy nodes
+
+    // ── Camera: perspective + initial orbit pose ───────────────────────────
+    g_s.gltf.camera().perspective(
+        45.f,
+        static_cast<float>(SDLOS_WIN_W) / static_cast<float>(SDLOS_WIN_H));
+
+    updateCamera();
+    syncParamLabels(tree);
+
+    // ── Label overlay: one div.mesh-label per proxy ────────────────────────
+    if (mc > 0) {
+        buildLabels(tree, root);
+        applyTheme(tree);
+    }
+
+    // ── Per-frame update callback ──────────────────────────────────────────
+    //
+    // Attached to the root node so it fires every frame before the draw pass.
+    // Captures tree by reference — safe because the RenderTree outlives the
+    // update callback (both live in jade_host's SceneState on main()'s stack).
+    if (auto* rn = tree.node(root)) {
+        rn->update = [&tree]() noexcept {
+            if (!g_s.gltf.ready()) return;
+
+            // Project mesh AABBs to screen — writes proxy->x/y/w/h.
+            g_s.gltf.tick(tree,
+                          static_cast<float>(SDLOS_WIN_W),
+                          static_cast<float>(SDLOS_WIN_H));
+
+            // Reposition each label above its mesh AABB centroid.
+            for (auto& [ph, lh] : g_s.label_pairs) {
+                const auto* proxy = tree.node(ph);
+                auto*       label = tree.node(lh);
+                if (!proxy || !label) continue;
+
+                if (!g_s.labels_vis) {
+                    // Collapse to zero size to hide without detaching.
+                    if (label->w != 0.f) {
+                        label->w        = 0.f;
+                        label->h        = 0.f;
+                        label->dirty_render = true;
+                    }
+                    continue;
+                }
+
+                label->w = 90.f;
+                label->h = 22.f;
+                // Horizontal centre of the AABB, 26 px above its top edge.
+                label->x = proxy->x + proxy->w * 0.5f - 45.f;
+                label->y = std::max(4.f, proxy->y - 26.f);
+                label->dirty_render = true;
+            }
+        };
+    }
+
+    // ── Bus subscriptions ──────────────────────────────────────────────────
+
+    // Orbit yaw
+    bus.subscribe("{$name$}:yaw-dec",
+        [&tree](const std::string&) {
+            g_s.yaw -= 10.f;
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    bus.subscribe("{$name$}:yaw-inc",
+        [&tree](const std::string&) {
+            g_s.yaw += 10.f;
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    // Orbit pitch (clamped to avoid gimbal flip)
+    bus.subscribe("{$name$}:pitch-dec",
+        [&tree](const std::string&) {
+            g_s.pitch = std::clamp(g_s.pitch - 5.f, -60.f, 80.f);
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    bus.subscribe("{$name$}:pitch-inc",
+        [&tree](const std::string&) {
+            g_s.pitch = std::clamp(g_s.pitch + 5.f, -60.f, 80.f);
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    // Orbit distance (zoom)
+    bus.subscribe("{$name$}:dist-dec",
+        [&tree](const std::string&) {
+            g_s.dist = std::clamp(g_s.dist - 0.5f, 1.5f, 20.f);
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    bus.subscribe("{$name$}:dist-inc",
+        [&tree](const std::string&) {
+            g_s.dist = std::clamp(g_s.dist + 0.5f, 1.5f, 20.f);
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    // Reset camera to default orbit pose
+    bus.subscribe("{$name$}:reset-camera",
+        [&tree](const std::string&) {
+            g_s.yaw   = 20.f;
+            g_s.pitch = 18.f;
+            g_s.dist  =  5.f;
+            updateCamera();
+            syncParamLabels(tree);
+        });
+
+    // Toggle all floating labels on / off
+    bus.subscribe("{$name$}:toggle-labels",
+        [&tree](const std::string&) {
+            g_s.labels_vis = !g_s.labels_vis;
+            setLabel(tree, g_s.lbltog_h,
+                     g_s.labels_vis
+                         ? "\xe2\x97\x89  Labels visible"
+                         : "\xe2\x97\x8e  Labels hidden");
+        });
+
+    // Cycle or jump to a theme.
+    //   button click  → payload = ""           → step to next theme
+    //   swatch click  → payload = "default"|…  → jump to named theme
+    bus.subscribe("{$name$}:cycle-theme",
+        [&tree](const std::string& val) {
+            if (!val.empty()) {
+                for (int i = 0; i < kThemeCount; ++i) {
+                    if (val == kThemes[i].name) { g_s.theme_idx = i; break; }
+                }
+            } else {
+                g_s.theme_idx = (g_s.theme_idx + 1) % kThemeCount;
+            }
+            applyTheme(tree);
+        });
+
+    // ── Raw SDL event hook: drag-orbit + scroll-zoom ───────────────────────
+    out_handler =
+        [&renderer, &tree](const SDL_Event& ev) mutable -> bool
+    {
+        const float sx = renderer.pixelScaleX();
+        const float sy = renderer.pixelScaleY();
+
+        switch (ev.type) {
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (ev.button.button == SDL_BUTTON_LEFT) {
+                g_s.drag = true;
+                return false;   // Don't consume — allow UI hit-testing to proceed.
+            }
+            break;
+
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (ev.button.button == SDL_BUTTON_LEFT)
+                g_s.drag = false;
+            break;
+
+        case SDL_EVENT_MOUSE_MOTION:
+            if (g_s.drag) {
+                g_s.yaw   += ev.motion.xrel * sx * 0.45f;
+                g_s.pitch  = std::clamp(
+                    g_s.pitch - ev.motion.yrel * sy * 0.45f, -60.f, 80.f);
+                updateCamera();
+                syncParamLabels(tree);
+            }
+            break;
+
+        case SDL_EVENT_MOUSE_WHEEL:
+            g_s.dist = std::clamp(
+                g_s.dist - ev.wheel.y * 0.3f, 1.5f, 20.f);
+            updateCamera();
+            syncParamLabels(tree);
+            break;
+
+        default:
+            break;
+        }
+
+        return false;   // never consume — sidebar buttons must still work
+    };
+
+    sdlos_log("[{$name$}] ready — " + std::to_string(mc) + " meshes");
+}

@@ -172,6 +172,7 @@ def _build_context(cfg: "AppConfig") -> dict:
     return {
         "name":        cfg.name,
         "pascal_name": _pascal(cfg.name),
+        "template":    cfg.template,
         "win_w":       cfg.win_w,
         "win_h":       cfg.win_h,
         "data_dir":    cfg.data_dir,

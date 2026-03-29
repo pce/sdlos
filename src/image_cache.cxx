@@ -65,6 +65,50 @@ void ImageCache::setBasePath(std::string path) noexcept
     std::cerr << "[ImageCache] base path: " << base_path_ << "\n";
 }
 
+// ---- Scope management ----
+
+void ImageCache::set_scope(std::string scope) noexcept
+{
+    current_scope_ = std::move(scope);
+}
+
+void ImageCache::evict_scope(std::string_view scope) noexcept
+{
+    if (scope.empty()) return;   // never mass-evict permanent entries
+
+    // Collect keys to remove (avoid iterator invalidation).
+    std::vector<std::string> to_evict;
+    to_evict.reserve(entry_scopes_.size());
+
+    for (const auto& [path, s] : entry_scopes_) {
+        if (s == scope) to_evict.push_back(path);
+    }
+
+    for (const auto& path : to_evict) {
+        auto it = cache_.find(path);
+        if (it != cache_.end()) {
+            if (it->second.texture && device_)
+                SDL_ReleaseGPUTexture(device_, it->second.texture);
+            cache_.erase(it);
+        }
+        entry_scopes_.erase(path);
+    }
+
+    if (!to_evict.empty()) {
+        std::cerr << "[ImageCache] evicted scope '" << scope
+                  << "': " << to_evict.size() << " texture(s)\n";
+    }
+}
+
+std::size_t ImageCache::scope_size(std::string_view scope) const noexcept
+{
+    std::size_t n = 0;
+    for (const auto& [path, s] : entry_scopes_) {
+        if (s == scope) ++n;
+    }
+    return n;
+}
+
 // ---- Cache interface ----
 
 ImageTexture ImageCache::ensureTexture(std::string_view path)
@@ -132,6 +176,11 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
     // return this entry (cache hit) rather than double-loading the file.
     const ImageTexture img{ tex, surf->w, surf->h };
     cache_.emplace(key, img);
+
+    // Tag with the current scope so evict_scope() can find it later.
+    // Permanent entries (empty scope) are not recorded in entry_scopes_.
+    if (!current_scope_.empty())
+        entry_scopes_[key] = current_scope_;
 
     // Queue the upload for the next flushUploads() call.
     pending_.push_back(PendingUpload{ key, surf, tex });
@@ -228,6 +277,7 @@ void ImageCache::evict(std::string_view path)
     if (it->second.texture && device_)
         SDL_ReleaseGPUTexture(device_, it->second.texture);
     cache_.erase(it);
+    entry_scopes_.erase(key);   // keep scope map in sync
 }
 
 void ImageCache::clearCache() noexcept
@@ -239,6 +289,7 @@ void ImageCache::clearCache() noexcept
         }
     }
     cache_.clear();
+    entry_scopes_.clear();   // keep scope map in sync
 }
 
 // ---- Private helpers ----

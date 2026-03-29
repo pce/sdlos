@@ -90,7 +90,7 @@ set(SIMDUTF_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(SIMDUTF_TOOLS      OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     simdutf
-    URL https://github.com/simdutf/simdutf/archive/refs/tags/v5.6.4.tar.gz
+    URL https://github.com/simdutf/simdutf/archive/refs/tags/v8.2.0.tar.gz
 )
 FetchContent_MakeAvailable(simdutf)
 
@@ -99,7 +99,7 @@ FetchContent_MakeAvailable(simdutf)
 # failures that can occur with GIT_REPOSITORY + GIT_TAG on some generators).
 FetchContent_Declare(
     utfcpp
-    URL      https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.0.4.tar.gz
+    URL      https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.0.9.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(utfcpp)
@@ -129,7 +129,7 @@ endif()
 # Loaded as a tarball (no git required, reproducible, fast on CI).
 FetchContent_Declare(
     fastgltf
-    URL      https://github.com/spnda/fastgltf/archive/refs/tags/v0.8.0.tar.gz
+    URL      https://github.com/spnda/fastgltf/archive/refs/tags/v0.9.0.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 # Disable fastgltf's own test targets — we only need the library.
@@ -213,6 +213,7 @@ function(sdlos_link_sdl TARGET)
         elseif(TARGET SDL_mixer::SDL_mixer)
             target_link_libraries(${TARGET} PRIVATE SDL_mixer::SDL_mixer)
         endif()
+        target_compile_definitions(${TARGET} PRIVATE SDL_MIXER_AVAILABLE=1)
     endif()
 
     if(SDL_TTF_AVAILABLE)
@@ -239,6 +240,15 @@ set(SDLOS_ENGINE_SOURCES
     src/sdl_renderer.cxx
     src/text_renderer.cxx
     src/image_cache.cxx
+
+    # Virtual file system — URI-routed scheme dispatcher
+    # virtual_file_system.cxx lives in SDLOS_SHELL_SOURCES (OS-level only).
+    # The vfs/ primitives are compiled into the engine so jade apps can also
+    # use Vfs directly via jade_host without pulling in the desktop shell.
+    src/vfs/local_mount.cxx
+    src/vfs/mem_mount.cxx
+    src/vfs/union_mount.cxx
+    src/vfs/vfs.cxx
 
     # Event system
     src/event_bus.cxx
@@ -270,6 +280,11 @@ set(SDLOS_ENGINE_SOURCES
 
     # 3D glTF render layer (fastgltf + SDL3 GPU pipeline)
     src/gltf/gltf_scene.cxx
+
+    # Data-driven render pipeline (pipeline.pug → CompiledGraph)
+    src/frame_graph/pug_parser.cxx
+    src/frame_graph/compiled_graph.cxx
+    src/frame_graph/frame_graph.cxx
 )
 
 add_library(sdlos_engine STATIC ${SDLOS_ENGINE_SOURCES})
@@ -280,6 +295,7 @@ target_include_directories(sdlos_engine PUBLIC
     "${CMAKE_SOURCE_DIR}/src/widgets"
     "${CMAKE_SOURCE_DIR}/src/jade"
     "${CMAKE_SOURCE_DIR}/src/debug"
+    "${CMAKE_SOURCE_DIR}/src/vfs"
 )
 
 sdlos_target_compile_options(sdlos_engine)
@@ -521,12 +537,28 @@ if(SDLOS_ENABLE_TESTS)
     )
 
     sdlos_target_compile_options(test_jade)
+    # SDL3 includes are PRIVATE on sdlos_engine; propagate them explicitly so
+    # headers like render_tree.hh (which includes SDL3/SDL.h) resolve cleanly.
+    sdlos_link_sdl(test_jade)
+
+    # test_frame_graph — pug parser + CompiledGraph unit tests.
+    # No GPU device required: all GPU pointers are tested as nullptr/sentinel.
+    add_executable(test_frame_graph tests/test_frame_graph.cxx)
+
+    target_link_libraries(test_frame_graph PRIVATE
+        sdlos_engine
+        Catch2::Catch2WithMain
+    )
+
+    sdlos_target_compile_options(test_frame_graph)
+    sdlos_link_sdl(test_frame_graph)
 
     include(CTest)
     include(Catch)
     catch_discover_tests(test_jade)
+    catch_discover_tests(test_frame_graph)
 
-    message(STATUS "[sdlos] Tests: test_jade enabled")
+    message(STATUS "[sdlos] Tests: test_jade + test_frame_graph enabled")
 else()
     message(STATUS "[sdlos] Tests: disabled (pass -DSDLOS_ENABLE_TESTS=ON to enable)")
 endif()
@@ -545,9 +577,9 @@ message(STATUS "│  Compiler bin: ${CMAKE_CXX_COMPILER}")
 message(STATUS "│  SDL_image   : ${SDL_IMAGE_AVAILABLE}")
 message(STATUS "│  SDL_mixer   : ${SDL_MIXER_AVAILABLE}")
 message(STATUS "│  SDL_ttf     : ${SDL_TTF_AVAILABLE}")
-message(STATUS "│  simdutf     : ON (FetchContent v5.6.4)")
-message(STATUS "│  utf8cpp     : ON (FetchContent v4.0.4)")
-message(STATUS "│  fastgltf    : ON (FetchContent v0.8.0)")
+message(STATUS "│  simdutf     : ON (FetchContent v8.2.0)")
+message(STATUS "│  utf8cpp     : ON (FetchContent v4.0.9)")
+message(STATUS "│  fastgltf    : ON (FetchContent v0.9.0)")
 message(STATUS "│  SDL_camera  : (via SDL3 core)")
 message(STATUS "│  Tests       : ${SDLOS_ENABLE_TESTS}")
 message(STATUS "└───────────────────────────────────────── ─ ── ─")

@@ -51,7 +51,11 @@ bool OS::boot()
     }
 
     // ---- SDL init --------------------------------------------------------
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    // SDL_INIT_AUDIO is included so the OS shell can route audio events and
+    // the vfs "asset" scheme can resolve audio files for the desktop shell.
+    // Individual jade apps also call SDL_Init(SDL_INIT_AUDIO) in jade_host,
+    // but SDL reference-counts subsystem init calls so this is safe.
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_CAMERA)) {
         std::cerr << "[OS] SDL_Init failed: " << SDL_GetError() << "\n";
         return false;
     }
@@ -61,7 +65,65 @@ bool OS::boot()
     std::signal(SIGTERM, signal_handler);
 
     // ---- Virtual filesystem ----------------------------------------------
-    fs_ = std::make_unique<VirtualFileSystem>("/tmp/sdlos");
+    //
+    // Scheme layout for the desktop shell:
+    //
+    //   user://   →  SDL_GetPrefPath("pce", "sdlos")
+    //                Platform-correct writable user data directory.
+    //                  macOS:   ~/Library/Application Support/pce/sdlos/
+    //                  Linux:   ~/.local/share/sdlos/
+    //                  Windows: %APPDATA%\pce\sdlos\
+    //                Default scheme: bare IFileSystem paths resolve here.
+    //
+    //   asset://  →  SDL_GetBasePath()
+    //                Read-only directory of the running binary.
+    //                Shaders, fonts, bundled assets.  Mounted as read-only
+    //                so accidental writes surface as errors rather than
+    //                silently landing next to the binary.
+    //
+    // Callers that have migrated to the URI API use os.vfs() directly:
+    //
+    //   os.vfs().read_text("asset://shaders/desktop.frag.metal")
+    //   os.vfs().write_text("user://logs/session.txt", entry)
+    //
+    // Legacy IFileSystem callers (readFile / createFile / …) continue to
+    // work via the "user" default scheme without any changes.
+    //
+    // Additional schemes ("scene://") are registered per-jade-app in
+    // jade_host — they are not the OS shell's concern.
+    fs_ = std::make_unique<VirtualFileSystem>();
+
+    // user:// — platform user-data directory (writable).
+    // SDL_GetPrefPath creates the directory if needed and returns a path with
+    // a trailing separator, or nullptr on platforms that don't support it.
+    {
+        const char* pref = SDL_GetPrefPath("pce", "sdlos");
+        if (pref && pref[0] != '\0') {
+            fs_->mount("user", std::filesystem::path(pref));
+            fs_->vfs().set_default_scheme("user");
+            std::cout << "[OS] vfs: user://   →  " << pref << "\n";
+            SDL_free(const_cast<char*>(pref));
+        } else {
+            std::cerr << "[OS] vfs: SDL_GetPrefPath() unavailable — "
+                         "'user://' scheme not registered, IFileSystem will fail\n";
+        }
+    }
+
+    // asset:// — binary base path (read-only: installed assets, shaders).
+    // SDL_GetBasePath() returns the directory of the running binary with a
+    // trailing separator, or nullptr when indeterminate (some embedded targets).
+    {
+        const char* base = SDL_GetBasePath();
+        if (base && base[0] != '\0') {
+            // Read-only mount: asset files must not be mutated at runtime.
+            // A UnionMount could layer DLC on top here in future.
+            fs_->mount("asset", std::filesystem::path(base));
+            std::cout << "[OS] vfs: asset://  →  " << base << "\n";
+        } else {
+            std::cerr << "[OS] vfs: SDL_GetBasePath() unavailable — "
+                         "'asset://' scheme not registered\n";
+        }
+    }
 
     // ---- Desktop window --------------------------------------------------
     // In debug builds open a normal resizable window so tools like RenderDoc

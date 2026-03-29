@@ -1,0 +1,471 @@
+# sdlos knowledge packs
+# ---------------------
+# Loaded by docblocks.py, sca.py, and tidy.py to generate richer
+# documentation and more precise warnings.
+#
+# Sections
+# --------
+#   naming_patterns          function-name prefix → @brief verb phrase
+#   param_taxonomy           parameter name fragment → @param description
+#   type_taxonomy            C++ type fragment → human description
+#   return_taxonomy          return type fragment → @return text
+#   security_functions       unsafe API name → warning text
+#   design_patterns          code smell key → advisory text
+#   cpp_idioms               recognised idiom tag → note text
+#   c_opaque_handle_prefixes type-name prefixes that identify C API opaque
+#                            handles — raw pointer params of these types are
+#                            suppressed from raw_ptr_param SCA findings because
+#                            the C API itself does not offer const-qualified
+#                            variants and ownership is managed by the library.
+
+# ── Naming patterns ────────────────────────────────────────────────────────────
+# Matched as prefix of the function spelling (case-insensitive).
+# Value becomes the first word(s) of the generated @brief line.
+naming_patterns:
+  is_:       "Checks whether"
+  has_:      "Tests for the presence of"
+  get_:      "Returns"
+  set_:      "Sets"
+  update_:   "Updates"
+  on_:       "Handles"
+  handle_:   "Handles"
+  find_:     "Searches for and returns"
+  search_:   "Searches for"
+  create_:   "Creates and returns"
+  make_:     "Constructs and returns"
+  build_:    "Builds"
+  load_:     "Loads"
+  save_:     "Saves"
+  store_:    "Stores"
+  write_:    "Writes"
+  read_:     "Reads"
+  parse_:    "Parses"
+  render_:   "Renders"
+  draw_:     "Draws"
+  init_:     "Initialises"
+  initialize_: "Initialises"
+  shutdown_: "Shuts down"
+  reset_:    "Resets"
+  clear_:    "Clears"
+  flush_:    "Flushes"
+  bind_:     "Binds"
+  unbind_:   "Unbinds"
+  attach_:   "Attaches"
+  detach_:   "Detaches"
+  register_: "Registers"
+  unregister_: "Unregisters"
+  subscribe_: "Subscribes to"
+  publish_:  "Publishes"
+  notify_:   "Notifies"
+  apply_:    "Applies"
+  submit_:   "Submits"
+  dispatch_: "Dispatches"
+  push_:     "Pushes"
+  pop_:      "Pops"
+  peek_:     "Returns the top-of-stack element without removing it from"
+  enqueue_:  "Enqueues"
+  dequeue_:  "Dequeues"
+  insert_:   "Inserts"
+  remove_:   "Removes"
+  erase_:    "Erases"
+  add_:      "Adds"
+  append_:   "Appends"
+  prepend_:  "Prepends"
+  sort_:     "Sorts"
+  merge_:    "Merges"
+  split_:    "Splits"
+  copy_:     "Copies"
+  move_:     "Moves"
+  swap_:     "Swaps"
+  resize_:   "Resizes"
+  reserve_:  "Reserves capacity for"
+  shrink_:   "Shrinks"
+  trim_:     "Trims"
+  validate_: "Validates"
+  verify_:   "Verifies"
+  check_:    "Checks"
+  test_:     "Tests"
+  compute_:  "Computes"
+  calculate_: "Calculates"
+  evaluate_: "Evaluates"
+  convert_:  "Converts"
+  encode_:   "Encodes"
+  decode_:   "Decodes"
+  compress_: "Compresses"
+  decompress_: "Decompresses"
+  hash_:     "Computes a hash of"
+  format_:   "Formats"
+  serialize_: "Serialises"
+  deserialize_: "Deserialises"
+  emit_:     "Emits"
+  log_:      "Logs"
+  print_:    "Prints"
+  dump_:     "Dumps"
+  trace_:    "Traces"
+  profile_:  "Profiles"
+  begin_:    "Begins"
+  end_:      "Ends"
+  open_:     "Opens"
+  close_:    "Closes"
+  acquire_:  "Acquires"
+  release_:  "Releases"
+  lock_:     "Locks"
+  unlock_:   "Unlocks"
+  enable_:   "Enables"
+  disable_:  "Disables"
+  show_:     "Shows"
+  hide_:     "Hides"
+  resize_:   "Resizes"
+  layout_:   "Performs layout for"
+  resolve_:  "Resolves"
+  lookup_:   "Looks up"
+  mount_:    "Mounts"
+  unmount_:  "Unmounts"
+  upload_:   "Uploads"
+  download_: "Downloads"
+  connect_:  "Connects"
+  disconnect_: "Disconnects"
+  send_:     "Sends"
+  receive_:  "Receives"
+  request_:  "Requests"
+  respond_:  "Responds to"
+  process_:  "Processes"
+  poll_:     "Polls"
+  wait_:     "Waits for"
+  signal_:   "Signals"
+  cancel_:   "Cancels"
+  abort_:    "Aborts"
+  retry_:    "Retries"
+  advance_:  "Advances"
+  step_:     "Steps"
+  tick_:     "Ticks one simulation frame for"
+  schedule_: "Schedules"
+  defer_:    "Defers"
+  post_:     "Posts"
+
+# ── Parameter name taxonomy ────────────────────────────────────────────────────
+# Fragment is matched as a case-insensitive substring of the parameter name.
+# Value is appended to the @param description.
+param_taxonomy:
+  id:       "Unique object identifier"
+  uid:      "Universally unique identifier"
+  uuid:     "UUID string"
+  idx:      "Zero-based array index"
+  index:    "Zero-based index into the collection"
+  offset:   "Byte offset from the base address"
+  stride:   "Distance in bytes between consecutive elements"
+  len:      "Length of the buffer in bytes"
+  length:   "Number of characters or elements"
+  size:     "Capacity or number of elements"
+  count:    "Number of elements"
+  num:      "Numeric count"
+  cap:      "Capacity of the buffer or container"
+  capacity: "Maximum number of elements before reallocation"
+  ptr:      "Raw pointer to the memory region (caller retains ownership)"
+  buf:      "Writable byte buffer"
+  buffer:   "Contiguous memory buffer"
+  src:      "Source operand or data"
+  dst:      "Destination operand or buffer"
+  out:      "Output parameter written by the callee"
+  result:   "Output parameter to receive the computed value"
+  ret:      "Output parameter to receive the return value"
+  path:     "Filesystem path"
+  file:     "File path or open file handle"
+  dir:      "Directory path"
+  name:     "Human-readable name or identifier string"
+  key:      "Lookup key"
+  tag:      "String tag used for lookup or categorisation"
+  label:    "Display label"
+  text:     "UTF-8 text content"
+  str:      "Null-terminated C string"
+  msg:      "Message text"
+  message:  "Descriptive message string"
+  fmt:      "printf-style format string"
+  format:   "Format descriptor"
+  val:      "Value to store or compare"
+  value:    "Operand value"
+  data:     "Raw payload bytes"
+  payload:  "Message payload"
+  bytes:    "Raw byte span"
+  blob:     "Opaque binary data"
+  ctx:      "Execution or rendering context"
+  context:  "Mutable context passed through the call chain"
+  handle:   "Opaque resource handle"
+  h:        "Opaque resource handle"
+  node:     "Render-tree node handle"
+  cursor:   "libclang AST cursor"
+  iter:     "Iterator into the collection"
+  it:       "Iterator position"
+  pos:      "Position or coordinate"
+  x:        "Horizontal coordinate in logical pixels"
+  y:        "Vertical coordinate in logical pixels"
+  z:        "Depth coordinate"
+  w:        "Width in logical pixels"
+  width:    "Width in logical pixels"
+  h_dim:    "Height in logical pixels"
+  height:   "Height in logical pixels"
+  r:        "Red channel component [0, 1]"
+  g:        "Green channel component [0, 1]"
+  b:        "Blue channel component [0, 1]"
+  a:        "Alpha channel component [0, 1]"
+  alpha:    "Opacity value [0, 1]"
+  color:    "RGBA colour value"
+  colour:   "RGBA colour value"
+  scale:    "Uniform scale factor"
+  ratio:    "Aspect ratio"
+  angle:    "Rotation angle in radians"
+  rot:      "Rotation quaternion or angle"
+  matrix:   "Transformation matrix"
+  mat:      "Transformation matrix"
+  transform: "Affine transformation"
+  min:      "Inclusive lower bound"
+  max:      "Inclusive upper bound"
+  lo:       "Lower bound"
+  hi:       "Upper bound"
+  t:        "Interpolation parameter in [0, 1]"
+  dt:       "Delta-time in seconds since the last frame"
+  delta:    "Change in value since the last sample"
+  duration: "Time duration in seconds"
+  timeout:  "Maximum wait duration in milliseconds"
+  seed:     "Pseudo-random number generator seed"
+  flags:    "Bitmask of option flags"
+  mask:     "Bitmask"
+  mode:     "Operation mode selector"
+  type:     "Discriminator tag or type enumeration"
+  kind:     "Discriminator tag"
+  level:    "Severity or detail level"
+  depth:    "Nesting depth or stack depth"
+  callback: "Callable invoked on the named event"
+  cb:       "Callback function"
+  fn:       "Callable"
+  func:     "Callable"
+  handler:  "Event handler callable"
+  listener: "Observer callback"
+  pred:     "Unary predicate; returns true to select an element"
+  cmp:      "Comparator; returns true when the left operand is less"
+  allocator: "Custom memory allocator"
+  alloc:    "Memory allocator or arena"
+  arena:    "Frame-scoped memory arena"
+  config:   "Configuration options struct"
+  cfg:      "Configuration options struct"
+  opts:     "Option flags or settings struct"
+  options:  "Option flags or settings struct"
+  args:     "Argument list"
+  argv:     "Command-line argument vector"
+  env:      "Environment variable map"
+  self:     "Pointer to the owning object (C-style OOP)"
+
+# ── Type taxonomy ──────────────────────────────────────────────────────────────
+# Matched as a case-sensitive substring of the canonical C++ type spelling.
+# Used to annotate @param / @return descriptions.
+type_taxonomy:
+  "std::string":        "UTF-8 string"
+  "std::string_view":   "Non-owning view of UTF-8 text"
+  "std::wstring":       "Wide-character string"
+  "std::vector":        "Dynamic array of"
+  "std::array":         "Fixed-size array of"
+  "std::span":          "Non-owning contiguous view of"
+  "std::list":          "Doubly-linked list of"
+  "std::deque":         "Double-ended queue of"
+  "std::set":           "Sorted unique set of"
+  "std::unordered_set": "Hash set of"
+  "std::map":           "Sorted key→value map"
+  "std::unordered_map": "Hash key→value map"
+  "std::optional":      "Optional value of type"
+  "std::expected":      "Result (value or error string)"
+  "std::variant":       "Type-safe union of"
+  "std::any":           "Type-erased value"
+  "std::unique_ptr":    "Unique-ownership smart pointer to"
+  "std::shared_ptr":    "Shared-ownership smart pointer to"
+  "std::weak_ptr":      "Non-owning observer of"
+  "std::function":      "Type-erased callable"
+  "std::pair":          "Two-element tuple"
+  "std::tuple":         "Heterogeneous tuple"
+  "std::atomic":        "Lock-free atomic variable of type"
+  "std::mutex":         "Mutual-exclusion lock"
+  "std::condition_variable": "Condition variable for thread synchronisation"
+  "std::future":        "Asynchronous result of type"
+  "std::promise":       "Asynchronous result provider for"
+  "std::filesystem::path": "Filesystem path"
+  "Path":               "Filesystem path"
+  "NodeHandle":         "Render-tree node handle"
+  "SlotID":             "Slot-map element identifier"
+  "SDL_Texture":        "GPU texture owned by SDL"
+  "SDL_GPUTexture":     "SDL3 GPU texture handle"
+  "SDL_Event":          "SDL3 input or window event"
+  "SDL_Window":         "SDL3 window handle"
+  "SDL_GPUDevice":      "SDL3 GPU device handle"
+  "bool":               "Boolean flag"
+  "float":              "32-bit floating-point scalar"
+  "double":             "64-bit floating-point scalar"
+  "int":                "Signed 32-bit integer"
+  "int8_t":             "Signed 8-bit integer"
+  "int16_t":            "Signed 16-bit integer"
+  "int32_t":            "Signed 32-bit integer"
+  "int64_t":            "Signed 64-bit integer"
+  "uint8_t":            "Unsigned 8-bit integer"
+  "uint16_t":           "Unsigned 16-bit integer"
+  "uint32_t":           "Unsigned 32-bit integer"
+  "uint64_t":           "Unsigned 64-bit integer"
+  "size_t":             "Unsigned size or count"
+  "ptrdiff_t":          "Signed pointer difference"
+  "uintptr_t":          "Unsigned integer wide enough to hold a pointer"
+
+# ── Return type taxonomy ───────────────────────────────────────────────────────
+# Matched as a case-sensitive substring of the return type spelling.
+# Value is the generated @return sentence (empty string → omit @return).
+return_taxonomy:
+  "void":               ""
+  "bool":               "true on success, false on failure"
+  "std::expected":      "The computed value on success, or an error string on failure"
+  "std::optional":      "The value if present, std::nullopt otherwise"
+  "std::unique_ptr":    "Owning pointer to the created object, or nullptr on failure"
+  "std::shared_ptr":    "Shared pointer to the object, or nullptr on failure"
+  "std::string":        "UTF-8 string result"
+  "std::string_view":   "Non-owning view of the result (lifetime tied to the source)"
+  "std::vector":        "Collection of results"
+  "std::span":          "Non-owning view over the result range (lifetime tied to the source)"
+  "NodeHandle":         "Handle to the node, or k_null_handle on failure"
+  "SlotID":             "Slot identifier, or k_null_slot if allocation failed"
+  "size_t":             "Count or size in elements"
+  "float":              "Computed floating-point value"
+  "int":                "Integer result; negative values indicate an error code"
+  "int32_t":            "Integer result; negative values indicate an error code"
+  "uint32_t":           "Non-negative integer result"
+
+# ── Security-sensitive functions ───────────────────────────────────────────────
+# Used by SCA to emit @warning tags and issue reports.
+security_functions:
+  strcpy:    "Buffer overflow — destination size is not checked; use strncpy, strlcpy, or std::string"
+  strncpy:   "Potential truncation and missing NUL terminator; prefer strlcpy or std::string"
+  strcat:    "Buffer overflow — destination size is not checked; use strncat, strlcat, or std::string::append"
+  strncat:   "Potential truncation; prefer strlcat or std::string::append"
+  sprintf:   "Buffer overflow — destination size is not checked; use snprintf or std::format"
+  vsprintf:  "Buffer overflow — destination size is not checked; use vsnprintf or std::vformat"
+  gets:      "Removed in C11 — unbounded input; use fgets or std::getline"
+  scanf:     "Unchecked input width; use explicit-width specifiers or std::cin with validation"
+  sscanf:    "Unchecked input; prefer std::from_chars or std::istringstream"
+  fscanf:    "Unchecked input width; use explicit-width specifiers"
+  atoi:      "No error detection — silently returns 0 on failure; use std::stoi or std::from_chars"
+  atol:      "No error detection; use std::stol or std::from_chars"
+  atof:      "No error detection; use std::stod or std::from_chars"
+  strtol:    "Verify errno and endptr after call; prefer std::from_chars in C++17+"
+  strtod:    "Verify errno and endptr after call; prefer std::from_chars in C++17+"
+  system:    "OS command injection risk — sanitise all input before use or avoid entirely"
+  popen:     "OS command injection risk — sanitise all input before use"
+  execl:     "OS command injection risk — validate and sanitise all arguments"
+  execv:     "OS command injection risk — validate and sanitise all arguments"
+  getenv:    "Environment variable may be attacker-controlled; validate the returned value"
+  rand:      "Cryptographically weak PRNG — use std::mt19937 for simulation or OS RNG for security"
+  srand:     "Seeding a cryptographically weak PRNG — use OS entropy source for security"
+  malloc:    "Manual heap allocation — prefer std::vector, std::unique_ptr, or a frame arena"
+  calloc:    "Manual heap allocation — prefer std::vector or std::unique_ptr"
+  realloc:   "Manual heap reallocation — prefer std::vector::resize"
+  free:      "Manual deallocation — prefer RAII, std::unique_ptr, or a frame arena"
+  memcpy:    "Bounds not checked by the API — verify destination capacity before calling"
+  memmove:   "Bounds not checked by the API — verify destination capacity before calling"
+  memset:    "Ensure buffer size is correct; consider std::fill or value-initialisation"
+  strlen:    "No upper bound — ensure the input is always NUL-terminated"
+  strdup:    "Returns heap-allocated string requiring manual free(); use std::string instead"
+  strtok:    "Not thread-safe and modifies its input; use std::string tokenisation or std::ranges"
+  printf:    "Format string must be a compile-time literal to prevent format-string attacks"
+  fprintf:   "Format string must be a compile-time literal to prevent format-string attacks"
+
+# ── Design-pattern advisories ──────────────────────────────────────────────────
+# Emitted as @warning or @note tags by the docblock generator or SCA.
+# ── C API opaque handle prefixes ───────────────────────────────────────────────
+# Type names (or their struct-tag equivalents) whose pointee starts with one of
+# these prefixes are skipped by the raw_ptr_param SCA check.  These are C
+# library handle types where:
+#   • The C API owns and manages object lifetime.
+#   • The C API never exposes a const-qualified handle variant.
+#   • Passing non-const* is the documented, intended calling convention.
+# Add entries whenever a new C library boundary is introduced to the codebase.
+c_opaque_handle_prefixes:
+  # SDL3 — GPU, window, renderer, audio, camera, I/O, mutex, …
+  - SDL_
+  # Vulkan — VkDevice, VkBuffer, VkImage, VkQueue, VkPipeline, …
+  - Vk
+  # OpenXR — XrSession, XrInstance, XrSpace, …
+  - Xr
+  # POSIX / libc opaque handles — FILE, DIR, …
+  - FILE
+  - DIR
+  # freetype2 — FT_Library, FT_Face, …
+  - FT_
+  # HarfBuzz — hb_font_t, hb_buffer_t, …
+  - hb_
+  # plutovg / plutosvg
+  - plutovg_
+  - plutosvg_
+
+design_patterns:
+  raw_pointer_param:
+    severity: warning
+    text: "Raw pointer parameter — ownership is ambiguous; consider std::span (non-owning view), std::unique_ptr (transfer), or const T* (borrow)"
+
+  non_const_ref_param:
+    severity: note
+    text: "Non-const reference output parameter — consider returning std::expected or std::optional instead"
+
+  new_expression:
+    severity: warning
+    text: "Manual heap allocation with new — prefer std::make_unique or std::make_shared to avoid resource leaks"
+
+  delete_expression:
+    severity: warning
+    text: "Manual deallocation with delete — prefer RAII wrappers or smart pointers"
+
+  mutable_global:
+    severity: warning
+    text: "Mutable global / static variable — initialisation order is undefined across translation units; use Meyers singleton or dependency injection"
+
+  implicit_bool_conversion:
+    severity: note
+    text: "Implicit conversion to bool — add an explicit cast or comparison to make intent clear"
+
+  unchecked_return:
+    severity: warning
+    text: "Return value discarded — this function signals errors through its return value; check it or use [[nodiscard]]"
+
+  missing_const:
+    severity: note
+    text: "Variable or parameter could be declared const — express immutability explicitly"
+
+  missing_nodiscard:
+    severity: note
+    text: "Function returns a value that callers should not silently discard — consider [[nodiscard]]"
+
+  signed_unsigned_compare:
+    severity: warning
+    text: "Signed/unsigned comparison — potential undefined behaviour on overflow; cast explicitly"
+
+  c_style_cast:
+    severity: note
+    text: "C-style cast — replace with static_cast, reinterpret_cast, or const_cast to express intent"
+
+  throwing_in_destructor:
+    severity: warning
+    text: "Exception thrown from a destructor — this will call std::terminate during stack unwinding; catch and log instead"
+
+  blocking_in_render_thread:
+    severity: warning
+    text: "Blocking call detected on the render thread — this will cause frame drops; offload to a worker thread"
+
+  raw_array_decay:
+    severity: note
+    text: "Array decays to pointer — prefer std::array or std::span for bounds-safe access"
+
+# ── C++ idiom annotations ──────────────────────────────────────────────────────
+# Used to annotate recognised patterns with positive notes in docblocks.
+cpp_idioms:
+  raii:             "Follows RAII — resource is released automatically in the destructor"
+  factory:          "Factory function — the caller takes ownership of the returned object"
+  builder:          "Builder pattern — call build() to finalise and obtain the constructed object"
+  singleton:        "Singleton accessor — returns the unique instance; construction is lazy and thread-safe"
+  observer:         "Observer registration — the subscriber will be notified until it is unregistered"
+  crtp:             "CRTP base — do not use this class directly; derive from it with the subclass as the template argument"
+  pimpl:            "Pimpl idiom — the private implementation is forward-declared to minimise compile-time dependencies"
+  type_erasure:     "Type-erased interface — the concrete type is hidden behind a value-semantic wrapper"
+  expected_result:  "Returns std::expected — always check for error with .has_value() or .error() before using the value"
+  coroutine:        "C++20 coroutine — must be co_awaited; ensure the coroutine frame outlives all suspension points"

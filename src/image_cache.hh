@@ -20,6 +20,23 @@
 // Textures are cached for the lifetime of the ImageCache object; call
 // evict() to explicitly drop a single entry or clearCache() for all.
 //
+// Scene-scoped lifetime
+// ─────────────────────
+// Textures accumulate in GPU memory as scenes are navigated.  Use the scope
+// API to tag textures with a logical owner and release them on transition:
+//
+//   // Before building a new scene:
+//   image_cache->evict_scope("scene");   // release previous scene's textures
+//   image_cache->set_scope("scene");     // tag textures loaded this scene
+//
+//   // Permanent shared textures (UI icons, fonts atlas) carry no scope ("").
+//   image_cache->set_scope("");          // back to permanent
+//
+// evict_scope("scene") is safe to call immediately after
+// SDLRenderer::SetScene(nullptr) because no draw callbacks referencing those
+// textures are executing, and SDL3 GPU defers the actual GPU-side release
+// until all in-flight command buffers have completed.
+//
 // Not thread-safe — all calls must come from the render thread that owns the
 // SDL GPU device.
 
@@ -117,6 +134,38 @@ public:
 
     [[nodiscard]] std::size_t cacheSize() const noexcept { return cache_.size(); }
 
+    // ---- Scope-based lifetime management ---------------------------------
+    //
+    // A scope is a string tag associated with textures loaded after
+    // set_scope() is called.  Scoped textures can be bulk-released with
+    // evict_scope() — typically at the start of a scene transition.
+    //
+    // The empty scope ("") is the default and means "permanent" — those
+    // textures are never touched by evict_scope and only released by
+    // evict() or clearCache().
+
+    /// Set the scope tag applied to all subsequently loaded textures.
+    /// Pass "" to revert to the permanent (un-scoped) default.
+    void set_scope(std::string scope) noexcept;
+
+    /// Return the currently active scope tag.
+    [[nodiscard]] const std::string& current_scope() const noexcept
+    {
+        return current_scope_;
+    }
+
+    /// Release all GPU textures whose scope matches `scope`.
+    ///
+    /// Safe to call while no scene is attached to the renderer
+    /// (immediately after SDLRenderer::SetScene(nullptr, k_null_handle)).
+    /// SDL3 GPU defers GPU-side release until all in-flight work completes.
+    ///
+    /// No-op if no textures carry the requested scope.
+    void evict_scope(std::string_view scope) noexcept;
+
+    /// Return the number of textures currently tagged with `scope`.
+    [[nodiscard]] std::size_t scope_size(std::string_view scope) const noexcept;
+
     // ---- Sampler ---------------------------------------------------------
 
     /// Bilinear, clamp-to-edge sampler shared by all images.
@@ -153,6 +202,21 @@ private:
 
     // Prepended to relative paths in ensureTexture() — set via setBasePath().
     std::string base_path_;
+
+    // ---- Scope tracking --------------------------------------------------
+    //
+    // current_scope_  — applied to every new cache entry created by
+    //                   ensureTexture().  Empty = permanent (never evicted
+    //                   by evict_scope).
+    //
+    // entry_scopes_   — parallel map: path → scope.  Kept in sync with
+    //                   cache_ so evict_scope() can find all candidates in
+    //                   O(entries-in-scope) without scanning the full cache.
+    //                   Only entries with a non-empty scope are stored here;
+    //                   permanent entries have no entry_scopes_ record.
+
+    std::string current_scope_;
+    std::unordered_map<std::string, std::string> entry_scopes_;  // path → scope
 };
 
 } // namespace pce::sdlos

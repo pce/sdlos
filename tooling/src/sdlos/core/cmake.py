@@ -63,7 +63,7 @@ def cmake_snippet(
                      to append after the app registration block.
     """
     src_base = f"examples/apps/{name}"
-    data_base = f"examples/data/{name}"
+    data_base = f"examples/apps/{name}/data"
     lines = [
         f"sdlos_jade_app({name}",
         f"    {src_base}/{name}.jade",

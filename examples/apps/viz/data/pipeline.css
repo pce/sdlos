@@ -1,0 +1,73 @@
+/* =============================================================================
+   viz/data/pipeline.css  —  CSS rules for the viz render pipeline
+   Loaded by FrameGraph::apply_css() after pipeline.pug is parsed.
+
+   Selectors target pass ids directly:
+     #bg    { ... }      ← bucket-C params for the background pass
+     #grade { ... }      ← bucket-C params for the color-grade pass
+
+   Scoped rules apply only when the pipeline root has the matching class:
+     pipeline.night #grade { ... }   ← active when class "night" is set
+     pipeline.low-power #grade { ... } ← active on low-power event
+
+   EventBus wiring (see viz_behavior.cxx):
+     bus.publish("theme:add",    "night")       → add_class("night", ...)
+     bus.publish("theme:remove", "night")       → remove_class("night", ...)
+     bus.publish("quality:low",  "")            → disables grade pass
+   ============================================================================= */
+
+/* ── Base styles ──────────────────────────────────────────────────────────── */
+
+#bg {
+    scale: 1.5;
+    speed: 0.4;
+    time:  0.0;
+}
+
+#grade {
+    enabled:    true;
+    exposure:   1.0;
+    gamma:      2.2;
+    saturation: 1.05;
+}
+
+/* ── Night theme ──────────────────────────────────────────────────────────── */
+/* Applied when bus.publish("theme:add", "night") is called.                  */
+/* Darker, cooler tones; slightly desaturated for a cinematic feel.           */
+
+pipeline.night #bg {
+    scale: 1.2;
+    speed: 0.2;
+}
+
+pipeline.night #grade {
+    enabled:    true;
+    exposure:   0.75;
+    gamma:      2.4;
+    saturation: 0.85;
+}
+
+/* ── Low-power mode ───────────────────────────────────────────────────────── */
+/* Applied by bus.publish("quality:low", "").                                  */
+/* Disables the grade pass entirely — zero fragment work, zero GPU cost.       */
+
+pipeline.low-power #grade {
+    enabled: false;
+}
+
+pipeline.low-power #bg {
+    speed: 0.15;
+}
+
+/* ── Vivid theme ──────────────────────────────────────────────────────────── */
+
+pipeline.vivid #bg {
+    scale: 2.0;
+    speed: 0.6;
+}
+
+pipeline.vivid #grade {
+    exposure:   1.15;
+    gamma:      2.0;
+    saturation: 1.4;
+}

@@ -1,109 +1,68 @@
 #include "virtual_file_system.hh"
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <stdexcept>
-#include <mutex>
+
+#include <iostream>
 
 namespace pce::sdlos {
 
-VirtualFileSystem::VirtualFileSystem(const std::string& root) : root_path(root) {
-    if (!std::filesystem::exists(root_path)) {
-        std::filesystem::create_directories(root_path);
-    }
+VirtualFileSystem::VirtualFileSystem() {}
+
+void VirtualFileSystem::mount(std::string scheme, std::filesystem::path real_root)
+{
+    vfs_.mount_local(std::move(scheme), std::move(real_root));
 }
 
-bool VirtualFileSystem::isPathSafe(const std::string& path) const {
-    if (path.empty() || path.find("..") != std::string::npos) {
+void VirtualFileSystem::mount(std::string scheme,
+                              std::unique_ptr<pce::vfs::IMount> impl)
+{
+    vfs_.mount(std::move(scheme), std::move(impl));
+}
+
+bool VirtualFileSystem::createFile(std::string_view path, std::string_view content)
+{
+    const auto result = vfs_.write_text(path, content);
+    if (!result) {
+        std::cerr << "[vfs] createFile: " << result.error() << "\n";
         return false;
     }
-
-    std::filesystem::path real_path = std::filesystem::absolute(path);
-    std::filesystem::path root = std::filesystem::absolute(root_path);
-
-    return real_path.string().find(root.string()) == 0;
+    return true;
 }
 
-std::string VirtualFileSystem::getRealPath(const std::string& virtual_path) const {
-    std::lock_guard<std::mutex> lock(fs_mutex);
-    if (!isPathSafe(virtual_path)) {
-        throw std::runtime_error("Invalid path: " + virtual_path);
-    }
-    return root_path + "/" + virtual_path;
-}
-
-bool VirtualFileSystem::createFile(const std::string& path, const std::string& content) {
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        std::filesystem::path full_path = getRealPath(path);
-        std::filesystem::create_directories(full_path.parent_path());
-
-        std::ofstream file(full_path);
-        if (file.is_open()) {
-            file << content;
-            file.close();
-            return true;
-        }
-        return false;
-    } catch (const std::exception&) {
+bool VirtualFileSystem::createDirectory(std::string_view path)
+{
+    const auto result = vfs_.mkdir(path);
+    if (!result) {
+        std::cerr << "[vfs] createDirectory: " << result.error() << "\n";
         return false;
     }
+    return true;
 }
 
-bool VirtualFileSystem::createDirectory(const std::string& path) {
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        std::filesystem::create_directories(getRealPath(path));
-        return true;
-    } catch (const std::exception&) {
+bool VirtualFileSystem::deleteFile(std::string_view path)
+{
+    const auto result = vfs_.remove(path);
+    if (!result) {
+        std::cerr << "[vfs] deleteFile: " << result.error() << "\n";
         return false;
     }
+    return true;
 }
 
-std::string VirtualFileSystem::readFile(const std::string& path) {
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        std::ifstream file(getRealPath(path));
-        if (file.is_open()) {
-            std::stringstream buffer;
-            buffer << file.rdbuf();
-            file.close();
-            return buffer.str();
-        }
-        return "";
-    } catch (const std::exception&) {
-        return "";
-    }
+std::string VirtualFileSystem::readFile(std::string_view path)
+{
+    // Silently returns "" on miss — callers use readFile() for existence probes.
+    // Use vfs_.read_text() directly when distinguishing missing vs. error matters.
+    const auto result = vfs_.read_text(path);
+    return result ? *result : std::string{};
 }
 
-bool VirtualFileSystem::deleteFile(const std::string& path) {
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        return std::filesystem::remove(getRealPath(path));
-    } catch (const std::exception&) {
-        return false;
-    }
+std::vector<std::string> VirtualFileSystem::listDirectory(std::string_view path)
+{
+    return vfs_.list(path);
 }
 
-bool VirtualFileSystem::exists(const std::string& path) {
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        return std::filesystem::exists(getRealPath(path));
-    } catch (const std::exception&) {
-        return false;
-    }
-}
-
-std::vector<std::string> VirtualFileSystem::listDirectory(const std::string& path) {
-    std::vector<std::string> result;
-    try {
-        std::lock_guard<std::mutex> lock(fs_mutex);
-        for (const auto& entry : std::filesystem::directory_iterator(getRealPath(path))) {
-            result.push_back(entry.path().filename().string());
-        }
-    } catch (const std::exception&) {
-    }
-    return result;
+bool VirtualFileSystem::exists(std::string_view path)
+{
+    return vfs_.exists(path);
 }
 
 } // namespace pce::sdlos

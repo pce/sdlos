@@ -8,9 +8,11 @@ Entry point (registered in pyproject.toml):
 
 Commands
 --------
-  sdlos create <name>   — scaffold a new jade app
-  sdlos templates       — list available scaffold templates
-  sdlos version         — print tooling version
+  sdlos create   <name>    — scaffold a new jade app from a template
+  sdlos run      <name>    — build and launch a jade app (with optional watch)
+  sdlos pipeline [target]  — visualise a pipeline.pug render pipeline
+  sdlos templates          — list available scaffold templates
+  sdlos version            — print tooling version
 
 Examples
 --------
@@ -20,6 +22,18 @@ Examples
   sdlos create mycam --template camera --data-dir --with-model assets/Cluster.glb
   sdlos create myapp --config tooling/config/app.yaml --dry-run
   sdlos create myapp --no-interactive   # CI / scripting — no prompts at all
+
+  sdlos run calc                        # build + launch (incremental)
+  sdlos run calc --watch                # build + launch + auto-rebuild on change
+  sdlos run calc --clean                # --clean-first rebuild, then launch
+  sdlos run calc --build-dir ../mybuild # explicit cmake binary dir
+  sdlos run calc --no-build             # skip build, just launch
+
+  sdlos pipeline                        # auto-detect pipeline.pug from cwd
+  sdlos pipeline viz                    # by app name
+  sdlos pipeline data/pipeline.pug      # explicit path
+  sdlos pipeline viz --watch            # live-reload on file change
+  sdlos pipeline viz --no-params        # compact view, omit Bucket-C params
 """
 from __future__ import annotations
 
@@ -32,13 +46,24 @@ import click
 from . import __version__
 from .config.schema import AppConfig
 from .core.cmake import find_project_root
+from .core.console import console, print_banner
 from .core.naming import validate_name
 from .templates.renderer import list_available
+from .commands.run import run_app
+from .commands.pipeline import cmd_pipeline
+from .commands.analyze import cmd_analyze
 
 
 def _is_tty() -> bool:
     """Return True when both stdin and stdout are connected to a terminal."""
     return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+def _resolve_build_dir(build_dir: Optional[Path], project_root: Path) -> Path:
+    """Return the cmake binary directory, defaulting to <project_root>/build."""
+    return (build_dir or project_root / "build").resolve()
 
 
 # ── Root group ────────────────────────────────────────────────────────────────
@@ -51,6 +76,10 @@ def _is_tty() -> bool:
 def main(ctx: click.Context) -> None:
     """sdlos jade-app scaffolding and release tooling."""
     if ctx.invoked_subcommand is None:
+        print_banner(
+            "sdlos tooling",
+            subtitle=f"v{__version__}  ·  create · run · pipeline · analyze · templates",
+        )
         click.echo(ctx.get_help())
 
 
@@ -59,7 +88,9 @@ def main(ctx: click.Context) -> None:
 @main.command("version")
 def cmd_version() -> None:
     """Print the sdlos tooling version and exit."""
-    click.echo(f"sdlos-tooling {__version__}")
+    console.print(
+        f"[bold white]sdlos-tooling[/]  [cyan]{__version__}[/]"
+    )
 
 
 # ── sdlos templates ───────────────────────────────────────────────────────────
@@ -69,11 +100,121 @@ def cmd_templates() -> None:
     """List available scaffold templates."""
     available = list_available()
     if not available:
-        click.echo("No templates found.")
+        console.print("[yellow]No templates found.[/]")
         return
-    click.echo("Available templates:")
+    console.print("\n[bold]Available templates[/]")
     for name in available:
-        click.echo(f"  {name}")
+        console.print(f"  [bold cyan]{name}[/]")
+    console.print()
+
+
+# ── sdlos pipeline ────────────────────────────────────────────────────────────
+
+main.add_command(cmd_pipeline)
+main.add_command(cmd_analyze)
+
+# ── sdlos run ─────────────────────────────────────────────────────────────────
+
+@main.command("run")
+@click.argument("name", metavar="NAME")
+@click.option(
+    "--build-dir", "-b",
+    type=click.Path(path_type=Path),
+    default=None, metavar="DIR",
+    help="cmake binary directory [default: <project-root>/build].",
+)
+@click.option(
+    "--clean",
+    is_flag=True, default=False,
+    help="Pass --clean-first to cmake (full recompile, no dep re-fetch).",
+)
+@click.option(
+    "--watch", "-w",
+    is_flag=True, default=False,
+    help="Watch app sources and rebuild + relaunch on every file change.",
+)
+@click.option(
+    "--jobs", "-j",
+    type=int, default=None, metavar="N",
+    help="Parallel build jobs (-j N). Default: cmake decides.",
+)
+@click.option(
+    "--no-build",
+    is_flag=True, default=False,
+    help="Skip the cmake build step and jump straight to launching.",
+)
+@click.option(
+    "--quiet", "-q",
+    is_flag=True, default=False,
+    help="Suppress sdlos-tooling status lines (cmake output is unaffected).",
+)
+@click.option(
+    "--reconfigure", "-r",
+    is_flag=True, default=False,
+    help=(
+        "Re-run cmake configure before building.  "
+        "Use this after `sdlos create` on an already-configured build "
+        "so the new <name>.cmake is picked up by the root glob.  "
+        "Configure also runs automatically when the build dir is absent "
+        "or contains no CMakeCache.txt."
+    ),
+)
+@click.option(
+    "--preset",
+    default=None, metavar="PRESET",
+    help=(
+        "cmake preset name to use during configure "
+        "(e.g. macos-debug, macos-release).  "
+        "Runs `cmake --preset PRESET` instead of `cmake -B <dir> -S .`.  "
+        "Only used when a configure step actually runs."
+    ),
+)
+def cmd_run(
+    name: str,
+    build_dir: Optional[Path],
+    clean: bool,
+    watch: bool,
+    jobs: Optional[int],
+    no_build: bool,
+    quiet: bool,
+    reconfigure: bool,
+    preset: Optional[str],
+) -> None:
+    """Build and launch the jade app NAME.
+
+    NAME must be the snake_case app name used when the app was created.
+
+    \b
+    Examples
+    --------
+      sdlos run calc                           incremental build + launch
+      sdlos run calc --watch                   rebuild + relaunch on source change
+      sdlos run calc --clean                   cmake --clean-first, then launch
+      sdlos run calc --reconfigure             re-configure then build (after sdlos create)
+      sdlos run calc --reconfigure --preset macos-debug
+      sdlos run calc --build-dir ../out        use an explicit cmake binary dir
+      sdlos run calc --no-build                skip build, just launch
+      sdlos run calc -j 8 --watch              parallel build in watch loop
+    """
+    root_dir = find_project_root(Path.cwd())
+
+    try:
+        run_app(
+            name=name,
+            project_root=root_dir,
+            build_dir=_resolve_build_dir(build_dir, root_dir),
+            clean=clean,
+            watch=watch,
+            jobs=jobs,
+            no_build=no_build,
+            quiet=quiet,
+            reconfigure=reconfigure,
+            preset=preset,
+        )
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise click.ClickException(str(exc)) from exc
 
 
 # ── sdlos create ─────────────────────────────────────────────────────────────
@@ -83,11 +224,11 @@ def cmd_templates() -> None:
 # ── Template ──────────────────────────────────────────────────────────────────
 @click.option(
     "--template", "-t",
-    type=click.Choice(["minimal", "shader", "camera"]),
+    type=click.Choice(["minimal", "shader", "camera", "pug", "vfs", "scene3d"]),
     default="minimal",
     show_default=True,
     metavar="TMPL",
-    help="Starter template: minimal | shader | camera.",
+    help="Starter template: minimal | shader | camera | pug | vfs | scene3d.",
 )
 # ── Window ────────────────────────────────────────────────────────────────────
 @click.option(
@@ -112,6 +253,15 @@ def cmd_templates() -> None:
     "--with-model",
     default=None, metavar="PATH",
     help="Copy a .glb/.gltf file into data/models/ during scaffold.",
+)
+@click.option(
+    "--app-dir",
+    default=None, metavar="DIR",
+    help=(
+        "Base directory for the generated app folder.  "
+        "The app lands at <DIR>/<name>.  "
+        "Default: examples/apps/<name> inside the project root."
+    ),
 )
 
 # ── Safety ───────────────────────────────────────────────────────────────────
@@ -160,6 +310,7 @@ def cmd_create(
     win_h: Optional[int],
     data_dir: bool,
     with_model: Optional[str],
+    app_dir: Optional[str],
     overwrite: bool,
     dry_run: bool,
     interactive: Optional[bool],
@@ -178,6 +329,9 @@ def cmd_create(
       minimal   empty jade_app_init stub with TODO markers
       shader    shader canvas + preset sidebar + +/- param controls
       camera    live video canvas + filter chips + dragnum inputs
+      pug       FrameGraph pipeline demo (pipeline.pug + CSS + Metal shaders + HUD)
+      vfs       VFS explorer + audio player (MemMount, LocalMount, SDL3 audio)
+      scene3d   glTF model viewer + floating labels + orbit camera
 
     \b
     Examples
@@ -187,6 +341,8 @@ def cmd_create(
       sdlos create viz  --template shader           prompts for window + data
       sdlos create mycam --template camera --data-dir --no-interactive
       sdlos create myapp --config tooling/config/app.yaml --dry-run
+      sdlos create myvis --template pug             FrameGraph demo, data/ forced
+      sdlos create myapp --app-dir ~/projects/apps  custom output directory
     """
     # ── Decide whether to run interactive prompts ─────────────────────────────
     # Explicit --interactive / --no-interactive always wins.
@@ -214,12 +370,14 @@ def cmd_create(
             win_w=win_w,
             win_h=win_h,
             data_dir=_pinned_data_dir,
+            app_dir=app_dir,
         )
-        name     = resolved["name"]
+        name      = resolved["name"]
         _template = resolved["template"]
-        win_w    = resolved["win_w"]
-        win_h    = resolved["win_h"]
-        data_dir = resolved["data_dir"]
+        win_w     = resolved["win_w"]
+        win_h     = resolved["win_h"]
+        data_dir  = resolved["data_dir"]
+        app_dir   = resolved["app_dir"]
 
     elif not name:
         # Non-interactive and no name → must have it from --config or fail.
@@ -240,6 +398,7 @@ def cmd_create(
             overwrite=overwrite,
             dry_run=dry_run,
             with_model=with_model,
+            app_dir=app_dir,
             config_path=config,
         )
     except (ValueError, KeyError) as exc:

@@ -37,7 +37,7 @@ class TestCmakeSnippet:
 
     def test_with_data_dir(self):
         s = cmake_snippet("myapp", 1280, 800, has_data=True)
-        assert "DATA_DIR examples/data/myapp" in s
+        assert "DATA_DIR examples/apps/myapp/data" in s
 
     def test_closes_with_paren(self):
         s = cmake_snippet("calc", 800, 600, has_data=False)
@@ -56,7 +56,7 @@ class TestCmakeSnippet:
 
     def test_extra_resources(self):
         extras = [
-            'sdlos_copy_resource_to(foo "examples/data/foo/models/a.glb" "data/models/a.glb")',
+            'sdlos_copy_resource_to(foo "examples/apps/foo/data/models/a.glb" "data/models/a.glb")',
         ]
         s = cmake_snippet("foo", 800, 600, has_data=True, extra_resources=extras)
         assert "sdlos_copy_resource_to" in s
@@ -105,7 +105,7 @@ class TestWriteAppCmake:
         assert "sdlos_jade_app(my_app" in text
         assert "WIN_W 1280"            in text
         assert "WIN_H 720"             in text
-        assert "DATA_DIR"              in text
+        assert "DATA_DIR examples/apps/my_app/data" in text
 
     def test_cmake_file_ends_with_newline(self, tmp_path: Path) -> None:
         app_dir = tmp_path / "my_app"
@@ -143,7 +143,7 @@ class TestWriteAppCmake:
     def test_extra_resources_in_file(self, tmp_path: Path) -> None:
         app_dir = tmp_path / "my_app"
         app_dir.mkdir()
-        extras = ['sdlos_copy_resource_to(my_app "examples/data/my_app/models/cube.glb" "data/models/cube.glb")']
+        extras = ['sdlos_copy_resource_to(my_app "examples/apps/my_app/data/models/cube.glb" "data/models/cube.glb")']
         snippet = cmake_snippet("my_app", 800, 600, True, extra_resources=extras)
         write_app_cmake(app_dir, snippet, _cfg("my_app"))
         text = (app_dir / "my_app.cmake").read_text()

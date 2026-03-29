@@ -3,8 +3,43 @@
 :toclevels: 2
 
 C++23 / SDL3 GPU framework for building native applications with a declarative
-scene graph, CSS-driven styling, and a Jade-like UI description language.
+scene graph, CSS-driven styling, and a Jade-like **retained-mode** UI description language.
 Not a browser. Not Electron. A render tree that runs directly on the GPU.
+
+
+
+== Design Principles
+
+The render tree is data-oriented, not a classical node hierarchy. Three
+structural choices make every pass fast and predictable.
+
+
+Clean up Contract: Zombie Preventation => no stale pointers, no GPU crashes, no zombies.
+
+
+*SoA over AoS* — layout and style data live in flat arrays, not per-node fields:
+
+[source,cpp]
+----
+struct LayoutData { std::vector<float> width, height; };
+struct StyleData  { std::vector<Color> color; /* … */ };
+----
+
+*Linear traversal* — passes iterate a pre-computed flat order; no recursion:
+
+[source,cpp]
+----
+for (uint32_t i = 0; i < node_count; ++i) { process(i); }
+----
+
+SIMD-friendly, branch-predictor-friendly, trivially parallelisable by splitting
+the array into per-thread chunks — no locks when data is partitioned by pass.
+
+*Pass-oriented* — the unit of optimisation is the pass, not the node:
+
+....
+[style pass] → [layout pass] → [paint pass]
+....
 
 Three boot targets from one codebase:
 
@@ -78,8 +113,27 @@ The traversal picks this up immediately — no fixpoint loop, O(n).
 `flexLayout` scratch span (`std::span<RenderNode*>`) is allocated from the
 `frame_arena` per call — zero heap traffic during layout.
 
-*Tradeoff 1 — no size-to-content:* parent dimensions must be known before
-children are laid out. Children cannot push a parent's size.
+*Tradeoff 1* — no size-to-content (<<tradeoffs>>).
+
+*Dirty propagation is root-wide in practice:* `markLayoutDirty(h)` walks
+upward and sets `dirty_layout` on every ancestor up to the root.
+Because the root is always marked dirty, the preorder traversal in `update()`
+re-runs `resolveLayout()` on the full tree every frame a change occurs.
+The flag infrastructure supports subtree-bounded re-layout — it is not yet
+exploited.
+
+*External layout engines (Yoga, Clay):* worth the dependency cost when
+`flex-shrink` or content-driven sizing is required. When crossing a C-API
+boundary, batch the whole tree in one call — per-node crossings kill
+inlining and optimizer visibility.
+
+*Physics as layout:* makes sense only when elements must physically collide
+(game inventory, physics playground). For fling, overscroll, and transitions
+seed `spring_vel` from gesture velocity — no collision detection needed.
+
+*Grid requires two passes:* track sizing needs item sizes before placement,
+but placement depends on track sizes. The single-pass cascade cannot satisfy
+this bidirectional dependency. Reserved for a later phase.
 
 ---
 
@@ -134,13 +188,9 @@ exactly what the stylesheet declared, not whatever the behavior may have set.
 `buildActive()` scans children of every node carrying a `toggle-group`
 attribute and wires `:active` rules as a radio group.
 
-*Tradeoff 2 — CSS applied once at load:* `applyTo()` is not called
-automatically when new nodes are added after load. Nodes inserted dynamically
-must have styles set manually via `setStyle()` or a second `applyTo()` call.
+*Tradeoff 2* — CSS applied once at load (<<tradeoffs>>).
 
-*Tradeoff 3 — no cascade, no inheritance, no `var()`, no `@media`:*
-styles are flat key-value on each node.
-A property set on a parent does not propagate to children.
+*Tradeoff 3* — no cascade, no inheritance, no `var()` (<<tradeoffs>>).
 
 ---
 
@@ -182,10 +232,7 @@ interval-ms / ontick  → update() callback → bus.publish(ontick, "")
 onreveal              → fires once on first update()
 ....
 
-*Tradeoff 4 — EventBus subscriptions outlive nodes:* removing a node from the
-tree does not cancel its `bus.subscribe()` callbacks.
-The closures capture `shared_ptr<AppState>` so there is no crash, but dead
-entries are never pruned from the bus.
+*Tradeoff 4* — EventBus subscriptions outlive nodes (<<tradeoffs>>).
 
 ---
 
@@ -249,8 +296,7 @@ struct NodeShaderParams {   // 8 × float32 = 32 bytes
 Shader entry point is always `main0`.
 The `_shader_param0..2` style keys map to `u_param0..2`.
 
-*Tradeoff 5 — fixed 8-float uniform interface:* shaders cannot receive more
-than 8 parameters without changing `NodeShaderParams` and all pipelines.
+*Tradeoff 5* — fixed 8-float shader uniforms (<<tradeoffs>>).
 
 Reference shader apps in `examples/apps/cam/` and `examples/apps/shade/`
 demonstrate the full Metal + GLSL + WGSL implementations of tilt-blur,
@@ -292,12 +338,7 @@ renderer.setScene3DHook(
 renderer.setGpuPreShutdownHook([]() noexcept { g_scene.shutdown(); });
 ----
 
-*Tradeoff 6 — pre-shutdown hook is required when `GltfScene` has static
-storage duration.* SDL's Metal backend destroys textures during
-`SDL_DestroyGPUDevice`. If `GltfScene` outlives the device, its destructor
-races the Metal cleanup and segfaults. See `architecture.md §App State and
-GltfScene Lifecycle` for the `shared_ptr<AppState>` alternative that sidesteps
-this entirely.
+*Tradeoff 6* — `GltfScene` shutdown ordering (<<tradeoffs>>).
 
 ---
 
@@ -318,8 +359,7 @@ box.focus();
 
 == Custom Containers
 
-All four containers live in `src/core/` and are used throughout the engine.
-They exist to fill gaps in what Apple Clang's libc++ ships with today.
+All four containers live in `src/core/` and serve the engine's hot paths.
 
 [cols="1,2,3",options="header"]
 |===
@@ -337,8 +377,9 @@ They exist to fill gaps in what Apple Clang's libc++ ships with today.
   Used in `flexLayout` scratch spans and text-renderer upload queues.
 
 | `small_flat_map<K,V,N=8>`
-| `std::flat_map` _(C++23, not yet in LLVM libc++)_
-| Sorted pairs. N entries inline on the stack; spills to heap beyond N.
+| `std::flat_map` (C++23)
+| N pairs inline on the stack; spills to heap beyond N.
+  `std::flat_map` provides no inline storage — even a 1-entry map heap-allocates.
   Used in `RenderContext::pipelines` and `StyleMap`.
 
 | `small_vector<T,N>`
@@ -346,11 +387,6 @@ They exist to fill gaps in what Apple Clang's libc++ ships with today.
 | N elements inline; heap spill on overflow.
   Used in widget state and various scratch collections.
 |===
-
-`std::flat_map` is available in the C++23 standard but was not shipped in
-Apple Clang / LLVM libc++ at the time these containers were written.
-`small_flat_map` and `small_vector` will be replaced with their standard
-equivalents once the toolchain catches up.
 
 ---
 
@@ -367,13 +403,20 @@ equivalents once the toolchain catches up.
 Metal and SPIR-V source files are maintained separately.
 There is no shader transpiler in the pipeline.
 
-*Tradeoff 7 — dual shader maintenance:* each shader effect requires two
-implementations (`.metal` + `.glsl`/`.wgsl`). Adding a backend does not
-require C++ changes — drop the compiled `.spv` files next to the `.metal`
-sources and the loader picks the right one at startup.
+*Tradeoff 7* — dual shader maintenance (<<tradeoffs>>).
 
 PBR mesh shaders are engine-level resources placed by
 `sdlos_copy_resource_to(sdlos_engine …)` at build time, not per-app.
+
+== GPU Layout _(planned)_
+
+BFS level-synchronisation makes layout GPU-parallel: nodes at the same depth
+are independent and dispatch together, one barrier per depth level (6–10 for
+a typical UI tree). A _speculative layout layer_ — a position cache with a
+confidence score — sits between the UI and the layout engine, predicting
+positions from content heuristics before assets finish loading; `spring_tick`
+smooths any correction. See `architecture.md §GPU Layout` for the design.
+
 
 ---
 
@@ -387,7 +430,7 @@ scene. Source code and runtime assets live in separate trees:
 sdlos_jade_app(myapp
     examples/apps/myapp/myapp.jade
     BEHAVIOR examples/apps/myapp/myapp_behavior.cxx
-    DATA_DIR examples/data/myapp
+    DATA_DIR examples/apps/myapp/data
     WIN_W 1280  WIN_H 800)
 ----
 
@@ -406,7 +449,7 @@ sdlos_jade_app(myapp
 
 | `DATA_DIR`
 | `POST_BUILD copy_directory`
-| `examples/data/<name>/` lands at `<binary_dir>/data/`.
+| `examples/apps/<name>/data/` lands at `<binary_dir>/data/`.
   Loaded at runtime via `SDL_GetBasePath() + "data/"`.
 
 | `WIN_W / WIN_H`
@@ -415,8 +458,7 @@ sdlos_jade_app(myapp
   Release builds are always `SDL_WINDOW_FULLSCREEN`.
 |===
 
-*Tradeoff 8 — window size is compile-time:* `WIN_W` / `WIN_H` are baked into
-the binary. Changing the debug window size requires a rebuild.
+*Tradeoff 8* — window size is compile-time (<<tradeoffs>>).
 
 The root `CMakeLists.txt` auto-discovers apps via:
 
@@ -431,7 +473,7 @@ endforeach()
 To register an app: create it. To remove an app: delete its directory.
 No shared file is ever edited by either operation.
 
-By desgin no dynamic loading or linking tricks, instead we a replace a NOOP with Behavior at compile time.
+By design: no dynamic loading or linking. The behavior is `#include`d at compile time — replacing a no-op stub with the app's real code, zero linker seams.
 
 ---
 
@@ -445,31 +487,93 @@ Install once from `tooling/`:
 cd tooling && uv sync
 ----
 
+.Onomatopoeia
+====
+The book hit the floor with a *thud*.
+
+He could hear doves *cooing* in the pine trees`' branches.
+====
+
+
 [source,sh]
 ----
-# fully interactive on a TTY (default)
-sdlos create
+cd tooling
 
-# supply the name, prompt for the rest
-sdlos create my_viz
+uv run sdlos create pug --template pug
+uv run sdlos run pug --reconfigure
+uv run sdlos run pug
+uv run sdlos run pug --watch
 
-# fully non-interactive — CI / scripts
-sdlos create my_viz --template shader --no-interactive
 ----
 
-A create run writes four files and nothing else:
+.create and reconfigure once
+====
 
+first time: re-configures so CMake globs and picks up ${app_name}.cmake
+
+====
+
+
+[%collapsible]
 ....
-examples/apps/<name>/<name>.jade
-examples/apps/<name>/<name>.css
-examples/apps/<name>/<name>_behavior.cxx
-examples/apps/<name>/<name>.cmake      ← self-registers via the root glob
+➜  uv run sdlos create pug --template pug
 
-examples/data/<name>/                  ← when --data-dir / interactive yes
-    shaders/msl/
-    shaders/spirv/
-    img/
-    models/
+  App name  : pug
+  Template  : pug
+? Window size: Fullscreen        — release always, debug uses display size
+? Scaffold data/ directory?  (shaders · fonts · models · images) Yes
+
+╭─────────────────────────────────────────────────────────╮
+│                      sdlos create                       │
+│      template: pug  ·  fullscreen / engine default      │
+╰─────────────────────────────────────────────────────────╯
+
+  name      :  pug  (Pug)
+  template  :  pug
+  window    :  fullscreen / engine default
+  source    :  /examples/apps/pug
+  data      :  /examples/apps/pug/data
+  [mkdir]  examples/apps/pug/data/  (shaders/msl, shaders/spirv, img, models)
+  [create]  examples/apps/pug/data/.gitignore
+  [create]  examples/apps/pug/data/img/.gitignore
+  [create]  examples/apps/pug/data/models/.gitignore
+  [create]  examples/apps/pug/data/shaders/.gitignore
+  [create]  examples/apps/pug/data/shaders/spirv/.gitignore
+  [create]  examples/apps/pug/data/pipeline.pug
+  [create]  examples/apps/pug/data/pipeline.css
+  [create]  examples/apps/pug/data/shaders/msl/fullscreen.vert.metal
+  [create]  examples/apps/pug/data/shaders/msl/bg.frag.metal
+  [create]  examples/apps/pug/data/shaders/msl/vignette.frag.metal
+  [create]  examples/apps/pug/data/shaders/msl/grade.frag.metal
+  [create]  pug.jade
+  [create]  pug.css
+  [create]  pug_behavior.cxx
+  [create]  pug.cmake
+
+╭──────────────────────── Done ────────────────────────╮
+│   ✓  pug  scaffolded successfully                    │
+│                                                      │
+│   Next steps                                         │
+│     Add shaders/assets to  examples/apps/pug/data/   │
+│     cmake --build build --target pug                 │
+│     sdlos run pug                                    │
+│                                                      │
+╰──────────────────────────────────────────────────────╯
+
+➜  uv run sdlos run pug --reconfigure
+
+sdlos run  pug
+  build dir: /build
+  [configure] --reconfigure requested
+  [configure] cmake -B /build -S
+-- [sdlos] SDL3: using vendored copy at /deps/SDL3
+-- SDL3 was configured with the following options:
+--
+-- Platform: Darwin-25.3.0
+-- 64-bit:   TRUE
+-- Compiler: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc
+-- Revision: SDL-3
+
 ....
 
 [cols="1,3",options="header"]
@@ -482,20 +586,7 @@ examples/data/<name>/                  ← when --data-dir / interactive yes
              Interactive `data/` prompt defaults to *yes*.
 |===
 
-Window size is chosen from named presets in interactive mode:
-
-....
-● Fullscreen        — release always, debug uses display size
-  Phone portrait    375 × 667   (sdlos debug default)
-  Phone landscape   667 × 375
-  Tablet            768 × 1024
-  Desktop           1280 × 800
-  Wide              1920 × 1080
-  Square            800 × 800
-  Custom…
-....
-
-"Fullscreen" omits `WIN_W` / `WIN_H` from the cmake file entirely.
+Window size is chosen from named presets in interactive mode: "Fullscreen" omits `WIN_W` / `WIN_H` from the cmake file entirely.
 
 User code between the `--- enter the forrest ---` /
 `--- back to the sea ---` markers in generated files is preserved verbatim
@@ -516,7 +607,7 @@ when re-running `sdlos create --overwrite`.
 |===
 
 `cam` and `shade` carry no `.cmake` file and are invisible to the build.
-Their source and shader data (`examples/data/cam/`, `examples/data/shade/`)
+Their source and shader data (`examples/apps/cam/data/`, `examples/apps/shade/data/`)
 serve as reference while the generator is still being built out.
 
 ---
@@ -539,48 +630,63 @@ serve as reference while the generator is still being built out.
 . *Fixed 8-float shader uniforms* — `NodeShaderParams` is a fixed 32-byte
   struct. Custom shaders needing more parameters require an engine change.
 
-. *`jade_app_init` compiled in* — every app binary has exactly one source
-  file: `src/jade_host.cxx`. The behavior is `#include`d into it at compile
-  time via the `SDLOS_APP_BEHAVIOR` macro:
-+
-[source,cpp]
-----
-#ifdef SDLOS_APP_BEHAVIOR
-#  include SDLOS_APP_BEHAVIOR   // e.g. examples/apps/my_viz/my_viz_behavior.cxx
-#endif
-----
-+
-A behavior change therefore recompiles exactly *one* translation unit.
-`sdlos_engine` is a pre-built static library that is not touched.
-On a warm cache a full rebuild + relink of a single app takes a few seconds.
-+
-The tooling already knows the project root and target name, so a
-`sdlos run my_viz` command (build the target, relaunch the binary) is a
-natural next step — close enough to hot-reload for most iteration cycles.
-+
-True C++ hot-reload — patching a live process without restart — is a solved
-problem in open-source:
-+
---
-* https://github.com/fungos/cr[*cr.h*] — single header; compiles the behavior
-  to a `.dylib` / `.dll`, `dlopen`s the new version, and copies state across
-  via a plain struct. Requires pinning the behavior's state into one
-  explicitly-declared struct that survives the swap.
-* https://github.com/RuntimeCompiledCPlusPlus/RuntimeCompiledCPlusPlus[*RCCPP*]
-  — heavier; supports class hierarchies and virtual dispatch across the reload
-  boundary.
-* https://liveplusplus.tech/[*Live++*] / https://molecular-matters.com/[*Molecule*]
-  — commercial; patch the running process in-memory with no ABI restrictions.
---
-+
-The single-TU design is compatible with `cr.h`: the behavior file already
-compiles independently and owns its own state struct. Adding dylib output is
-a cmake option change, not a code change.
+. *`jade_app_init` compiled in* — one translation unit, `#include`d at
+  compile time via `SDLOS_APP_BEHAVIOR`. A behavior change recompiles exactly
+  one TU; on a warm cache that takes a few seconds.
+  `sdlos run my_viz` (build + relaunch) is the intended iteration loop.
+  True hot-reload via https://github.com/fungos/cr[cr.h] is compatible with
+  the single-TU design — adding dylib output is a cmake option change.
 
 . *Dual shader maintenance* — Metal + SPIR-V written separately.
 
 . *`GltfScene` shutdown ordering* — see §3D Scene above and
   `architecture.md §App State and GltfScene Lifecycle`.
+
+---
+
+[#tradeoffs]
+== Tradeoffs
+
+Deliberate design decisions with known downsides.
+
+[cols="1,1,3",options="header"]
+|===
+| # | Area | Description
+
+| 1 | Layout
+| *No size-to-content.* Parent dimensions must be known before children are
+  laid out. Children cannot push a parent's size.
+
+| 2 | CSS
+| *CSS applied once at load.* `applyTo()` is not called for dynamically
+  inserted nodes. Use `setStyle()` or call `applyTo()` again.
+
+| 3 | CSS
+| *No cascade, inheritance, `var()`, or `@media`.* Styles are flat key-value
+  per node. A parent property does not propagate to children.
+
+| 4 | JadeLite EventBus
+| *EventBus subscriptions outlive nodes.* `bus.subscribe()` callbacks are not
+  cancelled on node removal. Dead entries accumulate;
+  `shared_ptr<AppState>` prevents crashes. Don't Touch The Driver!
+
+| 5 | Shader Nodes
+| *Fixed 8-float uniform interface.* `NodeShaderParams` is 32 bytes.
+  More parameters require changing the struct and all pipelines.
+
+| 6 | 3D Scene
+| *`GltfScene` shutdown ordering.* A global `GltfScene` destructor races
+  SDL's GPU teardown. Use `setGpuPreShutdownHook` or move state into a
+  `shared_ptr<AppState>`. See `architecture.md §App State and GltfScene Lifecycle`.
+
+| 7 | GPU Backends
+| *Dual shader maintenance.* Every effect needs a `.metal` source and a
+  `.glsl`/`.wgsl` source. No transpiler in the pipeline.
+
+| 8 | Standalone App
+| *Window size is compile-time.* `WIN_W` / `WIN_H` are baked into the
+  binary. Debug window size changes require a rebuild.
+|===
 
 ---
 

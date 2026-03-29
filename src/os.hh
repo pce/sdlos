@@ -7,6 +7,7 @@
 #include "virtual_file_system.hh"
 #include "notification_system.hh"
 #include "i_file_system.hh"
+#include "vfs/vfs.hh"
 
 #include <SDL3/SDL.h>
 
@@ -64,8 +65,21 @@ public:
     [[nodiscard]] Desktop&            desktop()       { return desktop_;       }
     [[nodiscard]] AppCatalog&         catalog()       { return catalog_;       }
     [[nodiscard]] EventBus&           events()        { return events_;        }
-    [[nodiscard]] IFileSystem&        filesystem()    { return *fs_;           }
     [[nodiscard]] NotificationCenter& notifications() { return notifications_; }
+
+    /// Legacy IFileSystem interface — delegates to the "tmp" LocalMount.
+    ///
+    /// Prefer vfs() for new code — it provides scheme routing, binary IO,
+    /// and std::expected<T,E> error propagation.
+    [[nodiscard]] IFileSystem& filesystem() noexcept { return *fs_; }
+
+    /// Direct access to the underlying Vfs for scheme-routed URI IO.
+    ///
+    ///   os.vfs().read("scene://assets/audio/t-rex-roar.wav")
+    ///   os.vfs().write_text("tmp://log/session.txt", entry)
+    ///   os.vfs().mount_local("scene", jade_dir)
+    [[nodiscard]] pce::vfs::Vfs&       vfs() noexcept       { return fs_->vfs(); }
+    [[nodiscard]] const pce::vfs::Vfs& vfs() const noexcept { return fs_->vfs(); }
 
 private:
     // ---- Main-loop stages ------------------------------------------------
@@ -92,7 +106,9 @@ private:
 
     // VirtualFileSystem requires a root path — heap-allocated and
     // initialised in boot() once we know the path.
-    std::unique_ptr<IFileSystem> fs_;
+    // Stored as VirtualFileSystem (not IFileSystem) so vfs() can reach
+    // the underlying Vfs for scheme-routed IO without a static_cast.
+    std::unique_ptr<VirtualFileSystem> fs_;
 
     // ---- Active processes ------------------------------------------------
     // Only live (started) processes are stored here.

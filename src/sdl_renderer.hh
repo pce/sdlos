@@ -4,6 +4,7 @@
 #include "text_renderer.hh"
 #include "image_cache.hh"
 #include "video_texture.hh"
+#include "frame_graph/frame_graph.hh"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <memory>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,6 +55,43 @@ public:
 
     /// Returns true on success; the previous pipeline stays active on failure.
     bool ReloadShader(const std::string& shaderPath);
+
+    // FrameGraph (data-driven post-process pipeline) ─────────────────────────
+    //
+    // An optional render pipeline loaded from a `pipeline.pug` descriptor.
+    // When loaded, the FrameGraph replaces the built-in FBM wallpaper pass and
+    // drives the scene through a compiled sequence of GPU render passes whose
+    // structure, shader variants, and float parameters are all CSS-addressable.
+    //
+    // Lifecycle:
+    //   1. Initialize(window)                          — creates GPU device
+    //   2. SetDataBasePath(path)                       — auto-loads pipeline.pug
+    //      OR LoadPipeline("data/pipeline.pug")        — explicit load
+    //   3. Every frame:  Render()                      — executes compiled graph
+    //   4. On CSS change: GetCompiledGraph()->apply_style(...)
+    //      On theme change: GetFrameGraph()->add_class(...)
+    //
+    // Zombie prevention
+    // -----------------
+    // CompiledGraph holds raw SDL_GPUTexture* pointers into the ResourcePool.
+    // After every window resize, Render() automatically calls
+    // FrameGraph::resize() followed by compile() BEFORE execute() runs —
+    // ensuring stale (freed) texture pointers are never accessed.
+    // The fg_compiled_w_/h_ dimensions track when a recompile is needed.
+
+    /// Load (or reload) a pipeline.pug file.
+    /// The file is parsed, resources are allocated, and the compiled graph is
+    /// deferred until the first Render() call when the swapchain format is known.
+    /// Returns false on parse/file error; the previous pipeline stays active.
+    bool LoadPipeline(std::string_view pug_path) noexcept;
+
+    /// Non-null after a successful LoadPipeline().
+    /// Use for CSS class mutations (add_class / remove_class) and wire_bus().
+    [[nodiscard]] fg::FrameGraph*    GetFrameGraph()    noexcept;
+
+    /// Non-null after the first successful compile (first Render() after load).
+    /// Use for per-frame param patches (apply_style / patch / set_enabled).
+    [[nodiscard]] fg::CompiledGraph* GetCompiledGraph() noexcept;
 
     [[nodiscard]] bool IsValid() const noexcept { return initialized_.load(); }
 
@@ -273,6 +312,29 @@ private:
     Scene3DHook scene3d_hook_;
 
     GpuPreShutdownHook gpu_pre_shutdown_hook_;
+
+    // -------------------------------------------------------------------------
+    // FrameGraph — optional data-driven render pipeline
+    //
+    // Ownership model:
+    //   frame_graph_   — owns ResourcePool (textures) + ShaderLibrary (PSOs)
+    //   compiled_graph_ — NON-OWNING view into frame_graph_'s resources;
+    //                     all pointers are raw and become dangling if the
+    //                     ResourcePool releases textures (e.g. on resize).
+    //
+    // Zombie prevention contract:
+    //   Render() checks fg_compiled_w_/h_ against the current swapchain size.
+    //   If they differ: frame_graph_->resize() + compile() run BEFORE execute().
+    //   This guarantees compiled_graph_ always holds live pointers.
+    // -------------------------------------------------------------------------
+    std::optional<fg::FrameGraph> frame_graph_;
+    fg::CompiledGraph             compiled_graph_;
+
+    bool                 fg_needs_compile_{false};     ///< set by LoadPipeline
+    uint32_t             fg_compiled_w_{0};            ///< swapchain w at last compile
+    uint32_t             fg_compiled_h_{0};            ///< swapchain h at last compile
+    SDL_GPUTextureFormat fg_swapchain_fmt_{            ///< swapchain fmt at last compile
+        SDL_GPU_TEXTUREFORMAT_INVALID};
 
     /// Load and compile a node shader pipeline on first use; cache the result.
     /// Returns nullptr on failure (and caches the failure so it is not retried).

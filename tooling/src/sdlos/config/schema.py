@@ -36,7 +36,7 @@ import yaml
 
 # ── Template identifiers ──────────────────────────────────────────────────────
 
-TEMPLATES = ("minimal", "shader", "camera")
+TEMPLATES = ("minimal", "shader", "camera", "pug", "vfs", "scene3d")
 
 
 # ── Config schema ─────────────────────────────────────────────────────────────
@@ -48,9 +48,31 @@ class AppConfig:
     """App name in snake_case (e.g. ``my_app``).  Becomes the CMake target."""
 
     template: str = "minimal"
-    """Starter template: ``minimal`` | ``shader`` | ``camera``."""
+    """Starter template: ``minimal`` | ``shader`` | ``camera`` | ``pug``."""
 
-    # ── Window ────────────────────────────────────────────────────────────────
+    # ── Output directory ──────────────────────────────────────────────────────
+    app_dir: Optional[str] = None
+    """Base directory for the generated app folder.
+
+    ``None`` (default) → ``<project-root>/examples/apps/<name>``.
+
+    Any other value is treated as the *parent* directory; the app lands at
+    ``<app_dir>/<name>``.  The directory (and any missing parents) is created
+    automatically.
+
+    Examples::
+
+        # default — lands in examples/apps/my_app/
+        app_dir = None
+
+        # custom — lands in /home/alice/projects/apps/my_app/
+        app_dir = "/home/alice/projects/apps"
+
+        # per-user convention — repo/<username>/apps/my_app/
+        app_dir = "pce/apps"
+    """
+
+    # ── Window ───────────────────────────────────────────────────────────────
     win_w: Optional[int] = None
     """Debug window width in logical pixels.  None → engine default (375)."""
 
@@ -94,6 +116,8 @@ class AppConfig:
                 f"Unknown template {self.template!r}. "
                 f"Choose from: {', '.join(TEMPLATES)}."
             )
+        if self.app_dir is not None and not self.app_dir:
+            raise ValueError("app_dir must be a non-empty string or None.")
         if self.win_w is not None and self.win_w < 1:
             raise ValueError("win_w must be a positive integer.")
         if self.win_h is not None and self.win_h < 1:
@@ -131,6 +155,7 @@ class AppConfig:
         overwrite: bool = False,
         dry_run: bool = False,
         with_model: Optional[str] = None,
+        app_dir: Optional[str] = None,
         config_path: Optional[Path] = None,
     ) -> "AppConfig":
         """Build an AppConfig from CLI arguments, optionally seeded from a
@@ -164,6 +189,8 @@ class AppConfig:
             base.data_dir = data_dir
         if with_model is not None:
             base.with_model = with_model
+        if app_dir is not None:
+            base.app_dir = app_dir
 
         return base
 

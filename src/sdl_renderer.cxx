@@ -375,6 +375,20 @@ void SDLRenderer::SetDataBasePath(const std::string& path) noexcept
     //   1. loadAppFonts() in jade_host (scans <jade_dir>/data/fonts/)
     //   2. SDLRenderer::SetFontPath() called explicitly from jade_host or a
     //      behaviour via the _font jade attribute on the root node.
+
+    // Auto-load pipeline.pug if present in the app's data/ directory.
+    // CMake copies DATA_DIR contents to <binary_dir>/data/, so the file lives
+    // at data_base_path_ + "data/pipeline.pug" at runtime.
+    // Non-fatal: the built-in FBM wallpaper is the fallback when absent.
+    const std::string pug_path = data_base_path_ + "data/pipeline.pug";
+    if (fs::exists(pug_path)) {
+        if (LoadPipeline(pug_path)) {
+            std::cout << "[SDLRenderer] pipeline.pug loaded from: " << pug_path << "\n";
+        } else {
+            std::cerr << "[SDLRenderer] pipeline.pug found but failed to load: "
+                      << pug_path << "\n";
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +421,89 @@ bool SDLRenderer::SetFontPath(const std::string& path, float pt_size) noexcept
     }
     std::cerr << "[SDLRenderer] SetFontPath: failed to load '" << full << "'\n";
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// LoadPipeline — parse and cache a pipeline.pug render pipeline.
+//
+// The FrameGraph is created from the pug source immediately.  The first
+// CompiledGraph build is deferred to the first Render() call so the
+// swapchain texture format is available.
+//
+// Calling this again (hot-reload) replaces the old FrameGraph atomically:
+// the old compiled_graph_ is cleared first (it holds only non-owning
+// pointers) and then frame_graph_ is replaced — ResourcePool and
+// ShaderLibrary destructor releases happen during the assignment.
+// ---------------------------------------------------------------------------
+bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept
+{
+    if (!device_) {
+        std::cerr << "[SDLRenderer] LoadPipeline: device not ready\n";
+        return false;
+    }
+
+    // Shader binaries live in data/shaders/<platform>/ alongside the other
+    // compiled assets.  CMake copies DATA_DIR to <binary_dir>/data/ so the
+    // full path is data_base_path_ + "data/shaders/<platform>/".
+    // This mirrors the convention used by ensureNodeShaderPipeline().
+    std::string shader_dir;
+    {
+        const char* platform_dir = "spv";
+        if (shader_format_ & SDL_GPU_SHADERFORMAT_MSL)        platform_dir = "msl";
+        else if (shader_format_ & SDL_GPU_SHADERFORMAT_DXIL)  platform_dir = "dxil";
+        shader_dir  = data_base_path_;
+        shader_dir += "data/shaders/";
+        shader_dir += platform_dir;
+        shader_dir += '/';
+    }
+
+    // Use the current window pixel size to pre-size swapchain resources.
+    // If the window isn't visible yet (size == 0,0) we pass zeros and the
+    // ResourcePool will defer texture creation until the first resize/compile.
+    int pw = 0, ph = 0;
+    if (sdl_window_)
+        SDL_GetWindowSizeInPixels(sdl_window_, &pw, &ph);
+
+    auto result = fg::FrameGraph::from_file(
+        pug_path,
+        device_,
+        shader_dir,
+        shader_format_,
+        static_cast<uint32_t>(pw),
+        static_cast<uint32_t>(ph));
+
+    if (!result) {
+        std::cerr << "[SDLRenderer] LoadPipeline failed: " << result.error() << "\n";
+        return false;
+    }
+
+    // Clear the old compiled graph (non-owning pointers — safe to discard).
+    // Then replace the FrameGraph; old ResourcePool + ShaderLibrary auto-release.
+    compiled_graph_ = {};
+    frame_graph_    = std::move(*result);
+
+    // Schedule a compile on the next Render() call when swapchain_fmt is known.
+    fg_needs_compile_ = true;
+    fg_compiled_w_    = 0;
+    fg_compiled_h_    = 0;
+    fg_swapchain_fmt_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+    SDL_Log("[SDLRenderer] LoadPipeline: %zu passes parsed from '%s'",
+            frame_graph_->passes().size(),
+            std::string(pug_path).c_str());
+    return true;
+}
+
+fg::FrameGraph* SDLRenderer::GetFrameGraph() noexcept
+{
+    return frame_graph_.has_value() ? &*frame_graph_ : nullptr;
+}
+
+fg::CompiledGraph* SDLRenderer::GetCompiledGraph() noexcept
+{
+    return (frame_graph_.has_value() && !compiled_graph_.empty())
+               ? &compiled_graph_
+               : nullptr;
 }
 
 /// Lazily load, compile, and cache a node shader pipeline.
@@ -584,6 +681,14 @@ void SDLRenderer::Shutdown() noexcept {
     node_shader_cache_.clear();
 
     if (video_texture_) { video_texture_->shutdown(); video_texture_.reset(); }
+
+    // Release frame graph resources (ResourcePool textures + ShaderLibrary PSOs)
+    // BEFORE the GPU device is destroyed.  The CompiledGraph holds only
+    // non-owning pointers — clear it first so no dangling access can happen
+    // even if a destructor elsewhere triggers an indirect execute().
+    compiled_graph_ = {};
+    frame_graph_.reset();
+    fg_needs_compile_ = false;
 
     // Release window claim before destroying the device.
     if (sdl_window_) {
@@ -861,6 +966,58 @@ void SDLRenderer::Render(double timeSeconds) {
         return;
     }
 
+    // ---- Frame graph: zombie prevention — recompile before execute() ------
+    //
+    // CompiledGraph holds raw SDL_GPUTexture* pointers into the ResourcePool.
+    // If the swapchain was resized since the last compile, those pointers are
+    // stale (the pool already freed them).  We MUST call resize() + compile()
+    // here — before any execute() — to obtain fresh pointers.
+    //
+    // Additional triggers: first frame after LoadPipeline (fg_needs_compile_)
+    // and swapchain format change (extremely rare but possible on display
+    // reconfiguration).
+    if (frame_graph_.has_value()) {
+        const bool size_changed = (width  != fg_compiled_w_ ||
+                                   height != fg_compiled_h_);
+
+        // SDL_GetGPUSwapchainTextureFormat is only called when we actually
+        // need to (re)compile — not every frame.  On the steady-state hot
+        // path (nothing changed) the check short-circuits here with zero
+        // API calls.  The format is cached in fg_swapchain_fmt_ after the
+        // first successful compile and changes only on display reconfiguration.
+        const bool needs_compile = fg_needs_compile_ || size_changed ||
+                                   (fg_swapchain_fmt_ == SDL_GPU_TEXTUREFORMAT_INVALID);
+
+        if (needs_compile) {
+            const SDL_GPUTextureFormat sc_fmt =
+                SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+
+            const bool fmt_changed = (sc_fmt != fg_swapchain_fmt_);
+
+            if (fg_needs_compile_ || size_changed || fmt_changed) {
+                // resize() releases stale swapchain-sized textures from the
+                // pool.  Do this before compile() so the new allocations use
+                // the correct dimensions.
+                if (size_changed)
+                    frame_graph_->resize(width, height);
+
+                fg_swapchain_fmt_ = sc_fmt;
+                fg_compiled_w_    = width;
+                fg_compiled_h_    = height;
+
+                // compile() re-acquires textures from the pool and resolves
+                // all pointers — compiled_graph_ now has live, non-dangling
+                // handles.
+                compiled_graph_   = frame_graph_->compile(fg_swapchain_fmt_);
+                fg_needs_compile_ = false;
+
+                SDL_Log("[SDLRenderer] frame graph compiled: %zu passes (%zu active)",
+                        compiled_graph_.pass_count(),
+                        compiled_graph_.active_count());
+            }
+        }
+    }
+
     // ---- Ensure persistent UI texture exists and matches swapchain size --
     // A size mismatch means the window was resized.  Recreate the texture and
     // force a full repaint so no node renders into the wrong-sized buffer.
@@ -986,32 +1143,56 @@ void SDLRenderer::Render(double timeSeconds) {
     // The UI texture is then alpha-composited on top using the text pipeline
     // (textured quad, straight-alpha blend, tint = {1,1,1,1}).
 
-    SDL_GPUColorTargetInfo ct{};
-    ct.texture     = swap;
-    ct.load_op     = SDL_GPU_LOADOP_CLEAR;
-    ct.store_op    = SDL_GPU_STOREOP_STORE;
-    ct.clear_color = {0.f, 0.f, 0.f, 1.f};
-    ct.cycle       = true;
+    // ---- Pass 3a: background — frame graph OR built-in FBM wallpaper ----
+    //
+    // When pipeline.pug is loaded and compiled:
+    //   CompiledGraph::execute() drives the scene.  Each enabled pass opens
+    //   and closes its own SDL_GPURenderPass; the final pass writes to the
+    //   swapchain (pass.output == nullptr sentinel).  Any "time" param is
+    //   injected per-frame via a stack copy — no heap traffic.
+    //
+    // When no pipeline.pug (or compile failed):
+    //   The built-in animated FBM wallpaper runs in a single render pass
+    //   with LOADOP_CLEAR — preserving the original behaviour exactly.
+    SDL_GPURenderPass* pass = nullptr;
 
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
-    if (!pass) {
-        std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: "
-                  << SDL_GetError() << "\n";
-        SDL_SubmitGPUCommandBuffer(cmd);
-        return;
+    if (frame_graph_.has_value() && !compiled_graph_.empty()) {
+        // ── Frame graph path ─────────────────────────────────────────────
+        // execute() manages its own SDL_GPURenderPass per enabled pass.
+        // On success, `swap` contains the frame graph's final output.
+        // On a pass failure (null pipeline/target), execute() skips that
+        // pass in O(1) — no crash, no partial GPU state.
+        compiled_graph_.execute(cmd, swap, width, height,
+                                static_cast<float>(timeSeconds));
+    } else {
+        // ── Built-in FBM wallpaper path ───────────────────────────────────
+        SDL_GPUColorTargetInfo ct{};
+        ct.texture     = swap;
+        ct.load_op     = SDL_GPU_LOADOP_CLEAR;
+        ct.store_op    = SDL_GPU_STOREOP_STORE;
+        ct.clear_color = {0.f, 0.f, 0.f, 1.f};
+        ct.cycle       = true;
+
+        pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
+        if (!pass) {
+            std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: "
+                      << SDL_GetError() << "\n";
+            SDL_SubmitGPUCommandBuffer(cmd);
+            return;
+        }
+
+        // ---- 3a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) ----------
+        SDL_BindGPUGraphicsPipeline(pass, pipeline_);
+
+        FragmentUniform fu{};
+        fu.time      = static_cast<float>(timeSeconds);
+        fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
+        SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+        SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+        SDL_EndGPURenderPass(pass);
+        pass = nullptr;
     }
-
-    // ---- 3a. Wallpaper (fullscreen FBM, 3 vertices, no buffer) ----------
-    SDL_BindGPUGraphicsPipeline(pass, pipeline_);
-
-    FragmentUniform fu{};
-    fu.time      = static_cast<float>(timeSeconds);
-    fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
-    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
-
-    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
-    SDL_EndGPURenderPass(pass);
-    pass = nullptr;
 
     // ---- 3b. 3D scene pre-pass (optional) ─────────────────────────────
     // The hook begins its own render pass (LOADOP_LOAD on swap) with a

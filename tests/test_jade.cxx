@@ -163,6 +163,175 @@ TEST_CASE("Lexer: attribute with no value (boolean attr)", "[lexer]")
     REQUIRE(toks[2].type  == TokenType::AttrValue); REQUIRE(toks[2].value == "");
 }
 
+TEST_CASE("Lexer: multi-line attrs — all attrs are parsed", "[lexer]")
+{
+    // Each attribute on its own continuation line (viz.jade style).
+    const char* src =
+        "div(id=\"canvas\"\n"
+        "    flexGrow=\"1\"\n"
+        "    src=\"img.png\")";
+
+    const auto toks = Lexer{src}.tokenize();
+
+    // Collect AttrKey values.
+    std::vector<std::string> keys;
+    for (const auto& t : toks)
+        if (t.type == TokenType::AttrKey) keys.push_back(t.value);
+
+    REQUIRE(keys.size() == 3u);
+    CHECK(keys[0] == "id");
+    CHECK(keys[1] == "flexGrow");
+    CHECK(keys[2] == "src");
+
+    // Check the corresponding values.
+    std::vector<std::string> vals;
+    for (const auto& t : toks)
+        if (t.type == TokenType::AttrValue) vals.push_back(t.value);
+
+    REQUIRE(vals.size() == 3u);
+    CHECK(vals[0] == "canvas");
+    CHECK(vals[1] == "1");
+    CHECK(vals[2] == "img.png");
+}
+
+TEST_CASE("Lexer: multi-line attrs produce no spurious Indent/Dedent", "[lexer]")
+{
+    // Continuation lines are indented deeper, but must NOT fire Indent/Dedent.
+    const char* src =
+        "div(id=\"a\"\n"
+        "    flexGrow=\"1\")";
+
+    const auto toks = Lexer{src}.tokenize();
+    for (const auto& t : toks) {
+        CHECK(t.type != TokenType::Indent);
+        CHECK(t.type != TokenType::Dedent);
+    }
+}
+
+TEST_CASE("Lexer: multi-line attrs — quoted paren in value does not close list", "[lexer]")
+{
+    // onclick="show()" contains parens inside a string — must not confuse
+    // the paren-balance counter and cause the remaining attrs to be dropped.
+    const char* src =
+        "div(onclick=\"show()\"\n"
+        "    id=\"btn\")";
+
+    const auto toks = Lexer{src}.tokenize();
+
+    std::vector<std::string> keys;
+    for (const auto& t : toks)
+        if (t.type == TokenType::AttrKey) keys.push_back(t.value);
+
+    REQUIRE(keys.size() == 2u);
+    CHECK(keys[0] == "onclick");
+    CHECK(keys[1] == "id");
+
+    std::vector<std::string> vals;
+    for (const auto& t : toks)
+        if (t.type == TokenType::AttrValue) vals.push_back(t.value);
+
+    REQUIRE(vals.size() == 2u);
+    CHECK(vals[0] == "show()");
+    CHECK(vals[1] == "btn");
+}
+
+TEST_CASE("Lexer: multi-line attrs — nine attrs (viz.jade exact shape)", "[lexer]")
+{
+    // Mirrors the div#viz-canvas block from viz.jade.
+    const char* src =
+        "div(id=\"viz-canvas\"\n"
+        "    flexGrow=\"1\"\n"
+        "    src=\"data/img/canvas.png\"\n"
+        "    _shader=\"preset_a\"\n"
+        "    _shader_focusX=\"0.5\"\n"
+        "    _shader_focusY=\"0.5\"\n"
+        "    _shader_param0=\"1.0\"\n"
+        "    _shader_param1=\"0.0\"\n"
+        "    _shader_param2=\"0.0\")";
+
+    const auto toks = Lexer{src}.tokenize();
+
+    std::vector<std::string> keys;
+    for (const auto& t : toks)
+        if (t.type == TokenType::AttrKey) keys.push_back(t.value);
+
+    REQUIRE(keys.size() == 9u);
+    CHECK(keys[0] == "id");
+    CHECK(keys[1] == "flexGrow");
+    CHECK(keys[2] == "src");
+    CHECK(keys[3] == "_shader");
+    CHECK(keys[4] == "_shader_focusX");
+    CHECK(keys[5] == "_shader_focusY");
+    CHECK(keys[6] == "_shader_param0");
+    CHECK(keys[7] == "_shader_param1");
+    CHECK(keys[8] == "_shader_param2");
+
+    // No spurious Indent/Dedent/Text tokens.
+    for (const auto& t : toks) {
+        CHECK(t.type != TokenType::Indent);
+        CHECK(t.type != TokenType::Dedent);
+        CHECK(t.type != TokenType::Text);
+    }
+}
+
+TEST_CASE("Parser: multi-line attrs all stored in styles", "[parser]")
+{
+    RenderTree tree;
+    const char* src =
+        "div(id=\"canvas\"\n"
+        "    flexGrow=\"1\"\n"
+        "    src=\"img.png\")";
+
+    const auto  root = parse(src, tree);
+    const auto* div  = firstChild(tree, root);
+    REQUIRE(div != nullptr);
+    CHECK(div->style("id")       == "canvas");
+    CHECK(div->style("flexGrow") == "1");
+    CHECK(div->style("src")      == "img.png");
+}
+
+TEST_CASE("Parser: multi-line attrs — no spurious child nodes created", "[parser]")
+{
+    // Before the fix each continuation line would be parsed as a child Tag node.
+    RenderTree tree;
+    const char* src =
+        "div(id=\"canvas\"\n"
+        "    flexGrow=\"1\"\n"
+        "    src=\"img.png\")";
+
+    const auto  root = parse(src, tree);
+    const auto* div  = firstChild(tree, root);
+    REQUIRE(div != nullptr);
+    // The div must have NO children — the continuation lines are not child nodes.
+    CHECK(!div->child.valid());
+}
+
+TEST_CASE("Parser: multi-line attrs — sibling after multi-line node is attached correctly", "[parser]")
+{
+    // The node following a multi-line tag must be a sibling, not a child.
+    RenderTree tree;
+    const char* src =
+        "div(id=\"a\"\n"
+        "    flexGrow=\"1\")\n"
+        "div(id=\"b\")";
+
+    const auto  root = parse(src, tree);
+    const auto* rn   = tree.node(root);
+    REQUIRE(rn != nullptr);
+
+    const auto* first = tree.node(rn->child);
+    REQUIRE(first != nullptr);
+    CHECK(first->style("id") == "a");
+
+    const auto* second = tree.node(first->sibling);
+    REQUIRE(second != nullptr);
+    CHECK(second->style("id") == "b");
+
+    // Neither node has children.
+    CHECK(!first->child.valid());
+    CHECK(!second->child.valid());
+}
+
 TEST_CASE("Lexer: comment line is skipped entirely", "[lexer]")
 {
     const auto toks = Lexer{"// this is a comment"}.tokenize();
