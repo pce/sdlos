@@ -190,7 +190,7 @@ TextField makeTextField(RenderTree& tree, TextFieldConfig cfg);
  *
  * @return TextField result
  */
-TextField makeTextBox(RenderTree& tree, TextFieldConfig cfg)
+inline TextField makeTextBox(RenderTree& tree, TextFieldConfig cfg)
 {
     cfg.multiline = false;
     return makeTextField(tree, std::move(cfg));
@@ -204,7 +204,7 @@ TextField makeTextBox(RenderTree& tree, TextFieldConfig cfg)
  *
  * @return TextField result
  */
-TextField makeTextArea(RenderTree& tree, TextAreaConfig cfg)
+inline TextField makeTextArea(RenderTree& tree, TextAreaConfig cfg)
 {
     cfg.multiline = true;
     return makeTextField(tree, std::move(cfg));

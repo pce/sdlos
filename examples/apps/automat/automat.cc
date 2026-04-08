@@ -196,12 +196,12 @@ static void wireHotspot(pce::sdlos::RenderTree& tree,
     n->setStyle("class", cls.empty() ? "hotspot" : cls + " hotspot");
 }
 
-} // namespace
+} // namespace                              ><
 
 
 void jade_app_init(pce::sdlos::RenderTree&               tree,
                    pce::sdlos::NodeHandle                 root,
-                   pce::sdlos::IEventBus&                 bus,
+                   pce::sdlos::IEventBus&                  bus,
                    pce::sdlos::SDLRenderer&               renderer,
                    std::function<bool(const SDL_Event&)>& out_handler)
 {

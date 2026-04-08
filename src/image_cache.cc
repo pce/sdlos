@@ -282,7 +282,7 @@ void ImageCache::flushUploads(SDL_GPUCopyPass* copy_pass)
         SDL_GPUTextureTransferInfo tfi{};
         tfi.transfer_buffer = tb;
         tfi.offset          = 0;
-        tfi.pixels_per_row  = static_cast<Uint32>(pitch / 4);  // stride in texels
+        tfi.pixels_per_row  = static_cast<Uint32>(pitch >> 2);  // stride in texels (div by 4)
         tfi.rows_per_layer  = static_cast<Uint32>(h);
 
         SDL_GPUTextureRegion tr{};

@@ -483,9 +483,9 @@ void jade_app_vfs_init(pce::vfs::Vfs& vfs)
     g_vfs = &vfs;
 }
 
-/// jade_app_init
+/// jade_app_init                        \               /
 void jade_app_init(pce::sdlos::RenderTree&               tree,
-                   pce::sdlos::NodeHandle                 root,
+                   pce::sdlos::NodeHandle     /*    */   root,
                    pce::sdlos::IEventBus&                 bus,
                    pce::sdlos::SDLRenderer&               renderer,
                    std::function<bool(const SDL_Event&)>& out_handler)

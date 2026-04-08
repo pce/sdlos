@@ -1,16 +1,11 @@
-// =============================================================================
 // shader_behavior.cc  —  [minimal] behaviour for the shader app
-// =============================================================================
 //
-// Architecture overview
-// ---------------------
 //   This file is #include-d directly into jade_host.cc at compile time.
 //   All declarations in jade_host.cc are visible here without any includes.
 //   The entry point is jade_app_init() — called once after the scene is fully
 //   parsed, styled, and layout-bound.
 //
 // Lifecycle
-// ---------
 //   1. jade_host.cc: SDL_Init, create window, SDLRenderer::Initialize
 //   2. jade_host.cc: load + parse shader.jade  →  RenderTree
 //   3. jade_host.cc: apply shader.css           →  StyleSheet
@@ -20,13 +15,11 @@
 //   7. jade_host.cc: event loop → render loop
 //
 // EventBus topics (published by this behavior)
-// --------------------------------------------
 //   None defined by default.  Subscribe with:
 //     bus.subscribe("shader:<topic>", [&tree, state](const std::string& v) { … });
 //   Fire events from jade with  onclick="shader:<topic>"  on any node.
 //
 // Customisation guide
-// -------------------
 //   1. Locate scene nodes with tree.findById(root, "my-id") and cache their
 //      handles in ShaderState.
 //   2. Subscribe to bus topics inside the "enter the forrest" user region.
@@ -36,24 +29,22 @@
 //      SDL events (TextField, NumberDragger, …).
 //
 // Regeneration
-// ------------
 //   sdlos create shader --overwrite
 //   Code between "enter the forrest" / "back to the sea" markers is preserved.
 //
 // Performance notes
-// -----------------
-//   • Bus callbacks run on the render thread — keep them O(1).
-//   • tree.node(h)->dirty_render = true marks only the subtree that changed;
+//   - Bus callbacks run on the render thread — keep them O(1).
+//   - tree.node(h)->dirty_render = true marks only the subtree that changed;
 //     jade_host will forceAllDirty only if at least one node is dirty.
-//   • Never call SDL_PollEvent(), acquire a GPU command buffer, or block on
+//   - Never call SDL_PollEvent(), acquire a GPU command buffer, or block on
 //     I/O from inside jade_app_init() or any bus callback.
-// =============================================================================
-
+//
+//
 #include <memory>
 #include <string>
 
-// ── State ─────────────────────────────────────────────────────────────────────
-
+// State
+//
 namespace {
 
 struct ShaderState {
@@ -78,19 +69,21 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 {
     auto state = std::make_shared<ShaderState>();
 
-    // ── Locate nodes ──────────────────────────────────────────────────────────
-    // const pce::sdlos::NodeHandle title_h = tree.findById(root, "my-title");
+    //  Locate nodes
+    const pce::sdlos::NodeHandle title_h = tree.findById(root, "my-title");
 
-    // ── Bus subscriptions ─────────────────────────────────────────────────────
+    title_h->
+
+    // Bus subscriptions
     // --- enter the forrest ---
 
-    // bus.subscribe("shader:action", [&tree, state](const std::string& data) {
-    //     sdlos_log("[shader] action: " + data);
-    // });
+    bus.subscribe("shader:action", [&tree, state](const std::string& data) {
+         sdlos_log("[shader] action: " + data);
+    });
 
     // --- back to the sea ---
 
-    // ── Raw SDL event hook (optional) ─────────────────────────────────────────
+    // Raw SDL event hook (optional)
     // Assign out_handler only when you need to forward raw SDL events to
     // widgets (TextField, NumberDragger, …).  Leave unset otherwise.
     //

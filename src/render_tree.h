@@ -133,9 +133,9 @@ struct VisualProps {
 
     // Controls how an image fills its bounding box when the aspect ratio
     // of the source file and the node's w×h differ.
-    //   Fill    — stretch to exactly w×h (default; may distort).
-    //   Contain — scale uniformly to fit inside w×h; letterbox empty space.
-    //   Cover   — scale to fill w×h, UV-crop center
+    //   Fill     - stretch to exactly w×h (default; may distort).
+    //   Contain  - scale uniformly to fit inside w×h; letterbox empty space.
+    //   Cover    - scale to fill w×h, UV-crop center
     enum class ObjectFit : uint8_t {
         Fill,       // stretch to w×h (default)
         Contain,    // scale to fit inside w×h, letterbox
@@ -153,8 +153,9 @@ struct VisualProps {
 //                         texture2d<float> tex         [[texture(0)]],
 //                         sampler          samp         [[sampler(0)]])
 //
-// Populated by style_draw.cc from _shader_param0/1/2, _shader_focusX/Y attrs.
-
+//
+/// TODO SoC: RenderTree GodObject Resolution
+/// TODO atm Populated by style_draw.cc from _shader_param0/1/2, _shader_focusX/Y attrs.
 struct NodeShaderParams {
     float u_width;    // node width  in physical pixels
     float u_height;   // node height in physical pixels
@@ -208,10 +209,17 @@ struct RenderContext {
     void drawRect(float x, float y, float w, float h,
                   float r, float g, float b, float a = 1.f);
 
-    // `rtl` enables HarfBuzz RTL shaping via TTF_SetFontDirection(RTL).
-    // Pass `vp.direction == VisualProps::Direction::RTL` from draw callbacks.
     /**
      * @brief Draws text
+     *
+     * `rtl` enables HarfBuzz RTL shaping via TTF_SetFontDirection(RTL).
+     * Pass `vp.direction == VisualProps::Direction::RTL` from draw callbacks.
+     * drawRect — no vertex buffer; ui_rect.vert generates a 6-vertex CCW quad
+     * entirely from push-uniform data.
+     *
+     * Push uniform layout (must match shader structs):
+     * slot 0, vertex stage   → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
+     * slot 0, fragment stage → {r, g, b, a}
      *
      * @param text  UTF-8 text content
      * @param x     Horizontal coordinate in logical pixels
@@ -229,7 +237,6 @@ struct RenderContext {
                   float r = 1.f, float g = 1.f, float b = 1.f, float a = 1.f,
                   bool  rtl = false);
 
-    // Four filled rects — no extra shader needed.
     /**
      * @brief Draws rect outline
      *
@@ -315,6 +322,8 @@ struct RenderContext {
 
 [[nodiscard]]
 std::expected<SDL_GPUShader*, std::string>
+
+
 /**
  * @brief Loads shader
  *
@@ -585,69 +594,7 @@ public:
     void free(NodeHandle handle);
 
 
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
+
     /**
      * @brief Node
      *
@@ -695,33 +642,8 @@ public:
     void markLayoutDirty(NodeHandle handle);
 
 
-    /// Signal must outlive this RenderTree.
     /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
+     * @brief Binds = Signal must outlive this RenderTree.
      */
     template<typename T>
     void bind(Signal<T>& signal, NodeHandle handle)
@@ -748,52 +670,6 @@ public:
      */
     void render(NodeHandle root, RenderContext& ctx);// draw() on dirty nodes
 
-
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Root
-     *
-     * @return Handle to the node, or k_null_handle on failure
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
     /**
      * @brief Sets root
      *
@@ -909,45 +785,23 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
+
+
+    [[nodiscard]] core::frame_arena& arena()      noexcept       { return arena_; }
     /**
      * @brief Node count
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] core::frame_arena& arena()      noexcept       { return arena_; }
     [[nodiscard]] std::size_t        nodeCount()  const noexcept { return nodes_.size();     }
+     /**
+     * @brief Capacity
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::size_t        capacity()   const noexcept { return nodes_.capacity(); }
 
 private:
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
     /**
      * @brief Traverse
      */

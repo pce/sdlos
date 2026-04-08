@@ -71,15 +71,29 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
     message(STATUS "[sdlos] iOS/tvOS: forcing BUILD_SHARED_LIBS=OFF for all vendored deps")
 endif()
 
-# SDL3 — vendored copy in deps/ takes priority, otherwise find_package
+# SDL3 — vendored copy in deps/ takes priority, with FetchContent fallback
 set(_SDL3_VENDOR "${CMAKE_SOURCE_DIR}/deps/SDL3")
 
 if(EXISTS "${_SDL3_VENDOR}/CMakeLists.txt")
     message(STATUS "[sdlos] SDL3: using vendored copy at ${_SDL3_VENDOR}")
     add_subdirectory("${_SDL3_VENDOR}" EXCLUDE_FROM_ALL)
 else()
-    message(STATUS "[sdlos] SDL3: searching via find_package")
-    find_package(SDL3 REQUIRED CONFIG)
+    message(STATUS "[sdlos] SDL3: not found in deps/, attempting FetchContent fallback")
+    include(FetchContent)
+
+    # Disable SDL3 tests and examples during fetch
+    set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        SDL3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG        main
+        GIT_SHALLOW    ON
+    )
+
+    message(STATUS "[sdlos] SDL3: fetching from GitHub (this may take a moment...)")
+    FetchContent_MakeAvailable(SDL3)
 endif()
 
 # Optional SDL add-ons (image / mixer / ttf)
@@ -552,11 +566,14 @@ endfunction()
 #
 
 #
-# Helper: copy a single file from the source tree into the binary directory
+# Helper functions: copy a single file from the source tree into the binary directory
 # so apps can load it at runtime via SDL_GetBasePath() + filename.
 # Used for CSS layout files that sit next to the .jade / .cc sources but
 # must be deployed alongside the executable (separate from DATA_DIR / data/).
-#
+# sdlos_copy_resource_to(TARGET SRC_RELATIVE DEST_RELATIVE)
+# Like sdlos_copy_resource but lets you specify a destination sub-path
+# (e.g. "data/shaders/msl/foo.metal") relative to the binary directory.
+# Intermediate directories are created automatically.
 
 function(sdlos_copy_resource TARGET SRC_RELATIVE)
     get_filename_component(_fname "${SRC_RELATIVE}" NAME)
@@ -569,10 +586,7 @@ function(sdlos_copy_resource TARGET SRC_RELATIVE)
     )
 endfunction()
 
-# sdlos_copy_resource_to(TARGET SRC_RELATIVE DEST_RELATIVE)
-# Like sdlos_copy_resource but lets you specify a destination sub-path
-# (e.g. "data/shaders/msl/foo.metal") relative to the binary directory.
-# Intermediate directories are created automatically.
+
 function(sdlos_copy_resource_to TARGET SRC_RELATIVE DEST_RELATIVE)
     get_filename_component(_dname "${DEST_RELATIVE}" DIRECTORY)
     add_custom_command(TARGET ${TARGET} POST_BUILD
@@ -604,8 +618,7 @@ foreach(_f ${_app_cmake_files})
 endforeach()
 unset(_app_cmake_files)
 
-
-
+# TODO Test WebAssembly build with a real example app
 # Emscripten / Web target  (-DEMSCRIPTEN via config/config-web.sh)
 if(EMSCRIPTEN)
     set(SDLOS_WEB_APP "styleguide" CACHE STRING

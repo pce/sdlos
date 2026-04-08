@@ -19,9 +19,8 @@
 using namespace pce::sdlos;
 using namespace pce::sdlos::jade;
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
-// Extract only the TokenType values from a stream — makes REQUIRE lines short.
+/// Extract only the TokenType values from a stream — makes REQUIRE lines short.
 static std::vector<TokenType> types(const std::vector<Token>& toks)
 {
     std::vector<TokenType> out;
@@ -30,8 +29,8 @@ static std::vector<TokenType> types(const std::vector<Token>& toks)
     return out;
 }
 
-// Return the first child of the virtual parse root.
-// Every parse() call wraps results in a _root FlexColumn node.
+/// Return the first child of the virtual parse root.
+/// Every parse() call wraps results in a _root FlexColumn node.
 static const RenderNode* firstChild(const RenderTree& tree, NodeHandle root)
 {
     const RenderNode* r = tree.node(root);
@@ -39,9 +38,7 @@ static const RenderNode* firstChild(const RenderTree& tree, NodeHandle root)
     return tree.node(r->child);
 }
 
-// =============================================================================
 // Lexer
-// =============================================================================
 
 TEST_CASE("Lexer: empty source → only End", "[lexer]")
 {
@@ -422,9 +419,7 @@ TEST_CASE("Lexer: full shorthand combined with attrs and text", "[lexer]")
     REQUIRE(toks[7].type  == TokenType::Text);      REQUIRE(toks[7].value == "Title");
 }
 
-// =============================================================================
 // Parser
-// =============================================================================
 
 TEST_CASE("Parser: single node attached to virtual root", "[parser]")
 {
@@ -909,9 +904,7 @@ TEST_CASE("HitTest: last sibling wins when siblings overlap", "[hittest]")
     REQUIRE(tree.node(hit)->style("tag") == "second");
 }
 
-// =============================================================================
 // dispatchClick + dispatchSelect
-// =============================================================================
 
 // Minimal IEventBus stub — records published events for assertions.
 struct RecordingBus : IEventBus {
@@ -987,9 +980,7 @@ TEST_CASE("dispatchSelect: onselect topic is published", "[events]")
     REQUIRE(bus.log[0].data  == "item-3");
 }
 
-// =============================================================================
 // Integration — search overlay structure
-// =============================================================================
 
 TEST_CASE("Integration: search overlay structure", "[integration]")
 {

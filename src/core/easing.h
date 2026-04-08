@@ -11,20 +11,14 @@
 // call expensive standard library functions. These provide excellent accuracy
 // with ~2-3× speedup for animation-intensive workloads.
 //
-// Usage:
-//   #include "core/easing.h"
-//   float t = ...; // 0 → 1
-//   float v = pce::sdlos::easing::easeOut(t);
-//
-// File location: src/core/easing.h (header-only, no .cc needed)
+
+
 
 #include <cmath>
 
 namespace pce::sdlos::easing {
 
-// ============================================================================
 // Fast math approximations — used by expensive easing functions
-// ============================================================================
 // These are inline approximations tuned for the [0, 1] input range common in
 // animation easing. They avoid expensive system calls while maintaining good
 // visual quality (imperceptible error for UI animations).
@@ -66,7 +60,7 @@ namespace pce::sdlos::easing {
     const int i = static_cast<int>(y);
     const float f = y - static_cast<float>(i);
 
-    // Fast 2^f using polynomial: 2^f ≈ 1 + f*ln(2) + (f*ln(2))²/2 + ...
+    // Fast 2^f using polynomial: 2^f ≈ 1 + f*ln(2) + (f*ln(2))²/2 + …
     constexpr float ln2 = 0.69314718056f;
     const float ln2f = f * ln2;
     const float exp_frac = 1.f + ln2f * (1.f + ln2f * 0.5f);
@@ -103,7 +97,6 @@ namespace pce::sdlos::easing {
     return y;
 }
 
-// ============================================================================
 
 // Linear
 [[nodiscard]] constexpr float linear(float t) noexcept
@@ -112,18 +105,18 @@ namespace pce::sdlos::easing {
 }
 
 // Quadratic
-[[nodiscard]] constexpr float easeIn(float t) noexcept
+constexpr float easeIn(float t) noexcept
 {
     return t * t;
 }
 
-[[nodiscard]] constexpr float easeOut(float t) noexcept
+constexpr float easeOut(float t) noexcept
 {
     const float u = 1.f - t;
     return 1.f - u * u;
 }
 
-[[nodiscard]] constexpr float easeInOut(float t) noexcept
+constexpr float easeInOut(float t) noexcept
 {
     return t < 0.5f
         ? 2.f * t * t
@@ -131,18 +124,18 @@ namespace pce::sdlos::easing {
 }
 
 // Cubic
-[[nodiscard]] constexpr float easeInCubic(float t) noexcept
+constexpr float easeInCubic(float t) noexcept
 {
     return t * t * t;
 }
 
-[[nodiscard]] constexpr float easeOutCubic(float t) noexcept
+constexpr float easeOutCubic(float t) noexcept
 {
     const float u = 1.f - t;
     return 1.f - u * u * u;
 }
 
-[[nodiscard]] constexpr float easeInOutCubic(float t) noexcept
+constexpr float easeInOutCubic(float t) noexcept
 {
     if (t < 0.5f) return 4.f * t * t * t;
     const float u = -2.f * t + 2.f;
@@ -150,36 +143,35 @@ namespace pce::sdlos::easing {
 }
 
 // Quartic
-[[nodiscard]] constexpr float easeInQuart(float t) noexcept
+constexpr float easeInQuart(float t) noexcept
 {
     return t * t * t * t;
 }
 
-[[nodiscard]] constexpr float easeOutQuart(float t) noexcept
+constexpr float easeOutQuart(float t) noexcept
 {
     const float u = 1.f - t;
     return 1.f - u * u * u * u;
 }
 
-[[nodiscard]] constexpr float easeInOutQuart(float t) noexcept
+constexpr float easeInOutQuart(float t) noexcept
 {
     if (t < 0.5f) return 8.f * t * t * t * t;
     const float u = -2.f * t + 2.f;
     return 1.f - u * u * u * u * 0.5f;
 }
 
-// Back (overshoot)
+/// Back (overshoot)
 // easeInBack/easeOutBack slightly overshoot their target before settling.
 // `overshoot` controls the magnitude; the CSS default is 1.70158.
-
-[[nodiscard]] constexpr float easeInBack(float t,
-                                          float overshoot = 1.70158f) noexcept
+constexpr float easeInBack(float t,
+                           float overshoot = 1.70158f) noexcept
 {
     const float c = overshoot + 1.f;
     return c * t * t * t - overshoot * t * t;
 }
 
-[[nodiscard]] constexpr float easeOutBack(float t,
+constexpr float easeOutBack(float t,
                                            float overshoot = 1.70158f) noexcept
 {
     const float c = overshoot + 1.f;
@@ -187,7 +179,7 @@ namespace pce::sdlos::easing {
     return 1.f + c * u * u * u + overshoot * u * u;
 }
 
-[[nodiscard]] constexpr float easeInOutBack(float t,
+constexpr float easeInOutBack(float t,
                                              float overshoot = 1.70158f) noexcept
 {
     const float c = overshoot * 1.525f;
@@ -209,10 +201,8 @@ namespace pce::sdlos::easing {
 //           (t is normalised, so "unit time" = the full animation duration)
 //           8  → slow oscillation   18 → fast oscillation
 //
-// Typical SwiftUI-feel: zeta=0.5, omega=12
-// The output may briefly exceed 1.0 near the first overshoot peak.
-
-[[nodiscard]] inline float spring(float t,
+// The output may briefly exceed 1.0 near the first overshoot peak
+inline float spring(float t,
                                    float zeta  = 0.5f,
                                    float omega = 12.f) noexcept
 {
@@ -231,8 +221,7 @@ namespace pce::sdlos::easing {
 // sub-bounce before settling at 1.
 //
 // easeInBounce reverses the direction: starts with the bounce, ends smoothly.
-
-[[nodiscard]] inline float easeOutBounce(float t) noexcept
+inline float easeOutBounce(float t) noexcept
 {
     constexpr float n  = 7.5625f;
     constexpr float d  = 2.75f;
@@ -266,7 +255,6 @@ namespace pce::sdlos::easing {
 //
 // Exponentially-decaying sinusoid. Uses fast math approximations.
 // Similar feel to spring() but parameterised differently (amplitude, period).
-
 [[nodiscard]] inline float easeOutElastic(float t,
                                            float amplitude = 1.f,
                                            float period    = 0.3f) noexcept

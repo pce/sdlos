@@ -18,18 +18,7 @@ namespace pce::sdlos {
 
 
 std::expected<SDL_GPUShader*, std::string>
-/**
- * @brief Loads shader
- *
- * @param device               SDL3 GPU device handle
- * @param backend              Blue channel component [0, 1]
- * @param name                 Human-readable name or identifier string
- * @param stage                String tag used for lookup or categorisation
- * @param num_samplers         Numeric count
- * @param num_uniform_buffers  Contiguous memory buffer
- *
- * @return Integer result; negative values indicate an error code
- */
+
 loadShader(SDL_GPUDevice*     device,
            GPUBackend         backend,
            std::string_view   name,
@@ -93,24 +82,6 @@ loadShader(SDL_GPUDevice*     device,
 }
 
 
-// drawRect — no vertex buffer; ui_rect.vert generates a 6-vertex CCW quad
-// entirely from push-uniform data.
-//
-// Push uniform layout (must match shader structs):
-//   slot 0, vertex stage   → {x, y, w, h, viewport_w, viewport_h, _pad, _pad}
-//   slot 0, fragment stage → {r, g, b, a}
-/**
- * @brief Draws rect
- *
- * @param x  Horizontal coordinate in logical pixels
- * @param y  Vertical coordinate in logical pixels
- * @param w  Width in logical pixels
- * @param h  Opaque resource handle
- * @param r  Red channel component [0, 1]
- * @param g  Green channel component [0, 1]
- * @param b  Blue channel component [0, 1]
- * @param a  Alpha channel component [0, 1]
- */
 void RenderContext::drawRect(float x, float y, float w, float h,
                               float r, float g, float b, float a)
 {
@@ -258,8 +229,8 @@ SDL_GPUGraphicsPipeline* RenderContext::pipeline(std::string_view name)
  * @param y        Vertical coordinate in logical pixels
  * @param w        Width in logical pixels
  * @param h        Opaque resource handle
- * @param opacity  Iterator position
- * @param fit      Iterator position
+ * @param opacity
+ * @param fit      VisualProps
  */
 void RenderContext::drawImage(std::string_view src,
                                float x, float y, float w, float h,
@@ -1172,34 +1143,6 @@ std::vector<NodeHandle> RenderTree::findByClass(NodeHandle start,
 // Mutation constraint: fn must not call alloc() or free() during traversal.
 // slot_map::insert() may reallocate its backing vector, invalidating any
 // RenderNode* held by fn. Queue structural mutations and apply after render.
-
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
-/**
- * @brief Traverse
- */
 template<std::invocable<NodeHandle, RenderNode&> Fn>
 void RenderTree::traverse(NodeHandle start, Fn&& fn)
 {
@@ -1231,7 +1174,6 @@ void RenderTree::traverse(NodeHandle start, Fn&& fn)
     }
 }
 
-// Frame lifecycle
 
 /**
  * @brief Begins frame

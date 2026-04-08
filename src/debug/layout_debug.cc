@@ -11,7 +11,6 @@ namespace {
 
 struct DebugColor { float r, g, b; };
 
-[[nodiscard]]
 constexpr DebugColor colorForKind(LayoutKind kind) noexcept
 {
     switch (kind) {

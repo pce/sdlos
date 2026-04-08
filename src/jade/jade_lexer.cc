@@ -136,7 +136,7 @@ static RawIndent countRawIndent(std::string_view line) noexcept
 
 static int rawToLevel(int spaces, int tabs, int unit) noexcept
 {
-    const int space_levels = (unit > 0) ? (spaces + unit / 2) / unit : spaces;
+    const int space_levels = (unit > 0) ? (spaces + (unit >> 1)) / unit : spaces;
     return tabs + space_levels;
 }
 
