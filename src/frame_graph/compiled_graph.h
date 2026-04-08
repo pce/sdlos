@@ -38,9 +38,9 @@ struct CompiledParams {
     uint32_t              count = 0;   ///< populated slots; only this many bytes pushed
 
     /**
-     * @brief Sets
+     * @brief Set a uniform parameter by slot
      *
-     * @param slot  Lower bound
+     * @param slot  Parameter slot index (0-15)
      * @param v     32-bit floating-point scalar
      */
     void set(uint32_t slot, float v) noexcept {
@@ -51,15 +51,15 @@ struct CompiledParams {
     }
 
     /**
-     * @brief Empty
+     * @brief Check if parameters are empty
      *
-     * @return true on success, false on failure
+     * @return true when no parameters have been set
      */
-    [[nodiscard]] constexpr bool  empty()     const noexcept { return count == 0; }
-    [[nodiscard]] constexpr float operator[](uint32_t i) const noexcept { return data[i]; }
+    constexpr bool  empty()     const noexcept { return count == 0; }
+    constexpr float operator[](uint32_t i) const noexcept { return data[i]; }
 
     /// Raw byte span pushed to SDL_PushGPUFragmentUniformData.
-    [[nodiscard]] std::span<const float> span() const noexcept {
+    std::span<const float> span() const noexcept {
         return { data.data(), count };
     }
 };
@@ -195,23 +195,22 @@ struct CompiledGraph {
                      std::string_view val) noexcept;
 
 
-
     /**
-     * @brief Empty
+     * @brief Check if graph is empty
      *
-     * @return true on success, false on failure
+     * @return true when no passes are present
      */
     bool              empty()       const noexcept { return passes.empty(); }
     /**
-     * @brief Pass count
+     * @brief Get total number of passes
      *
-     * @return Integer result; negative values indicate an error code
+     * @return Number of passes in the compiled graph
      */
     std::size_t       pass_count()  const noexcept { return passes.size();  }
     /**
-     * @brief Active count
+     * @brief Get number of enabled passes
      *
-     * @return Integer result; negative values indicate an error code
+     * @return Number of currently enabled passes (disabled passes skipped)
      */
     std::size_t       active_count() const noexcept;
 
@@ -220,7 +219,7 @@ struct CompiledGraph {
 
 private:
     /// Find a pass by FNV hash.  Returns nullptr if not found.
-    [[nodiscard]] CompiledPass* find_pass(uint32_t id_hash) noexcept;
+    CompiledPass* find_pass(uint32_t id_hash) noexcept;
 };
 
 } // namespace pce::sdlos::fg

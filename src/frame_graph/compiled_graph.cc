@@ -89,7 +89,7 @@ inline void push_params(SDL_GPUCommandBuffer* cmd,
     SDL_PushGPUFragmentUniformData(
         cmd, 0,
         p.data.data(),
-        p.count * static_cast<uint32_t>(sizeof(float)));
+        p.count << 2);  // Bit shift left by 2: multiply by 4 (sizeof(float))
 }
 
 } // namespace
@@ -112,13 +112,13 @@ inline void push_params(SDL_GPUCommandBuffer* cmd,
 // Disabled passes are skipped in O(1); their output resource retains
 // whatever the previous pass wrote into it.
 /**
- * @brief Execute
+ * @brief Execute the compiled pipeline each frame
  *
- * @param cmd        SDL_GPUCommandBuffer * value
- * @param swapchain  Opaque resource handle
- * @param vp_w       Width in logical pixels
- * @param vp_h       Opaque resource handle
- * @param time       Interpolation parameter in [0, 1]
+ * @param cmd        Active SDL_GPUCommandBuffer
+ * @param swapchain  Current frame's swapchain texture
+ * @param vp_w       Viewport width in physical pixels
+ * @param vp_h       Viewport height in physical pixels
+ * @param time       Wall-clock time in seconds for animation parameters
  */
 void CompiledGraph::execute(SDL_GPUCommandBuffer* cmd,
                              SDL_GPUTexture*       swapchain,
@@ -166,9 +166,9 @@ void CompiledGraph::execute(SDL_GPUCommandBuffer* cmd,
 
 // CompiledGraph::active_count
 /**
- * @brief Active count
+ * @brief Get number of enabled passes
  *
- * @return Integer result; negative values indicate an error code
+ * @return Number of currently enabled passes (disabled passes not counted)
  */
 std::size_t CompiledGraph::active_count() const noexcept
 {
@@ -180,11 +180,11 @@ std::size_t CompiledGraph::active_count() const noexcept
 
 // Cold path helpers
 /**
- * @brief Searches for and returns pass
+ * @brief Find a pass by FNV hash
  *
- * @param id_hash  Unique object identifier
+ * @param id_hash  FNV-1a hash of pass id string
  *
- * @return Pointer to the result, or nullptr on failure
+ * @return Pointer to the CompiledPass, or nullptr if not found
  */
 CompiledPass* CompiledGraph::find_pass(uint32_t id_hash) noexcept
 {
@@ -199,11 +199,11 @@ CompiledPass* CompiledGraph::find_pass(uint32_t id_hash) noexcept
 // Called by apply_style() and directly from CSS property change handlers.
 // Strings only appear here — never in execute().
 /**
- * @brief Patch
+ * @brief Update a single float parameter on a named pass
  *
- * @param pass_id  Unique object identifier
- * @param key      Lookup key
- * @param val      Value to store or compare
+ * @param pass_id  Pass id string (e.g. "fog")
+ * @param key      Parameter key string (e.g. "density")
+ * @param val      New float value to set
  */
 void CompiledGraph::patch(std::string_view pass_id,
                            std::string_view key,
@@ -222,10 +222,10 @@ void CompiledGraph::patch(std::string_view pass_id,
 
 
 /**
- * @brief Sets enabled
+ * @brief Enable or disable a pass by name
  *
- * @param pass_id  Unique object identifier
- * @param enabled  Blue channel component [0, 1]
+ * @param pass_id  Pass id string (e.g. "dof")
+ * @param enabled  true to enable, false to disable the pass
  */
 void CompiledGraph::set_enabled(std::string_view pass_id,
                                  bool             enabled) noexcept
@@ -237,11 +237,11 @@ void CompiledGraph::set_enabled(std::string_view pass_id,
 
 
 /**
- * @brief Applies style
+ * @brief Apply CSS property change to pipeline
  *
- * @param pass_id  Unique object identifier
- * @param key      Lookup key
- * @param val      Value to store or compare
+ * @param pass_id  Pass id string
+ * @param key      Property key (either "enabled" or a param name)
+ * @param val      Property value as string
  */
 void CompiledGraph::apply_style(std::string_view pass_id,
                                  std::string_view key,
@@ -259,7 +259,9 @@ void CompiledGraph::apply_style(std::string_view pass_id,
 }
 
 /**
- * @brief Dumps
+ * @brief Dump pipeline state to stdout for development
+ *
+ * Prints pass configuration, enabled status, bindings, and parameters
  */
 void CompiledGraph::dump() const noexcept
 {
