@@ -1,3 +1,4 @@
+#include "audio/sfx_player.h"
 
 #include <algorithm>
 #include <cmath>
@@ -6,80 +7,9 @@
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace {
-
-// SfxPlayer
-//
-// Fire-and-forget sound effects.  Pre-loads WAV files from disk into memory;
-// play() opens a short-lived SDL3 audio stream, puts the PCM data, and lets
-// it drain — no mixing library needed for simple UI bleeps.
-//
-// Usage:
-//   sfx.load("click",  basePath + "data/sounds/nf-shot-01.wav");
-//   sfx.load("select", basePath + "data/sounds/neueis_13.wav");
-//   sfx.play("click");   // fire-and-forget
-//
-// NOTE: Each play() call opens its own audio device stream so multiple
-//       overlapping sounds work.  For heavy mixing consider SDL_mixer.
-
-struct SfxClip {
-    SDL_AudioSpec  spec{};
-    std::vector<Uint8> pcm;   // decoded PCM data
-};
-
-struct SfxPlayer {
-    std::unordered_map<std::string, SfxClip> clips;
-
-    /// Load a WAV file from disk and store it under `name`.
-    bool load(const std::string& name, const std::string& path) {
-        SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
-        if (!io) {
-            sdlos_log("[sfx] cannot open: " + path + " — " + SDL_GetError());
-            return false;
-        }
-
-        SDL_AudioSpec spec{};
-        Uint8*  buf = nullptr;
-        Uint32  len = 0;
-        if (!SDL_LoadWAV_IO(io, true, &spec, &buf, &len)) {
-            sdlos_log("[sfx] load failed: " + path + " — " + SDL_GetError());
-            return false;
-        }
-
-        SfxClip clip;
-        clip.spec = spec;
-        clip.pcm.assign(buf, buf + len);
-        SDL_free(buf);
-
-        clips[name] = std::move(clip);
-        sdlos_log("[sfx] loaded '" + name + "' ← " + path
-                  + "  (" + std::to_string(len) + " bytes)");
-        return true;
-    }
-
-    /// Play a previously loaded clip.  Fire-and-forget: the stream is leaked
-    /// intentionally — SDL3 reclaims it when playback finishes.
-    void play(const std::string& name) {
-        auto it = clips.find(name);
-        if (it == clips.end()) return;
-
-        const SfxClip& clip = it->second;
-        SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(
-            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &clip.spec, nullptr, nullptr);
-        if (!stream) return;
-
-        SDL_PutAudioStreamData(stream,
-            static_cast<const void*>(clip.pcm.data()),
-            static_cast<int>(clip.pcm.size()));
-        SDL_FlushAudioStream(stream);
-        SDL_ResumeAudioStreamDevice(stream);
-        // Stream will drain and SDL3 will reclaim it.
-    }
-};
-
 
 // ── Preset definitions ────────────────────────────────────────────────────────
 // Maps a display name → shader file name (without extension/path).
@@ -124,7 +54,7 @@ struct ShadeState {
     pce::sdlos::NodeHandle canvas_h      = pce::sdlos::k_null_handle;
     pce::sdlos::NodeHandle active_name_h = pce::sdlos::k_null_handle;
 
-    SfxPlayer sfx;
+    pce::sdlos::SfxPlayer sfx;
 };
 
 
@@ -223,8 +153,10 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     auto state = std::make_shared<ShadeState>();
 
-    // ── Load UI sound effects ─────────────────────────────────────────────────
+    // ── Load UI sound effects via VFS ─────────────────────────────────────────
     // data/sounds/ is copied next to the binary by CMake (DATA_DIR).
+    // The host VFS mounts the binary dir as "asset://".
+    // When no VFS is attached, SfxPlayer falls back to SDL_IOFromFile.
     {
         const char* base = SDL_GetBasePath();
         const std::string snd = base ? std::string(base) + "data/sounds/" : "data/sounds/";

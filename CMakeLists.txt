@@ -87,6 +87,10 @@ set(SDLOS_ENGINE_SOURCES
     src/vfs/union_mount.cc
     src/vfs/mem_mount.cc
 
+    # Audio
+    src/audio/sfx_player.cc
+    src/audio/audio_player.cc
+
     # Video / camera
     src/video_texture.cc
 
@@ -117,6 +121,7 @@ target_include_directories(sdlos_engine PUBLIC
     "${CMAKE_SOURCE_DIR}/src/jade"
     "${CMAKE_SOURCE_DIR}/src/debug"
     "${CMAKE_SOURCE_DIR}/src/vfs"
+    "${CMAKE_SOURCE_DIR}/src/audio"
 )
 
 sdlos_target_compile_options(sdlos_engine)

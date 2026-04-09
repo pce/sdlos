@@ -1,7 +1,9 @@
 #include "sfx_player.h"
 #include "vfs/vfs.h"
+
 #include <iostream>
 #include <string>
+
 namespace pce::sdlos {
 /**
  * @brief Sets vfs
@@ -33,7 +35,7 @@ bool SfxPlayer::decode_wav(SDL_IOStream* io, SfxClip& out, const std::string& la
     Uint32  len = 0;
     if (!SDL_LoadWAV_IO(io, true, &spec, &buf, &len)) {
         std::clog << "[sfx] WAV decode failed: " << label
-                  << " — " << SDL_GetError() << "\n";
+                  << " -- " << SDL_GetError() << "\n";
         return false;
     }
     out.spec = spec;
@@ -52,89 +54,112 @@ bool SfxPlayer::decode_wav(SDL_IOStream* io, SfxClip& out, const std::string& la
 bool SfxPlayer::load(const std::string& name, const std::string& path_or_uri)
 {
     SDL_InitSubSystem(SDL_INIT_AUDIO);
+
     pce::vfs::Vfs* vfs = nullptr;
     {
         std::lock_guard lock(mu_);
         vfs = vfs_;
     }
+
     if (vfs) {
-        auto byte#include "sfx_player.h"
-#include "vfs/vfs.h"
-#include <iostream>
-#include <string>
-namespace pce::sdlos {
-  #include "vfs/vfs.h"
-#] #include <iostream> '#include <string>
-  namespace pce::s< void SfxPlayer::set_ve.{
-    std::lock_guard lock(mu_);
-    vfs_ =romFile(path    vfs_ = vfs;
+        auto bytes = vfs->read(path_or_uri);
+        if (bytes) {
+            return load_bytes(name, *bytes);
+        }
+        std::clog << "[sfx] VFS read failed for '" << path_or_uri
+                  << "', trying direct file...\n";
+    }
+
+    SDL_IOStream* io = SDL_IOFromFile(path_or_uri.c_str(), "rb");
+    if (!io) {
+        std::clog << "[sfx] cannot open: " << path_or_uri
+                  << " -- " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    SfxClip clip;
+    if (!decode_wav(io, clip, path_or_uri))
+        return false;
+
+    std::size_t pcm_size = clip.pcm.size();
+    {
+        std::lock_guard lock(mu_);
+        clips_[name] = std::move(clip);
+    }
+
+    std::clog << "[sfx] loaded '" << name << "' <- " << path_or_uri
+              << "  (" << pcm_size << " bytes)\n";
+    return true;
 }
-bool SfxPlaf }
-bool SfxPlay  st{
-    SDL_AudioSpec spec{};
-    Uint8*  buf = nullptr;
-    Uint32  len = 0;
-    if _Get    Uint8*  buf = nullpt r    Uint32  len = 0;
-    xC    if (!SDL_LoadWAde        std::clog << "[sfx] WAV decode failed: " << la
-                   << " — " << SDL_GetError() << "\n";
- s        return false;
-    }
-    out.spec = spec;
-    omo    }
-    out.spec =st    lo    out.pcm.assign('"    SDL_free(buf);
-    return true
-     return true;
-  }
-bool SfxPlaye<< "{
-    SDL_InitSubSystem(SDL_INIT_AUDIO);
-    pce::vfs::Vfs* vfs = nullptr;
-  nam    pce::vfs::Vfs* vfs = nullptr;
-   td    {
-        std::lock_guard l
+
+bool SfxPlayer::load_bytes(const std::string& name,
+                           const std::vector<std::byte>& wav_bytes)
 {
-    SD        vfs = vfs_;
+    SDL_InitSubSystem(SDL_INIT_AUDIO);
+
+    SDL_IOStream* io = SDL_IOFromConstMem(
+        static_cast<const void*>(wav_bytes.data()),
+        wav_bytes.size());
+    if (!io) {
+        std::clog << "[sfx] IOFromConstMem failed: " << SDL_GetError() << "\n";
+        return false;
     }
-    if       }
-    if (vfs) =    _I        auto (
-#include "vfs/vfs.h"
-#include <iostreamte#include <iostream>wa#include <string>
-  namespace pce::s    #include "vfs/vfs.h I#] #include <iostream "  namespace pce::s< void SfxPlayer::set_rn    std::lock_guard lock(mu_);
-    vfs_ =roco    vfs_ =romFile(path    vfs  }
-bool SfxPlaf }
-bool SfxPlay  st{
- ize bool SfxPlay ze    SDL_AudioSpe      Uint8*  buf = nullpt);    Uint32  len = 0;
-    td    if _Get    Uint
-     xC    if (!SDL_LoadWAde        std::clog << "[sfx] Ws                    << " — " << SDL_GetError() << "\n";
- s        return false;re s        return false;
+
+    SfxClip clip;
+    if (!decode_wav(io, clip, name))
+        return false;
+
+    std::size_t pcm_size = clip.pcm.size();
+    {
+        std::lock_guard lock(mu_);
+        clips_[name] = std::move(clip);
     }
-    out.spec = spec;
-    me    }
-    out.spec = sd     (m    omo    }
-    oucl    out.speam    return true
-     return true;
-  }
-bool SfxPlaye<< "{
-   li     return tr;
-  }
-bool SfxPlayeabo s    SDL_InitSubSyud    pce::vfs::Vfs* vfs = nullptr;
-  nIC  nam    pce::vfs::Vfs* vfs = nunu   td    {
-        std::lock_guard l
-ur        sL_{
-    SD        vfs = vfm,
-     }
-    if       }
-    v    >(    if (vfs) ()#include "vfs/vfs.h"
-#include <iopc#include <iostreamt_F  namespace pce::s    #include "vfs/vfs.h I#] #include <ist    vfs_ =roco    vfs_ =romFile(path    vfs  }
-bool SfxPlaf }
-bool SfxPlay  st{
- ize bool SfxPlay ze    SDL_AudioSpe      Uint8*  buf = nPlbool SfxPlaf }
-bool SfxPlay  st{
- ize bool Sftdbool SfxPlay lo ize bool SfxPlaps    td    if _Get    Uint
-     xC    if (!SDL_LoadWAde        std::clog << "[sfx] W_.     xC    if (!SDL_Loadfx s        return false;re s        return false;
-    }
-    out.spec = spec;
-    me    }
-    out.spec = sd     (m  IL  wc -l /Users/pce/Documents/gitrepos/github/pce/tools/sdlos/userspace/src/audio/sfx_player.cc
-printf '' > /dev/null
-echo "ENDOFFILE"
-echo "done"
+
+    std::clog << "[sfx] loaded '" << name << "' from bytes  ("
+              << wav_bytes.size() << " raw, " << pcm_size << " PCM)\n";
+    return true;
+}
+
+void SfxPlayer::play(const std::string& name)
+{
+    std::lock_guard lock(mu_);
+    auto it = clips_.find(name);
+    if (it == clips_.end()) return;
+
+    const SfxClip& clip = it->second;
+    SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &clip.spec, nullptr, nullptr);
+    if (!stream) return;
+
+    SDL_PutAudioStreamData(stream,
+        static_cast<const void*>(clip.pcm.data()),
+        static_cast<int>(clip.pcm.size()));
+    SDL_FlushAudioStream(stream);
+    SDL_ResumeAudioStreamDevice(stream);
+}
+
+bool SfxPlayer::has(const std::string& name) const
+{
+    std::lock_guard lock(mu_);
+    return clips_.contains(name);
+}
+
+void SfxPlayer::unload(const std::string& name)
+{
+    std::lock_guard lock(mu_);
+    clips_.erase(name);
+}
+
+void SfxPlayer::clear()
+{
+    std::lock_guard lock(mu_);
+    clips_.clear();
+}
+
+std::size_t SfxPlayer::size() const
+{
+    std::lock_guard lock(mu_);
+    return clips_.size();
+}
+
+} // namespace pce::sdlos

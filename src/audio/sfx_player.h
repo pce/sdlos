@@ -55,11 +55,11 @@ public:
     SfxPlayer()  = default;
     ~SfxPlayer() = default;
 
-    // Copyable (clips are value types) but normally used as a member.
-    SfxPlayer(const SfxPlayer&)            = default;
-    SfxPlayer& operator=(const SfxPlayer&) = default;
-    SfxPlayer(SfxPlayer&&)                 = default;
-    SfxPlayer& operator=(SfxPlayer&&)      = default;
+    // Non-copyable, non-movable: owns a std::mutex.
+    SfxPlayer(const SfxPlayer&)            = delete;
+    SfxPlayer& operator=(const SfxPlayer&) = delete;
+    SfxPlayer(SfxPlayer&&)                 = delete;
+    SfxPlayer& operator=(SfxPlayer&&)      = delete;
 
 
     /// Attach a VFS instance.  When set, load() treats `path_or_uri` as a VFS

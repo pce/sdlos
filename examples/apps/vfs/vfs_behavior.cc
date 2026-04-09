@@ -51,136 +51,17 @@
 #include "vfs/vfs.h"
 #include "vfs/mem_mount.h"
 #include "vfs/local_mount.h"
+#include "audio/sfx_player.h"
+#include "audio/audio_player.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace {
 
-// ── SfxPlayer ─────────────────────────────────────────────────────────────────
-//
-// Fire-and-forget UI sound effects.  Pre-loads WAV files into memory;
-// play() opens a short-lived SDL3 audio stream per invocation so multiple
-// overlapping sounds work without a full mixing library.
-
-struct SfxClip {
-    SDL_AudioSpec  spec{};
-    std::vector<Uint8> pcm;
-};
-
-struct SfxPlayer {
-    std::unordered_map<std::string, SfxClip> clips;
-
-    bool load(const std::string& name, const std::string& path) {
-        SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
-        if (!io) {
-            sdlos_log("[sfx] cannot open: " + path + " — " + SDL_GetError());
-            return false;
-        }
-
-        SDL_AudioSpec spec{};
-        Uint8*  buf = nullptr;
-        Uint32  len = 0;
-        if (!SDL_LoadWAV_IO(io, true, &spec, &buf, &len)) {
-            sdlos_log("[sfx] load failed: " + path + " — " + SDL_GetError());
-            return false;
-        }
-
-        SfxClip clip;
-        clip.spec = spec;
-        clip.pcm.assign(buf, buf + len);
-        SDL_free(buf);
-
-        clips[name] = std::move(clip);
-        sdlos_log("[sfx] loaded '" + name + "' ← " + path
-                  + "  (" + std::to_string(len) + " bytes)");
-        return true;
-    }
-
-    void play(const std::string& name) {
-        auto it = clips.find(name);
-        if (it == clips.end()) return;
-
-        const SfxClip& clip = it->second;
-        SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(
-            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &clip.spec, nullptr, nullptr);
-        if (!stream) return;
-
-        SDL_PutAudioStreamData(stream,
-            static_cast<const void*>(clip.pcm.data()),
-            static_cast<int>(clip.pcm.size()));
-        SDL_FlushAudioStream(stream);
-        SDL_ResumeAudioStreamDevice(stream);
-    }
-};
-
-// ── AudioPlayer ───────────────────────────────────────────────────────────────
-//
-// Owns one SDL3 audio stream.  VFS delivers the raw bytes; SDL3 decodes the
-// WAV headers and feeds the PCM data to the default output device.
-//
-// Usage:
-//   auto bytes = state->vfs.read("asset://audio/click.wav");
-//   if (bytes) state->audio.play(*bytes);
-
-struct AudioPlayer {
-    SDL_AudioStream* stream  = nullptr;
-    bool             playing = false;
-
-    /// Load `wav_bytes` (full WAV file) and start playback.
-    /// Stops and replaces any currently active stream.
-    bool play(const std::vector<std::byte>& wav_bytes) {
-        stop();
-
-        SDL_IOStream* io = SDL_IOFromConstMem(
-            static_cast<const void*>(wav_bytes.data()), wav_bytes.size());
-        if (!io) {
-            sdlos_log("[vfs] audio: SDL_IOFromConstMem — " + std::string(SDL_GetError()));
-            return false;
-        }
-
-        SDL_AudioSpec spec{};
-        Uint8*  buf = nullptr;
-        Uint32  len = 0;
-        // SDL_TRUE in some SDL3 headers expands to a renamed symbol that isn't
-        // available in our build configuration; use a plain `true` boolean to
-        // avoid depending on the oldnames macro indirection.
-        if (!SDL_LoadWAV_IO(io, true, &spec, &buf, &len)) {
-            sdlos_log("[vfs] audio: SDL_LoadWAV_IO — " + std::string(SDL_GetError()));
-            return false;
-        }
-
-        stream = SDL_OpenAudioDeviceStream(
-            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
-        if (!stream) {
-            SDL_free(buf);
-            sdlos_log("[vfs] audio: SDL_OpenAudioDeviceStream — " + std::string(SDL_GetError()));
-            return false;
-        }
-
-        SDL_PutAudioStreamData(stream,
-            static_cast<const void*>(buf), static_cast<int>(len));
-        SDL_free(buf);
-        SDL_ResumeAudioStreamDevice(stream);
-        playing = true;
-        return true;
-    }
-
-    void stop() {
-        if (stream) {
-            SDL_PauseAudioStreamDevice(stream);
-            SDL_DestroyAudioStream(stream);
-            stream  = nullptr;
-        }
-        playing = false;
-    }
-
-    ~AudioPlayer() { stop(); }
-};
 
 
 // State
@@ -212,8 +93,8 @@ struct VfsState {
     // Handles to dynamically created scheme chips (used for active highlighting).
     std::vector<pce::sdlos::NodeHandle> scheme_chips;
 
-    AudioPlayer audio;
-    SfxPlayer   sfx;
+    pce::sdlos::AudioPlayer audio;
+    pce::sdlos::SfxPlayer   sfx;
 };
 
 
@@ -583,7 +464,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             const std::string src{an->style("src")};
             if (!src.empty()) {
                 const auto bytes = state->vfs.read(src);
-                if (bytes && state->audio.play(*bytes)) {
+                if (bytes && state->audio.play_bytes(*bytes)) {
                     setLabel(tree, state->audio_title_h, src);
                     setLabel(tree, state->audio_badge_h, "playing");
                     sdlos_log("[vfs] auto-play: " + src);
@@ -684,7 +565,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                 return;
             }
 
-            if (state->audio.play(*bytes)) {
+            if (state->audio.play_bytes(*bytes)) {
                 setLabel(tree, state->audio_badge_h, "playing");
                 setStatus(tree, state->status_h, "playing  " + src, true);
             } else {
