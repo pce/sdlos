@@ -58,7 +58,17 @@ struct Color {
      * @return Color result
      */
     static constexpr Color white() noexcept { return {1.f, 1.f, 1.f, 1.f}; }
+    /**
+     * @brief Black
+     *
+     * @return Color result
+     */
     static constexpr Color black() noexcept { return {0.f, 0.f, 0.f, 1.f}; }
+    /**
+     * @brief Clears
+     *
+     * @return Color result
+     */
     static constexpr Color clear() noexcept { return {0.f, 0.f, 0.f, 0.f}; }
 
     /**
@@ -210,9 +220,29 @@ struct FontStyle {
     bool        bold   = false;
     bool        italic = false;
 
+    /**
+     * @brief Body
+     *
+     * @return FontStyle result
+     */
     static FontStyle body()      { return {17.f}; }
+    /**
+     * @brief Title
+     *
+     * @return FontStyle result
+     */
     static FontStyle title()     { return {22.f, "", true}; }
+    /**
+     * @brief Caption
+     *
+     * @return FontStyle result
+     */
     static FontStyle caption()   { return {12.f}; }
+    /**
+     * @brief Monospace
+     *
+     * @return FontStyle result
+     */
     static FontStyle monospace() { return {14.f, "monospace"}; }
 };
 

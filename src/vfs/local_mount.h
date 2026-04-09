@@ -125,9 +125,39 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<void, std::string>
     write(std::string_view path, std::span<const std::byte> data) noexcept override;
 
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Removes
      *
@@ -257,9 +287,37 @@ public:
      *
      * @return Stat result
      */
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
     [[nodiscard]] Stat
     stat(std::string_view path) noexcept override;
 
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief List
      *
@@ -389,6 +447,20 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<void, std::string>
     mkdir(std::string_view path) noexcept override;
 
@@ -407,6 +479,20 @@ private:
     /// Returns std::unexpected with a human-readable message if:
     ///   - `vpath` is absolute (starts with '/' or '\')
     ///   - the normalised result would escape root_
+    /**
+     * @brief Resolves
+     *
+     * @param vpath  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Resolves
+     *
+     * @param vpath  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Resolves
      *

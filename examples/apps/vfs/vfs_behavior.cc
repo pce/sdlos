@@ -219,6 +219,28 @@ struct VfsState {
 
 // ── Small UI helpers ──────────────────────────────────────────────────────────
 
+/// Parse a single-element jade snippet and return just the element — not the
+/// virtual _root wrapper that jade::parse() creates.  The wrapper is detached
+/// and freed so it doesn't pollute the tree or collapse to zero height in
+/// flex layouts.
+static pce::sdlos::NodeHandle parseSingle(const std::string& jade_src,
+                                           pce::sdlos::RenderTree& tree)
+{
+    const pce::sdlos::NodeHandle wrapper = pce::sdlos::jade::parse(jade_src, tree);
+    if (!wrapper.valid()) return pce::sdlos::k_null_handle;
+
+    pce::sdlos::RenderNode* wr = tree.node(wrapper);
+    if (!wr || !wr->child.valid()) {
+        tree.free(wrapper);
+        return pce::sdlos::k_null_handle;
+    }
+
+    const pce::sdlos::NodeHandle child = wr->child;
+    tree.detach(child);
+    tree.free(wrapper);
+    return child;
+}
+
 static void setLabel(pce::sdlos::RenderTree& tree,
                      pce::sdlos::NodeHandle   h,
                      const std::string&       text)
@@ -303,13 +325,17 @@ static void rebuildSchemeChips(pce::sdlos::RenderTree& tree,
 
     for (const auto& s : schemes) {
         // Build a minimal jade snippet for one chip.
+        // Inline styles replicate CSS .scheme-chip because CSS is applied
+        // before jade_app_init() and does not cover dynamically created nodes.
         const std::string jade_src =
             "div.scheme-chip("
+            "height=\"30\" padding=\"6\" fontSize=\"12\" "
+            "color=\"#94a3b8\" backgroundColor=\"#ffffff0a\" "
             "data-value=\"" + s + "\" "
             "onclick=\"vfs:scheme\" "
             "text=\"" + s + "://\")";
 
-        const pce::sdlos::NodeHandle chip = pce::sdlos::jade::parse(jade_src, tree);
+        const pce::sdlos::NodeHandle chip = parseSingle(jade_src, tree);
         if (!chip.valid()) continue;
 
         pce::sdlos::bindDrawCallbacks(tree, chip);
@@ -321,6 +347,9 @@ static void rebuildSchemeChips(pce::sdlos::RenderTree& tree,
     // Refresh the mount-count label.
     setLabel(tree, state.vfs_info_h,
              std::to_string(schemes.size()) + " mount" + (schemes.size() == 1 ? "" : "s"));
+
+    // Ensure the parent container re-lays-out with the new children.
+    tree.markLayoutDirty(state.schemes_col_h);
 }
 
 
@@ -336,13 +365,17 @@ static void populateFileList(pce::sdlos::RenderTree& tree,
     const std::string uri = state.active_scheme + "://" + state.active_path;
     auto entries = state.vfs.list(uri);
 
+    sdlos_log("[vfs] list " + uri + " → " + std::to_string(entries.size()) + " entries");
+
     if (entries.empty()) {
         const pce::sdlos::NodeHandle h =
-            pce::sdlos::jade::parse("div.empty-hint(text=\"(empty)\")", tree);
+            parseSingle("div.empty-hint(height=\"24\" fontSize=\"12\" "
+                        "color=\"#64748b\" padding=\"4\" text=\"(empty)\")", tree);
         if (h.valid()) {
             pce::sdlos::bindDrawCallbacks(tree, h);
             tree.appendChild(state.file_list_h, h);
         }
+        tree.markLayoutDirty(state.file_list_h);
         return;
     }
 
@@ -353,25 +386,31 @@ static void populateFileList(pce::sdlos::RenderTree& tree,
     for (const auto& entry : entries) {
         const bool is_dir = !entry.empty() && entry.back() == '/';
         const std::string cls = is_dir ? "file-entry is-dir" : "file-entry";
+        const std::string color = is_dir ? "#60a5fa" : "#94a3b8";
 
         // Escape any double-quotes inside the entry name so the jade snippet
         // remains syntactically valid.
         std::string safe = entry;
         for (char& c : safe) if (c == '"') c = '\'';
 
+        // Inline styles replicate CSS .file-entry / .file-entry.is-dir.
         const std::string jade_src =
             "div." + cls + "("
+            "height=\"26\" padding=\"4\" fontSize=\"12\" "
+            "color=\"" + color + "\" "
             "data-value=\"" + safe + "\" "
             "onclick=\"vfs:open-file\" "
             "text=\"" + safe + "\")";
 
-        const pce::sdlos::NodeHandle h = pce::sdlos::jade::parse(jade_src, tree);
+        const pce::sdlos::NodeHandle h = parseSingle(jade_src, tree);
         if (!h.valid()) continue;
 
         pce::sdlos::bindDrawCallbacks(tree, h);
         pce::sdlos::bindNodeEvents(tree, h, bus);
         tree.appendChild(state.file_list_h, h);
     }
+
+    tree.markLayoutDirty(state.file_list_h);
 }
 
 

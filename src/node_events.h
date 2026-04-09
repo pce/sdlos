@@ -173,6 +173,38 @@ namespace css { struct StyleSheet; }   // forward — avoids pulling in full css
  *          ownership is ambiguous; consider std::span (non-owning view),
  *          std::unique_ptr (transfer), or const T* (borrow)
  */
+/**
+ * @brief Dispatches click
+ *
+ * @param tree  Red channel component [0, 1]
+ * @param root  Red channel component [0, 1]
+ * @param px    Horizontal coordinate in logical pixels
+ * @param py    Vertical coordinate in logical pixels
+ * @param bus   Blue channel component [0, 1]
+ * @param css   css::StyleSheet * value
+ *
+ * @return Handle to the node, or k_null_handle on failure
+ *
+ * @warning Parameter 'css' is a non-const raw pointer — Raw pointer parameter —
+ *          ownership is ambiguous; consider std::span (non-owning view),
+ *          std::unique_ptr (transfer), or const T* (borrow)
+ */
+/**
+ * @brief Dispatches click
+ *
+ * @param tree  Red channel component [0, 1]
+ * @param root  Red channel component [0, 1]
+ * @param px    Horizontal coordinate in logical pixels
+ * @param py    Vertical coordinate in logical pixels
+ * @param bus   Blue channel component [0, 1]
+ * @param css   css::StyleSheet * value
+ *
+ * @return Handle to the node, or k_null_handle on failure
+ *
+ * @warning Parameter 'css' is a non-const raw pointer — Raw pointer parameter —
+ *          ownership is ambiguous; consider std::span (non-owning view),
+ *          std::unique_ptr (transfer), or const T* (borrow)
+ */
 [[nodiscard]]
 NodeHandle dispatchClick(RenderTree& tree, NodeHandle root,
                          float px, float py, IEventBus& bus,

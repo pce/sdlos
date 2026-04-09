@@ -437,6 +437,13 @@ private:
     bool              pending_pipeline_dirty_{false};
 
     SDL_GPUGraphicsPipeline*
+    /**
+     * @brief Ensure node shader pipeline
+     *
+     * @param name  Human-readable name or identifier string
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     ensureNodeShaderPipeline(const std::string& name) noexcept;
 };
 

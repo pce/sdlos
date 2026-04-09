@@ -245,9 +245,39 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<void, std::string>
     write(std::string_view path, std::span<const std::byte> data) noexcept override;
 
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Removes
      *
@@ -377,6 +407,20 @@ public:
      *
      * @return Stat result
      */
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
     [[nodiscard]] Stat
     stat(std::string_view path) noexcept override;
 
@@ -443,9 +487,37 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::vector<std::string>
     list(std::string_view path) noexcept override;
 
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Mkdir
      *

@@ -227,6 +227,32 @@ public:
      *          pointer parameter — ownership is ambiguous; consider std::span (non-
      *          owning view), std::unique_ptr (transfer), or const T* (borrow)
      */
+    /**
+     * @brief Returns or create
+     *
+     * @param shader_key     Lookup key
+     * @param target_format  Format descriptor
+     * @param num_samplers   Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     *
+     * @warning Factory function 'get_or_create' returns a non-const raw pointer — Raw
+     *          pointer parameter — ownership is ambiguous; consider std::span (non-
+     *          owning view), std::unique_ptr (transfer), or const T* (borrow)
+     */
+    /**
+     * @brief Returns or create
+     *
+     * @param shader_key     Lookup key
+     * @param target_format  Format descriptor
+     * @param num_samplers   Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     *
+     * @warning Factory function 'get_or_create' returns a non-const raw pointer — Raw
+     *          pointer parameter — ownership is ambiguous; consider std::span (non-
+     *          owning view), std::unique_ptr (transfer), or const T* (borrow)
+     */
     [[nodiscard]]
     SDL_GPUGraphicsPipeline* get_or_create(
         std::string_view     shader_key,
@@ -236,6 +262,16 @@ public:
 
     // create_sampler — shared linear-clamp sampler used for all pass inputs.
     // Created once; caller does NOT own the returned pointer.
+    /**
+     * @brief Linear sampler
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
+    /**
+     * @brief Linear sampler
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     /**
      * @brief Linear sampler
      *
@@ -297,6 +333,24 @@ private:
     /// @param num_frag_samplers  Number of sampler bindings declared in the
     ///                           fragment shader.  Ignored for vertex shaders
     ///                           (always 0).  Must match the binary exactly.
+    /**
+     * @brief Loads shader
+     *
+     * @param name               Human-readable name or identifier string
+     * @param stage              String tag used for lookup or categorisation
+     * @param num_frag_samplers  Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
+    /**
+     * @brief Loads shader
+     *
+     * @param name               Human-readable name or identifier string
+     * @param stage              String tag used for lookup or categorisation
+     * @param num_frag_samplers  Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     /**
      * @brief Loads shader
      *

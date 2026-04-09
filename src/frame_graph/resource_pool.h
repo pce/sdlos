@@ -207,6 +207,16 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Swaps chain h
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Swaps chain h
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] uint32_t swapchain_w() const noexcept { return sw_w_; }
     [[nodiscard]] uint32_t swapchain_h() const noexcept { return sw_h_; }
 
@@ -233,6 +243,28 @@ private:
 
     /// create_texture — allocate a new GPU texture for the given descriptor.
     // Stores it in pool_[] and returns the raw pointer (or nullptr on failure).
+    /**
+     * @brief Creates and returns texture
+     *
+     * @param d  const ResourceDesc & value
+     *
+     * @return Pointer to the result, or nullptr on failure
+     *
+     * @warning Factory function 'create_texture' returns a non-const raw pointer — Raw
+     *          pointer parameter — ownership is ambiguous; consider std::span (non-
+     *          owning view), std::unique_ptr (transfer), or const T* (borrow)
+     */
+    /**
+     * @brief Creates and returns texture
+     *
+     * @param d  const ResourceDesc & value
+     *
+     * @return Pointer to the result, or nullptr on failure
+     *
+     * @warning Factory function 'create_texture' returns a non-const raw pointer — Raw
+     *          pointer parameter — ownership is ambiguous; consider std::span (non-
+     *          owning view), std::unique_ptr (transfer), or const T* (borrow)
+     */
     /**
      * @brief Creates and returns texture
      *

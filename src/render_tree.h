@@ -536,6 +536,16 @@ public:
      *
      * @return Reference to the result
      */
+    /**
+     * @brief Observe
+     *
+     * @return Reference to the result
+     */
+    /**
+     * @brief Observe
+     *
+     * @return Reference to the result
+     */
     template<typename Self>
     auto& observe(this Self&& self, std::function<void(const T&)> fn)
     {
@@ -602,6 +612,20 @@ public:
      *
      * @return Pointer to the result, or nullptr on failure
      */
+    /**
+     * @brief Node
+     *
+     * @param handle  Opaque resource handle
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
+    /**
+     * @brief Node
+     *
+     * @param handle  Opaque resource handle
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     [[nodiscard]] RenderNode*       node(NodeHandle handle);
     [[nodiscard]] const RenderNode* node(NodeHandle handle) const;
 
@@ -645,6 +669,12 @@ public:
     /**
      * @brief Binds = Signal must outlive this RenderTree.
      */
+    /**
+     * @brief Binds
+     */
+    /**
+     * @brief Binds
+     */
     template<typename T>
     void bind(Signal<T>& signal, NodeHandle handle)
     {
@@ -670,6 +700,16 @@ public:
      */
     void render(NodeHandle root, RenderContext& ctx);// draw() on dirty nodes
 
+    /**
+     * @brief Sets root
+     *
+     * @param h  Opaque resource handle
+     */
+    /**
+     * @brief Sets root
+     *
+     * @param h  Opaque resource handle
+     */
     /**
      * @brief Sets root
      *
@@ -802,6 +842,12 @@ public:
     [[nodiscard]] std::size_t        capacity()   const noexcept { return nodes_.capacity(); }
 
 private:
+    /**
+     * @brief Traverse
+     */
+    /**
+     * @brief Traverse
+     */
     /**
      * @brief Traverse
      */

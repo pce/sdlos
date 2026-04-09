@@ -11,7 +11,7 @@
 
 namespace {
 
-// ── SfxPlayer ─────────────────────────────────────────────────────────────────
+// SfxPlayer
 //
 // Fire-and-forget sound effects.  Pre-loads WAV files from disk into memory;
 // play() opens a short-lived SDL3 audio stream, puts the PCM data, and lets

@@ -189,6 +189,20 @@ public:
      *
      * @return Pointer to the result, or nullptr on failure
      */
+    /**
+     * @brief Searches for and returns
+     *
+     * @param scheme  Opaque resource handle
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
+    /**
+     * @brief Searches for and returns
+     *
+     * @param scheme  Opaque resource handle
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     [[nodiscard]] IMount*       find(std::string_view scheme)       noexcept;
     [[nodiscard]] const IMount* find(std::string_view scheme) const noexcept;
 
@@ -287,11 +301,41 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Reads text
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Reads text
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<std::string, std::string>
     read_text(std::string_view uri) noexcept;
 
 
     /// Create-or-replace a file with the given bytes.
+    /**
+     * @brief Writes
+     *
+     * @param uri   Red channel component [0, 1]
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Writes
+     *
+     * @param uri   Red channel component [0, 1]
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Writes
      *
@@ -440,11 +484,41 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Writes text
+     *
+     * @param uri   Red channel component [0, 1]
+     * @param text  UTF-8 text content
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Writes text
+     *
+     * @param uri   Red channel component [0, 1]
+     * @param text  UTF-8 text content
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<void, std::string>
     write_text(std::string_view uri, std::string_view text) noexcept;
 
 
     /// Remove a file or empty directory (idempotent — succeeds if absent).
+    /**
+     * @brief Removes
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Removes
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Removes
      *
@@ -589,6 +663,20 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Mkdir
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Mkdir
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     [[nodiscard]] std::expected<void, std::string>
     mkdir(std::string_view uri) noexcept;
 
@@ -621,6 +709,20 @@ private:
     /// Returns std::unexpected if:
     ///   - The scheme is absent and default_scheme_ is empty
     ///   - The scheme is not registered
+    /**
+     * @brief Dispatches
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Dispatches
+     *
+     * @param uri  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     /**
      * @brief Dispatches
      *

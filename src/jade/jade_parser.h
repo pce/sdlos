@@ -82,6 +82,22 @@ namespace pce::sdlos::jade {
  *
  * @return Handle to the node, or k_null_handle on failure
  */
+/**
+ * @brief Parses
+ *
+ * @param source  Red channel component [0, 1]
+ * @param tree    Red channel component [0, 1]
+ *
+ * @return Handle to the node, or k_null_handle on failure
+ */
+/**
+ * @brief Parses
+ *
+ * @param source  Red channel component [0, 1]
+ * @param tree    Red channel component [0, 1]
+ *
+ * @return Handle to the node, or k_null_handle on failure
+ */
 [[nodiscard]]
 NodeHandle parse(std::string_view source, RenderTree& tree);
 

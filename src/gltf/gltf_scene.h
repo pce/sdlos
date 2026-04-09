@@ -352,6 +352,11 @@ public:
      * @return Reference to the result
      */
     GltfCamera&       camera()     noexcept { return camera_; }
+    /**
+     * @brief Camera
+     *
+     * @return Reference to the result
+     */
     const GltfCamera& camera() const noexcept { return camera_; }
     /**
      * @brief Reads y
@@ -360,6 +365,11 @@ public:
      */
 
     bool              ready()  const noexcept { return pipeline_ != nullptr; }
+    /**
+     * @brief Mesh count
+     *
+     * @return Integer result; negative values indicate an error code
+     */
     std::size_t       meshCount() const noexcept { return entries_.size(); }
 
 private:

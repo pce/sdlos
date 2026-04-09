@@ -47,6 +47,16 @@ namespace pce::sdlos {
  *
  * @return T result
  */
+/**
+ * @brief Lerp
+ *
+ * @return T result
+ */
+/**
+ * @brief Lerp
+ *
+ * @return T result
+ */
 template<typename T>
 inline T lerp(T a, T b, T t) noexcept
 {
@@ -93,6 +103,24 @@ struct RGBAf {
 //   RGBAf from{1.f, 0.f, 0.f, 1.f};
 //   RGBAf to{0.f, 1.f, 0.f, 1.f};
 //   RGBAf mid = lerp(from, to, 0.5f);  // {0.5f, 0.5f, 0.f, 1.f}
+/**
+ * @brief Lerp
+ *
+ * @param a  Alpha channel component [0, 1]
+ * @param b  Blue channel component [0, 1]
+ * @param t  Interpolation parameter in [0, 1]
+ *
+ * @return RGBAf result
+ */
+/**
+ * @brief Lerp
+ *
+ * @param a  Alpha channel component [0, 1]
+ * @param b  Blue channel component [0, 1]
+ * @param t  Interpolation parameter in [0, 1]
+ *
+ * @return RGBAf result
+ */
 template<>
 inline RGBAf lerp(RGBAf a, RGBAf b, float t) noexcept
 {
