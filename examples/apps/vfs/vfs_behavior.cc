@@ -56,9 +56,67 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
+
+// ── SfxPlayer ─────────────────────────────────────────────────────────────────
+//
+// Fire-and-forget UI sound effects.  Pre-loads WAV files into memory;
+// play() opens a short-lived SDL3 audio stream per invocation so multiple
+// overlapping sounds work without a full mixing library.
+
+struct SfxClip {
+    SDL_AudioSpec  spec{};
+    std::vector<Uint8> pcm;
+};
+
+struct SfxPlayer {
+    std::unordered_map<std::string, SfxClip> clips;
+
+    bool load(const std::string& name, const std::string& path) {
+        SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
+        if (!io) {
+            sdlos_log("[sfx] cannot open: " + path + " — " + SDL_GetError());
+            return false;
+        }
+
+        SDL_AudioSpec spec{};
+        Uint8*  buf = nullptr;
+        Uint32  len = 0;
+        if (!SDL_LoadWAV_IO(io, true, &spec, &buf, &len)) {
+            sdlos_log("[sfx] load failed: " + path + " — " + SDL_GetError());
+            return false;
+        }
+
+        SfxClip clip;
+        clip.spec = spec;
+        clip.pcm.assign(buf, buf + len);
+        SDL_free(buf);
+
+        clips[name] = std::move(clip);
+        sdlos_log("[sfx] loaded '" + name + "' ← " + path
+                  + "  (" + std::to_string(len) + " bytes)");
+        return true;
+    }
+
+    void play(const std::string& name) {
+        auto it = clips.find(name);
+        if (it == clips.end()) return;
+
+        const SfxClip& clip = it->second;
+        SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(
+            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &clip.spec, nullptr, nullptr);
+        if (!stream) return;
+
+        SDL_PutAudioStreamData(stream,
+            static_cast<const void*>(clip.pcm.data()),
+            static_cast<int>(clip.pcm.size()));
+        SDL_FlushAudioStream(stream);
+        SDL_ResumeAudioStreamDevice(stream);
+    }
+};
 
 // ── AudioPlayer ───────────────────────────────────────────────────────────────
 //
@@ -125,7 +183,7 @@ struct AudioPlayer {
 };
 
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// State
 //
 // pce::vfs::Vfs is non-copyable / non-movable; it lives directly in this
 // struct which is heap-allocated via std::make_shared, so no copy or move
@@ -155,6 +213,7 @@ struct VfsState {
     std::vector<pce::sdlos::NodeHandle> scheme_chips;
 
     AudioPlayer audio;
+    SfxPlayer   sfx;
 };
 
 
@@ -213,7 +272,7 @@ static void clearChildren(pce::sdlos::RenderTree& tree,
 }
 
 
-// ── Scheme chip utilities ─────────────────────────────────────────────────────
+// Scheme chip utilities
 
 /// Update background/colour of every chip based on `active` scheme.
 static void highlightChips(pce::sdlos::RenderTree& tree,
@@ -265,8 +324,7 @@ static void rebuildSchemeChips(pce::sdlos::RenderTree& tree,
 }
 
 
-// ── File list ─────────────────────────────────────────────────────────────────
-
+// File list
 /// Repopulate the file-entry column for state.active_scheme + state.active_path.
 static void populateFileList(pce::sdlos::RenderTree& tree,
                               pce::sdlos::IEventBus&   bus,
@@ -317,8 +375,7 @@ static void populateFileList(pce::sdlos::RenderTree& tree,
 }
 
 
-// ── File open / navigation ────────────────────────────────────────────────────
-
+// File open / navigation
 /// Handle a click on a file-list entry.
 ///
 /// Directories  → push sub-path and re-list.
@@ -398,7 +455,16 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     auto state = std::make_shared<VfsState>();
 
-    // ── VFS mounts ─────────────────────────────────────────────────────────────
+    // ── Load UI sound effects ─────────────────────────────────────────────────
+    {
+        const char* bp = SDL_GetBasePath();
+        const std::string snd = bp ? std::string(bp) + "data/sounds/" : "data/sounds/";
+        state->sfx.load("click",  snd + "neueis_7.wav");
+        state->sfx.load("nav",    snd + "neueis_8.wav");
+        state->sfx.load("action", snd + "neueis_9.wav");
+    }
+
+    // VFS mounts
 
     // asset:// → binary directory / data/
     // CMake copies each app's data/ tree alongside the executable at build time,
@@ -428,7 +494,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         state->vfs.mount("mem", std::move(mem));
     }
 
-    // ── User extension point ───────────────────────────────────────────────────
+    // User extension point
     // Mount additional schemes here.  Chips rebuild automatically.
     // --- enter the forrest ---
 
@@ -458,6 +524,17 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // ── Build scheme chips from live vfs.schemes() ────────────────────────────
     rebuildSchemeChips(tree, bus, *state);
 
+    // ── Default view: asset://sounds/ ─────────────────────────────────────────
+    // Select the "asset" scheme and navigate into sounds/ so the user sees the
+    // list of audio files immediately on launch.
+    {
+        state->active_scheme = "asset";
+        state->active_path   = "sounds/";
+        highlightChips(tree, state->scheme_chips, "asset");
+        setLabel(tree, state->path_h, "asset://sounds/");
+        populateFileList(tree, bus, *state);
+    }
+
     // ── Auto-play a static src= on the audio node (if any) ───────────────────
     // If the jade source has  audio(src="asset://audio/ambient.wav")  the URI
     // is preserved verbatim (resolveAssetPaths skips "://") so we can play it
@@ -481,6 +558,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Scheme chip clicked → list that scheme's root directory.
     bus.subscribe("vfs:scheme",
         [&tree, state, &bus](const std::string& scheme) {
+            state->sfx.play("click");
             state->active_scheme = scheme;
             state->active_path   = "";
             highlightChips(tree, state->scheme_chips, scheme);
@@ -492,6 +570,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // File-list entry clicked → navigate or open.
     bus.subscribe("vfs:open-file",
         [&tree, state, &bus](const std::string& entry) {
+            state->sfx.play("nav");
             openEntry(tree, bus, *state, entry);
         });
 
@@ -505,6 +584,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Demo: write a file to mem:// at runtime.
     bus.subscribe("vfs:demo-write",
         [&tree, state](const std::string&) {
+            state->sfx.play("action");
             const auto r = state->vfs.write_text(
                 "mem://demo_write.txt",
                 "Written at runtime via vfs.write_text()!\n"
@@ -518,6 +598,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Demo: read it back and display in the content pane.
     bus.subscribe("vfs:demo-read",
         [&tree, state](const std::string&) {
+            state->sfx.play("action");
             const auto r = state->vfs.read_text("mem://demo_write.txt");
             if (r) {
                 setLabel(tree, state->content_h, *r);
@@ -532,6 +613,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Demo: delete it (idempotent — no error if already gone).
     bus.subscribe("vfs:demo-delete",
         [&tree, state](const std::string&) {
+            state->sfx.play("action");
             const auto r = state->vfs.remove("mem://demo_write.txt");
             setStatus(tree, state->status_h,
                 r ? "deleted  mem://demo_write.txt"
@@ -542,6 +624,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Audio: load src= from the audio node, read bytes via VFS, play via SDL3.
     bus.subscribe("vfs:audio-play",
         [&tree, state](const std::string&) {
+            state->sfx.play("click");
             if (!state->audio_node_h.valid()) return;
 
             const pce::sdlos::RenderNode* an = tree.node(state->audio_node_h);
@@ -574,6 +657,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Audio: stop the current stream.
     bus.subscribe("vfs:audio-stop",
         [&tree, state](const std::string&) {
+            state->sfx.play("click");
             state->audio.stop();
             setLabel(tree, state->audio_badge_h, "stopped");
             setStatus(tree, state->status_h, "audio stopped", true);

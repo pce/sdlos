@@ -72,7 +72,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     //  Locate nodes
     const pce::sdlos::NodeHandle title_h = tree.findById(root, "my-title");
 
-    title_h->
+    //title_h->
 
     // Bus subscriptions
     // --- enter the forrest ---

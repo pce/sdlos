@@ -83,7 +83,6 @@ from pathlib import Path
 from typing import Optional
 
 
-# ── Config ────────────────────────────────────────────────────────────────────
 
 @dataclass
 class RunConfig:
@@ -127,11 +126,10 @@ class RunConfig:
     directory is already configured and ``--reconfigure`` is not set.
     """
 
-    # ── Derived / internal ────────────────────────────────────────────────────
+    # Derived / internal
     _watch_dir: Optional[Path] = field(default=None, init=False, repr=False)
 
 
-# ── Executable discovery ──────────────────────────────────────────────────────
 
 _CONFIGS = ("", "Debug", "Release", "RelWithDebInfo", "MinSizeRel")
 _EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
@@ -154,7 +152,6 @@ def _find_executable(name: str, build_dir: Path) -> Optional[Path]:
     return None
 
 
-# ── Configure step ───────────────────────────────────────────────────────────
 
 def _needs_configure(build_dir: Path) -> bool:
     """Return True when cmake has not yet been configured in *build_dir*.
@@ -194,7 +191,6 @@ def _configure(
     return result.returncode == 0
 
 
-# ── Build step ────────────────────────────────────────────────────────────────
 
 def _build(run_cfg: RunConfig, project_root: Path) -> bool:
     """Run ``cmake --build`` for the target.  Returns ``True`` on success."""
@@ -216,7 +212,6 @@ def _build(run_cfg: RunConfig, project_root: Path) -> bool:
     return result.returncode == 0
 
 
-# ── Launch ────────────────────────────────────────────────────────────────────
 
 def _launch(exe: Path, quiet: bool) -> subprocess.Popen:
     """Start *exe* in a child process and return the Popen handle."""
@@ -240,7 +235,6 @@ def _wait_or_kill(proc: subprocess.Popen, timeout: float = 5.0) -> None:
         proc.wait()
 
 
-# ── Watch loop ────────────────────────────────────────────────────────────────
 
 def _watch_loop(run_cfg: RunConfig, project_root: Path, exe: Path) -> None:
     """Build → launch → watch → rebuild → relaunch.  Runs until Ctrl-C."""
@@ -279,7 +273,124 @@ def _watch_loop(run_cfg: RunConfig, project_root: Path, exe: Path) -> None:
         _wait_or_kill(proc)
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# Ensure .cmake registration file exists
+
+def _find_app_dir(name: str, project_root: Path) -> Optional[Path]:
+    """Return the app directory if it exists, or None."""
+    apps_root = project_root / "examples" / "apps"
+    candidate = apps_root / name
+    if candidate.is_dir():
+        return candidate
+    return None
+
+
+def _find_cmake_file(name: str, project_root: Path) -> Optional[Path]:
+    """Return the .cmake registration file for *name*, or None if missing."""
+    app_dir = _find_app_dir(name, project_root)
+    if app_dir is None:
+        return None
+    cmake_file = app_dir / f"{name}.cmake"
+    return cmake_file if cmake_file.exists() else None
+
+
+def _infer_cmake_snippet(name: str, app_dir: Path) -> str:
+    """Build a minimal sdlos_jade_app() cmake snippet by inspecting what files
+    actually exist in the app directory."""
+    src_base = f"examples/apps/{name}"
+
+    # Find jade file
+    jade_file = f"{src_base}/{name}.jade"
+
+    # Find behavior file — try common extensions
+    behavior = None
+    for ext in (".cc", ".cxx", ".cpp"):
+        candidate_name = f"{name}_behavior{ext}"
+        if (app_dir / candidate_name).exists():
+            behavior = f"{src_base}/{candidate_name}"
+            break
+        # Also try plain name (e.g. shade.cc)
+        candidate_name2 = f"{name}{ext}"
+        if (app_dir / candidate_name2).exists():
+            behavior = f"{src_base}/{candidate_name2}"
+            break
+
+    # Check for data/ directory
+    has_data = (app_dir / "data").is_dir()
+
+    lines = [f"sdlos_jade_app({name}", f"    {jade_file}"]
+    if behavior:
+        lines.append(f"    BEHAVIOR {behavior}")
+    if has_data:
+        lines.append(f"    DATA_DIR {src_base}/data")
+    lines.append(")")
+    return "\n".join(lines) + "\n"
+
+
+def _ensure_app_cmake(
+    name: str,
+    project_root: Path,
+    quiet: bool,
+    run_cfg: "RunConfig",
+) -> None:
+    """Check that a .cmake registration file exists for the app.
+
+    If the app directory exists but the .cmake file is missing:
+      - In an interactive terminal: prompt the user to auto-create it.
+      - Non-interactive: print a helpful error and exit.
+
+    If the .cmake was created, force reconfigure so cmake picks it up.
+    """
+    app_dir = _find_app_dir(name, project_root)
+
+    if app_dir is None:
+        # No app directory at all — nothing we can do here; cmake will fail
+        # later with a clear error message.
+        return
+
+    cmake_file = app_dir / f"{name}.cmake"
+    if cmake_file.exists():
+        return  # all good
+
+    # The app directory exists but the .cmake file is missing.
+    if not quiet:
+        _echo(f"  [warn]   {name}.cmake not found in {app_dir.relative_to(project_root)}")
+
+    # Check if this is an interactive TTY
+    is_interactive = sys.stdin.isatty() and sys.stdout.isatty()
+
+    if is_interactive:
+        snippet = _infer_cmake_snippet(name, app_dir)
+        _echo(f"\n  The app directory exists but {name}.cmake is missing.")
+        _echo(f"  I can create it for you:\n")
+        for line in snippet.splitlines():
+            _echo(f"    {line}")
+        _echo("")
+        try:
+            answer = input("  Create this file? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            _echo("")
+            answer = "n"
+
+        if answer in ("", "y", "yes"):
+            cmake_file.write_text(snippet, encoding="utf-8")
+            _echo(f"  [create] wrote {cmake_file.relative_to(project_root)}")
+            # Force reconfigure so cmake picks up the new file
+            run_cfg.reconfigure = True
+        else:
+            _die(
+                f"{name}.cmake is missing — the cmake build system cannot find this target.\n"
+                f"Create it manually or run:  sdlos create {name} --overwrite"
+            )
+    else:
+        _die(
+            f"{name}.cmake not found in {app_dir.relative_to(project_root)}.\n"
+            f"The cmake glob (examples/apps/*/*.cmake) cannot discover this app.\n"
+            f"Fix:\n"
+            f"  sdlos create {name} --overwrite     # re-scaffold with .cmake\n"
+            f"  sdlos run {name} --reconfigure      # in a terminal (interactive prompt)"
+        )
+
+
 
 def run_app(
     name: str,
@@ -347,11 +458,16 @@ def run_app(
         _echo(f"\nsdlos run  {name}")
         _echo(f"  build dir: {resolved_build}")
 
+    # ── Ensure the app has a .cmake registration file ─────────────────────────
+    # The root CMakeLists.txt discovers app targets via:
+    #   file(GLOB _app_cmake_files "examples/apps/*/*.cmake")
+    # If the .cmake file is missing (deleted, never created, etc.) the target
+    # is invisible to cmake even after --reconfigure.  Detect this early and
+    # offer to create a minimal one when running interactively.
+    if not no_build:
+        _ensure_app_cmake(name, project_root, quiet, run_cfg)
+
     # ── Configure (auto or forced) ────────────────────────────────────────────
-    # The root CMakeLists.txt discovers app targets at cmake *configure* time
-    # via file(GLOB "examples/apps/*/*.cmake").  A freshly scaffolded app is
-    # invisible to cmake --build until a configure pass has been made.
-    #
     # Handled cases:
     #   1. Build dir absent          → create dir + auto-configure.
     #   2. CMakeCache.txt missing    → auto-configure (dir exists but blank).
@@ -430,7 +546,6 @@ def run_app(
             _echo(f"  [exit]   process exited with code {rc}")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _echo(msg: str) -> None:
     print(msg, flush=True)

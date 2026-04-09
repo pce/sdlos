@@ -13,7 +13,8 @@ namespace pce::sdlos::css {
 
 namespace {
 
-[[nodiscard]] static std::string_view trimSV(std::string_view s) noexcept
+[[nodiscard]]
+static std::string_view trimSV(std::string_view s) noexcept
 {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
         s.remove_prefix(1);
@@ -22,7 +23,8 @@ namespace {
     return s;
 }
 
-[[nodiscard]] static bool hasClassToken(std::string_view class_sv,
+[[nodiscard]]
+static bool hasClassToken(std::string_view class_sv,
                                         const std::string& token) noexcept
 {
     std::size_t pos = 0;
@@ -38,7 +40,8 @@ namespace {
     return false;
 }
 
-[[nodiscard]] static std::string kebabToCamel(std::string_view prop)
+[[nodiscard]]
+static std::string kebabToCamel(std::string_view prop)
 {
     // CSS custom properties (--foo-bar) are stored verbatim in the StyleMap so
     // that GltfScene can read them with the same key it writes in setStyle():
@@ -65,14 +68,16 @@ namespace {
     return result;
 }
 
-[[nodiscard]] static std::string stripPx(std::string_view val)
+[[nodiscard]]
+static std::string stripPx(std::string_view val)
 {
     if (val.size() > 2 && val.substr(val.size() - 2) == "px")
         return std::string(val.substr(0, val.size() - 2));
     return std::string(val);
 }
 
-[[nodiscard]] static bool isSimpleSelector(std::string_view sel) noexcept
+[[nodiscard]]
+static bool isSimpleSelector(std::string_view sel) noexcept
 {
     if (sel.size() < 2) return false;
     if (sel[0] != '.' && sel[0] != '#') return false;
@@ -97,7 +102,8 @@ namespace {
     return true;
 }
 
-[[nodiscard]] static std::pair<float, float>
+[[nodiscard]]
+static std::pair<float, float>
 absolutePos(const RenderTree& tree, NodeHandle h) noexcept
 {
     float ax = 0.f, ay = 0.f;
@@ -146,7 +152,7 @@ static void walkTree(RenderTree& tree, NodeHandle root,
 /**
  * @brief Parses
  *
- * @param source  Red channel component [0, 1]
+ * @param source  CSS source code
  *
  * @return StyleSheet result
  */
@@ -228,9 +234,11 @@ StyleSheet parse(std::string_view source)
     return sheet;
 }
 
-// Forward declaration for recursive @import handling.
+
 /**
  * @brief Loads recursive
+ *
+ * Forward declaration for recursive @import handling.
  *
  * @param path     Filesystem path
  * @param visited  Iterator position

@@ -79,7 +79,7 @@ button.key:hover {
 
 cmake brings SDL, harfbuzz, and many more to the party
 
-> the current hierarchy allows to build without global package manager installations (brew, vcpkg, nuget, etc.)., CMakeLists.txt now implements a multi-level fallback strategy for resolving third party libraries from upstream, particularly SDL3 and its add-ons. 
+> the current hierarchy allows to build without global package manager installations (brew, vcpkg, nuget, etc.)., CMakeLists.txt now implements a  strategy for resolving third party libraries from upstream, particularly SDL3 and its add-ons. 
 
 - Vendored SDL3, SDL_image, SDL_mixer, SDL_ttf
 - Run `./pre_cmake.sh` once, then build offline

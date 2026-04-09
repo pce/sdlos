@@ -88,7 +88,7 @@ template upgrade.
 |===
 |`minimal`  |Empty `jade_app_init` stub with state struct and commented examples.
 |`shader`   |Three-column layout: preset chips \| shader canvas \| param steppers.
-|`camera`   |Three-column layout: filter chips \| live video canvas \| dragnums.
+|`camera`   |Three-column layout: filter chips \| live video canvas \| draggable numbers.
 |===
 
 // ─────────────────────────────────────────────────────────────────────────────
