@@ -36,9 +36,7 @@
 namespace pce::vfs {
 
 class LocalMount final : public IMount {
-public:
-
-
+  public:
     /// Construct a LocalMount rooted at `root`.
     ///
     /// `root` is normalised to an absolute lexical path.  The directory is
@@ -49,8 +47,8 @@ public:
     /// root is inaccessible.
     explicit LocalMount(std::filesystem::path root) noexcept;
 
-
-    [[nodiscard]] std::expected<std::vector<std::byte>, std::string>
+    [[nodiscard]]
+    std::expected<std::vector<std::byte>, std::string>
     read(std::string_view path) noexcept override;
 
     /**
@@ -141,7 +139,16 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string>
     write(std::string_view path, std::span<const std::byte> data) noexcept override;
 
     /**
@@ -221,8 +228,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    remove(std::string_view path) noexcept override;
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> remove(std::string_view path) noexcept override;
 
     /**
      * @brief Stat
@@ -301,8 +315,15 @@ public:
      *
      * @return Stat result
      */
-    [[nodiscard]] Stat
-    stat(std::string_view path) noexcept override;
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
+    [[nodiscard]]
+    Stat stat(std::string_view path) noexcept override;
 
     /**
      * @brief List
@@ -381,8 +402,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::vector<std::string>
-    list(std::string_view path) noexcept override;
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::vector<std::string> list(std::string_view path) noexcept override;
 
     /**
      * @brief Mkdir
@@ -461,16 +489,25 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    mkdir(std::string_view path) noexcept override;
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> mkdir(std::string_view path) noexcept override;
 
     // ---- Accessors -------------------------------------------------------
 
     /// The normalised absolute root used for all path resolution.
-    [[nodiscard]] const std::filesystem::path& root() const noexcept { return root_; }
+    [[nodiscard]]
+    const std::filesystem::path &root() const noexcept {
+        return root_;
+    }
 
-private:
-
+  private:
     // ---- Internal helpers ------------------------------------------------
 
     /// Resolve `vpath` (a mount-relative virtual path) to a real absolute
@@ -556,12 +593,20 @@ private:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<std::filesystem::path, std::string>
+    /**
+     * @brief Resolves
+     *
+     * @param vpath  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<std::filesystem::path, std::string>
     resolve(std::string_view vpath) const noexcept;
 
     // ---- State -----------------------------------------------------------
 
-    std::filesystem::path root_;   ///< absolute, lexically_normal()'d root
+    std::filesystem::path root_;  ///< absolute, lexically_normal()'d root
 };
 
-} // namespace pce::vfs
+}  // namespace pce::vfs

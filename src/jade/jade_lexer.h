@@ -11,13 +11,14 @@
 namespace pce::sdlos::jade {
 
 class Lexer {
-public:
+  public:
     /**
      * @brief Lexer
      *
      * @param source  Red channel component [0, 1]
      */
-    explicit Lexer(std::string_view source) noexcept : source_(source) {}
+    explicit Lexer(std::string_view source) noexcept
+        : source_(source) {}
 
     // Returns a token stream always ending with exactly one End token.
     // Blank lines and //-comment lines produce no tokens (not even Newline).
@@ -26,10 +27,11 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::vector<Token> tokenize() const;
+    [[nodiscard]]
+    std::vector<Token> tokenize() const;
 
-private:
+  private:
     std::string_view source_;
 };
 
-} // namespace pce::sdlos::jade
+}  // namespace pce::sdlos::jade

@@ -21,191 +21,191 @@
 
 ---
 Language: Cpp
-Standard: c++23
+Standard: Latest
 
 # Indentation
-IndentWidth:                 4
-TabWidth:                    4
-UseTab:                      Never
-ContinuationIndentWidth:     4
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
 ConstructorInitializerIndentWidth: 4
-LambdaBodyIndentation:       Signature
+LambdaBodyIndentation: Signature
 
 # Line length
-ColumnLimit:                 100
+ColumnLimit: 100
 
 # Alignment
-AlignAfterOpenBracket:       AlwaysBreak
-AlignArrayOfStructures:      Right
+AlignAfterOpenBracket: AlwaysBreak
+AlignArrayOfStructures: Right
 AlignConsecutiveAssignments:
-  Enabled:                   true
-  AcrossEmptyLines:          false
-  AcrossComments:            false
-  AlignCompound:             true
-  PadOperators:              true
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: true
+  PadOperators: true
 AlignConsecutiveBitFields:
-  Enabled:                   true
-  AcrossEmptyLines:          false
-  AcrossComments:            false
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
 AlignConsecutiveDeclarations:
-  Enabled:                   false   # too aggressive across disparate types
-  AcrossEmptyLines:          false
-  AcrossComments:            false
+  Enabled: false # too aggressive across disparate types
+  AcrossEmptyLines: false
+  AcrossComments: false
 AlignConsecutiveMacros:
-  Enabled:                   true
-  AcrossEmptyLines:          false
-  AcrossComments:            false
-AlignEscapedNewlines:        Left
-AlignOperands:               AlignAfterOperator
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignEscapedNewlines: Left
+AlignOperands: AlignAfterOperator
 AlignTrailingComments:
-  Kind:                      Always
-  OverEmptyLines:            1
+  Kind: Always
+  OverEmptyLines: 1
 
 # Arguments / parameters
-AllowAllArgumentsOnNextLine:        false
+AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
-BinPackArguments:                   false
-BinPackParameters:                  false
+BinPackArguments: false
+BinPackParameters: false
 
 # Short-form collapsing
-AllowShortBlocksOnASingleLine:      Never
-AllowShortCaseLabelsOnASingleLine:  false
-AllowShortEnumsOnASingleLine:       false
-AllowShortFunctionsOnASingleLine:   Inline   # allow only truly trivial getters
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline # allow only truly trivial getters
 AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine:     All
-AllowShortLoopsOnASingleLine:       false
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
 
 # Brace wrapping
-BreakBeforeBraces:           Custom
+BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterCaseLabel:            false
-  AfterClass:                false
-  AfterControlStatement:     Never
-  AfterEnum:                 false
-  AfterFunction:             false
-  AfterNamespace:            false
-  AfterObjCDeclaration:      false
-  AfterStruct:               false
-  AfterUnion:                false
-  AfterExternBlock:          false
-  BeforeCatch:               false
-  BeforeElse:                false
-  BeforeLambdaBody:          false
-  BeforeWhile:               false
-  IndentBraces:              false
-  SplitEmptyFunction:        false
-  SplitEmptyRecord:          false
-  SplitEmptyNamespace:       false
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
 
 # Pointer / reference style
 # Align * and & with the type: `const char* ptr`, `const SDL_Event& ev`
-PointerAlignment:            Right
-ReferenceAlignment:          Right
-QualifierAlignment:          Left    # const on the left: `const int` not `int const`
+PointerAlignment: Right
+ReferenceAlignment: Right
+QualifierAlignment: Left # const on the left: `const int` not `int const`
 
 # Include sorting
-SortIncludes:                CaseSensitive
-IncludeBlocks:               Regroup
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
 IncludeCategories:
   # 1. Project umbrella / precompiled header
-  - Regex:           '^"(pch|stdafx)\.(h|hh|hpp)"'
-    Priority:        1
-    SortPriority:    1
+  - Regex: '^"(pch|stdafx)\.(h|hh|hpp)"'
+    Priority: 1
+    SortPriority: 1
   # 2. Same-directory / project headers (quoted, no path separator)
-  - Regex:           '^"[^/]+'
-    Priority:        2
-    SortPriority:    2
+  - Regex: '^"[^/]+'
+    Priority: 2
+    SortPriority: 2
   # 3. Project subdirectory headers (quoted, with path separator)
-  - Regex:           '^"'
-    Priority:        3
-    SortPriority:    3
+  - Regex: '^"'
+    Priority: 3
+    SortPriority: 3
   # 4. SDL3 headers
-  - Regex:           '^<SDL3/'
-    Priority:        4
-    SortPriority:    4
+  - Regex: "^<SDL3/"
+    Priority: 4
+    SortPriority: 4
   # 5. Everything else (system / third-party angle-bracket headers)
-  - Regex:           '^<'
-    Priority:        5
-    SortPriority:    5
+  - Regex: "^<"
+    Priority: 5
+    SortPriority: 5
 
 # Namespace
-CompactNamespaces:           false
-FixNamespaceComments:        true
-NamespaceIndentation:        None
-ShortNamespaceLines:         0
+CompactNamespaces: false
+FixNamespaceComments: true
+NamespaceIndentation: None
+ShortNamespaceLines: 0
 
 # Template / concept formatting
-AlwaysBreakTemplateDeclarations:     Yes
-BreakBeforeConceptDeclarations:      Always
-RequiresClausePosition:              OwnLine
-RequiresExpressionIndentation:       OuterScope
-IndentRequiresClause:                true
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeConceptDeclarations: Always
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+IndentRequiresClause: true
 
 # Break locations
-AlwaysBreakAfterReturnType:          None
-BreakAfterAttributes:                Always     # [[nodiscard]] on its own line
-BreakBeforeBinaryOperators:          NonAssignment
-BreakBeforeTernaryOperators:         true
-BreakConstructorInitializers:        BeforeComma
-BreakInheritanceList:                BeforeComma
-BreakStringLiterals:                 true
+AlwaysBreakAfterReturnType: None
+BreakAfterAttributes: Always # [[nodiscard]] on its own line
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+BreakStringLiterals: true
 
 # Misc
-DerivePointerAlignment:              false
-DisableFormat:                       false
-EmptyLineAfterAccessModifier:        Never
-EmptyLineBeforeAccessModifier:       LogicalBlock
-IndentAccessModifiers:               false
-IndentCaseBlocks:                    false
-IndentCaseLabels:                    false
-IndentExternBlock:                   Indent
-IndentGotoLabels:                    true
-IndentPPDirectives:                  BeforeHash
-InsertBraces:                        false   # do not auto-insert braces — too invasive
-InsertNewlineAtEOF:                  true
-InsertTrailingCommas:                None
+DerivePointerAlignment: false
+DisableFormat: false
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+IndentAccessModifiers: false
+IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentExternBlock: Indent
+IndentGotoLabels: true
+IndentPPDirectives: BeforeHash
+InsertBraces: false # do not auto-insert braces — too invasive
+InsertNewlineAtEOF: true
+InsertTrailingCommas: None
 IntegerLiteralSeparator:
-  Binary:  4
+  Binary: 4
   Decimal: 3
-  Hex:     4
+  Hex: 4
 KeepEmptyLinesAtTheStartOfBlocks: false
-MaxEmptyLinesToKeep:              1
-PenaltyBreakAssignment:           2
+MaxEmptyLinesToKeep: 1
+PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 19
-PenaltyBreakComment:              300
-PenaltyBreakFirstLessLess:        120
-PenaltyBreakOpenParenthesis:      0
-PenaltyBreakString:               1000
-PenaltyBreakTemplateDeclaration:  10
-PenaltyExcessCharacter:           1000000
-PenaltyIndentedWhitespace:        0
-ReflowComments:                   true
-RemoveSemicolon:                  false
-SeparateDefinitionBlocks:         Leave
-SortUsingDeclarations:            LexicographicNumeric
-SpaceAfterCStyleCast:             false
-SpaceAfterLogicalNot:             false
-SpaceAfterTemplateKeyword:        true
-SpaceAroundPointerQualifiers:     Default
-SpaceBeforeAssignmentOperators:   true
-SpaceBeforeCaseColon:             false
-SpaceBeforeCpp11BracedList:       false
-SpaceBeforeCtorInitializerColon:  true
-SpaceBeforeInheritanceColon:      true
-SpaceBeforeParens:                ControlStatements
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakOpenParenthesis: 0
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyIndentedWhitespace: 0
+ReflowComments: true
+RemoveSemicolon: false
+SeparateDefinitionBlocks: Leave
+SortUsingDeclarations: LexicographicNumeric
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceAroundPointerQualifiers: Default
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
 SpaceBeforeRangeBasedForLoopColon: true
-SpaceBeforeSquareBrackets:        false
-SpaceInEmptyBlock:                false
-SpaceInEmptyParentheses:          false
-SpacesBeforeTrailingComments:     2
-SpacesInAngles:                   Never
-SpacesInConditionalStatement:     false
-SpacesInContainerLiterals:        false
-SpacesInCStyleCastParentheses:    false
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInCStyleCastParentheses: false
 SpacesInLineCommentPrefix:
-  Minimum:  1
-  Maximum:  -1
-SpacesInParentheses:              false
-SpacesInSquareBrackets:           false
-PenaltyReturnTypeOnItsOwnLine:    69
+  Minimum: 1
+  Maximum: -1
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+PenaltyReturnTypeOnItsOwnLine: 69

@@ -15,34 +15,40 @@
 
 namespace pce::sdlos {
 
-struct Point { float x = 0.f; float y = 0.f; };
+struct Point {
+    float x = 0.f;
+    float y = 0.f;
+};
 
 // SIMD helper: Packed AABB (left, top, right, bottom) for vectorized point-in-bounds test.
 // Used to speed up the point-in-AABB rejection test by 2-3× using float4 operations.
 struct PackedAABB {
-    float left   = 0.f;  ///< Min X
-    float top    = 0.f;  ///< Min Y
-    float right  = 0.f;  ///< Max X (left + width)
-    float bot    = 0.f;  ///< Max Y (top + height)
+    float left  = 0.f;  ///< Min X
+    float top   = 0.f;  ///< Min Y
+    float right = 0.f;  ///< Max X (left + width)
+    float bot   = 0.f;  ///< Max Y (top + height)
 
     /// Construct from node position and size, accumulated offset.
-    explicit PackedAABB(float node_x, float node_y, float node_w, float node_h,
-                        float parent_ox, float parent_oy) noexcept
-        : left(parent_ox + node_x),
-          top(parent_oy + node_y),
-          right(left + node_w),
-          bot(top + node_h)
-    {}
+    explicit PackedAABB(
+        float node_x,
+        float node_y,
+        float node_w,
+        float node_h,
+        float parent_ox,
+        float parent_oy) noexcept
+        : left(parent_ox + node_x)
+        , top(parent_oy + node_y)
+        , right(left + node_w)
+        , bot(top + node_h) {}
 
     /// Fast vectorized point-in-AABB test (point must be in global root space).
     /// Uses float4 comparisons for ~2-3× speedup over scalar bounds checks.
-   bool contains(float px, float py) const noexcept {
+    bool contains(float px, float py) const noexcept {
         // Vectorized: all four comparisons in parallel
         // px >= left && px < right && py >= top && py < bot
         return px >= left && px < right && py >= top && py < bot;
-   }
+    }
 };
-
 
 /**
  * @brief Hit test  — public entry point.
@@ -75,17 +81,15 @@ struct PackedAABB {
  *
  * @return Handle to the node, or k_null_handle on failure
  */
-NodeHandle hitTest(const RenderTree& tree, NodeHandle root,
-                   float px, float py) noexcept;
+NodeHandle hitTest(const RenderTree &tree, NodeHandle root, float px, float py) noexcept;
 
 /**
  * @brief Hit test
  *
  * @return Handle to the node, or k_null_handle on failure
  */
-inline NodeHandle hitTest(const RenderTree& tree, NodeHandle root, Point p) noexcept
-{
+inline NodeHandle hitTest(const RenderTree &tree, NodeHandle root, Point p) noexcept {
     return hitTest(tree, root, p.x, p.y);
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

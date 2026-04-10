@@ -6,10 +6,9 @@
 
 #include "io.h"
 
-#include <cstdlib>    // EXIT_SUCCESS, EXIT_FAILURE
+#include <cstdlib>  // EXIT_SUCCESS, EXIT_FAILURE
 
 namespace pce::sdlos {
-
 
 /**
  * @brief run  the real entry point for the tree walk
@@ -21,8 +20,7 @@ namespace pce::sdlos {
  *
  * @return Integer result; negative values indicate an error code
  */
-static int run(int /*argc*/, char* /*argv*/[])
-{
+static int run(int /*argc*/, char * /*argv*/[]) {
     IO io;
 
     if (!io.boot()) {
@@ -35,7 +33,7 @@ static int run(int /*argc*/, char* /*argv*/[])
     return EXIT_SUCCESS;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos
 
 /**
  * @brief Main entry point bridge, nothing more.
@@ -45,7 +43,6 @@ static int run(int /*argc*/, char* /*argv*/[])
  *
  * @return Integer result; negative values indicate an error code
  */
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
     return pce::sdlos::run(argc, argv);
 }

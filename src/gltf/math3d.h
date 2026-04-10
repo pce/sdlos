@@ -44,8 +44,8 @@ constexpr Vec4 operator*(float s, const Vec4& v) { return v * s; }
 struct Mat4 {
     std::array<float, 16> data{};
 
-    float  operator()(int row, int col) const { return data[col*4 + row]; }
-    float& operator()(int row, int col)       { return data[col*4 + row]; }
+    float  operator()(std::size_t row, std::size_t col) const { return data[col*4 + row]; }
+    float& operator()(std::size_t row, std::size_t col)       { return data[col*4 + row]; }
 
     static Mat4 identity() {
         Mat4 m{};
@@ -55,10 +55,10 @@ struct Mat4 {
 
     Mat4 operator*(const Mat4& b) const {
         Mat4 c{};
-        for (int col = 0; col < 4; ++col)
-            for (int row = 0; row < 4; ++row) {
+        for (std::size_t col = 0; col < 4; ++col)
+            for (std::size_t row = 0; row < 4; ++row) {
                 float s = 0.f;
-                for (int k = 0; k < 4; ++k) s += (*this)(row,k) * b(k,col);
+                for (std::size_t k = 0; k < 4; ++k) s += (*this)(row,k) * b(k,col);
                 c(row,col) = s;
             }
         return c;

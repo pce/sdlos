@@ -75,4 +75,4 @@ That's basically: camera lens, black hole, glass sphere
 
         floor(color * steps) / steps
 
-This gives: comic shading, topo-map bands, water ink layers, pixel style, etc. Adjust steps for more/less bands.
+This gives: comic shading, topo-map bands, water ink layers, pixel style, etc. Adjust steps for more/less bands.§

@@ -1,0 +1,39 @@
+// animal_farm.jade — Children's Toy Mode
+// Layout: col fills viewport, spacer in middle lets 3D show through,
+// instructions at top, name panel + buttons pinned at bottom via normal flex.
+col#animal-farm-page.flex-grow(overflow="hidden")
+
+    // ── Top bar: title + hint ────────────────────────────────────────────────
+    row.p-16.gap-12(justifyContent="center" alignItems="center")
+        div.text-12.color-gray-500(text="◀ ▶  navigate   •  ↑  reveal name")
+
+    // ── Center spacer — transparent so 3D scene shows through ───────────────
+    div.flex-grow
+
+    // ── Name Reveal Panel (hidden until animal:reveal) ───────────────────────
+    row(justifyContent="center" alignItems="center")
+        col#animal-name-container.rounded-24.p-24(alignItems="center" gap="8" backgroundColor="#00000099")
+            div#animal-name-text.text-48.font-bold.color-white(text="???")
+            div.text-12.color-gray-400(text="tap ❓ to reveal / hide")
+
+    // ── Toy Button Row ───────────────────────────────────────────────────────
+    row.p-32.gap-24(justifyContent="center" alignItems="center")
+        // Previous
+        div.circle-80.bg-blue-600(onclick="animal:prev" justifyContent="center" alignItems="center")
+            div.text-28.color-white(text="◀")
+
+        // Sound
+        div.circle-100.bg-yellow-500(onclick="animal:sound" justifyContent="center" alignItems="center")
+            div.text-36.color-white(text="♪")
+
+        // Reveal Name
+        div.circle-100.bg-green-600(onclick="animal:reveal" justifyContent="center" alignItems="center")
+            div.text-36.color-white(text="?")
+
+        // Action / Hop
+        div.circle-100.bg-purple-600(onclick="animal:hop" justifyContent="center" alignItems="center")
+            div.text-36.color-white(text="!")
+
+        // Next
+        div.circle-80.bg-blue-600(onclick="animal:next" justifyContent="center" alignItems="center")
+            div.text-28.color-white(text="▶")

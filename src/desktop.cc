@@ -1,13 +1,14 @@
 #include "desktop.h"
-#include "sdl_renderer.h"
+
 #include "debug/layout_debug.h"
+#include "sdl_renderer.h"
+
+#include <SDL3/SDL.h>
 
 #include <expected>
 #include <format>
 #include <iostream>
 #include <string>
-
-#include <SDL3/SDL.h>
 
 namespace pce::sdlos {
 
@@ -21,16 +22,21 @@ namespace pce::sdlos {
  * @param w      Width in logical pixels
  * @param h      Opaque resource handle
  */
-Window::Window(int id, const std::string& title, int w, int h)
-    : id_(id), title_(title), width_(w), height_(h)
-{}
+Window::Window(int id, const std::string &title, int w, int h)
+    : id_(id)
+    , title_(title)
+    , width_(w)
+    , height_(h) {}
 
-std::expected<std::unique_ptr<Window>, std::string>
-Window::create(int id, const std::string& title,
-               int x, int y, int w, int h,
-               SDL_WindowFlags flags)
-{
-    SDL_Window* raw = SDL_CreateWindow(title.c_str(), w, h, flags);
+std::expected<std::unique_ptr<Window>, std::string> Window::create(
+    int id,
+    const std::string &title,
+    int x,
+    int y,
+    int w,
+    int h,
+    SDL_WindowFlags flags) {
+    SDL_Window *raw = SDL_CreateWindow(title.c_str(), w, h, flags);
     if (!raw)
         return std::unexpected(
             std::format("[Window::create] SDL_CreateWindow failed: {}", SDL_GetError()));
@@ -54,10 +60,8 @@ Window::create(int id, const std::string& title,
             std::format("[Window::create] SDLRenderer::Initialize failed for '{}'", title));
 
     std::cerr << "[Window] opened"
-              << "  id="     << id
-              << "  title='" << title << "'"
-              << "  size="   << actual_w << "x" << actual_h
-              << "  sdl_id=" << SDL_GetWindowID(raw)
+              << "  id=" << id << "  title='" << title << "'"
+              << "  size=" << actual_w << "x" << actual_h << "  sdl_id=" << SDL_GetWindowID(raw)
               << "\n";
 
     return win;
@@ -66,8 +70,7 @@ Window::create(int id, const std::string& title,
 /**
  * @brief ~window
  */
-Window::~Window()
-{
+Window::~Window() {
     // GPU resources must be released before the window surface they were
     // bound to. Destruction order is intentionally: renderer → sdl_window.
     renderer_.reset();
@@ -77,17 +80,17 @@ Window::~Window()
 /**
  * @brief Shows
  */
-void Window::show()
-{
-    if (sdl_window_) SDL_ShowWindow(sdl_window_.get());
+void Window::show() {
+    if (sdl_window_)
+        SDL_ShowWindow(sdl_window_.get());
 }
 
 /**
  * @brief Hides
  */
-void Window::hide()
-{
-    if (sdl_window_) SDL_HideWindow(sdl_window_.get());
+void Window::hide() {
+    if (sdl_window_)
+        SDL_HideWindow(sdl_window_.get());
 }
 
 /**
@@ -96,11 +99,11 @@ void Window::hide()
  * @param w  Width in logical pixels
  * @param h  Opaque resource handle
  */
-void Window::resize(int w, int h)
-{
+void Window::resize(int w, int h) {
     width_  = w;
     height_ = h;
-    if (sdl_window_) SDL_SetWindowSize(sdl_window_.get(), w, h);
+    if (sdl_window_)
+        SDL_SetWindowSize(sdl_window_.get(), w, h);
 }
 
 /**
@@ -109,47 +112,47 @@ void Window::resize(int w, int h)
  * @param x  Horizontal coordinate in logical pixels
  * @param y  Vertical coordinate in logical pixels
  */
-void Window::move(int x, int y)
-{
-    if (sdl_window_) SDL_SetWindowPosition(sdl_window_.get(), x, y);
+void Window::move(int x, int y) {
+    if (sdl_window_)
+        SDL_SetWindowPosition(sdl_window_.get(), x, y);
 }
 
 /**
  * @brief Focus
  */
-void Window::focus()
-{
+void Window::focus() {
     is_focused_ = true;
-    if (sdl_window_) SDL_RaiseWindow(sdl_window_.get());
+    if (sdl_window_)
+        SDL_RaiseWindow(sdl_window_.get());
 }
 
 /**
  * @brief Minimize
  */
-void Window::minimize()
-{
+void Window::minimize() {
     is_minimized_ = true;
-    if (sdl_window_) SDL_MinimizeWindow(sdl_window_.get());
+    if (sdl_window_)
+        SDL_MinimizeWindow(sdl_window_.get());
 }
 
 /**
  * @brief Maximize
  */
-void Window::maximize()
-{
+void Window::maximize() {
     is_maximized_ = true;
     is_minimized_ = false;
-    if (sdl_window_) SDL_MaximizeWindow(sdl_window_.get());
+    if (sdl_window_)
+        SDL_MaximizeWindow(sdl_window_.get());
 }
 
 /**
  * @brief Restore
  */
-void Window::restore()
-{
+void Window::restore() {
     is_minimized_ = false;
     is_maximized_ = false;
-    if (sdl_window_) SDL_RestoreWindow(sdl_window_.get());
+    if (sdl_window_)
+        SDL_RestoreWindow(sdl_window_.get());
 }
 
 /**
@@ -157,10 +160,11 @@ void Window::restore()
  *
  * @param timeSeconds  Interpolation parameter in [0, 1]
  */
-void Window::render(double timeSeconds)
-{
-    if (is_minimized_) return;
-    if (renderer_)     renderer_->Render(timeSeconds);
+void Window::render(double timeSeconds) {
+    if (is_minimized_)
+        return;
+    if (renderer_)
+        renderer_->Render(timeSeconds);
 }
 
 /**
@@ -168,38 +172,37 @@ void Window::render(double timeSeconds)
  *
  * @param e  SDL3 input or window event
  */
-void Window::handleEvent(const SDL_Event& e)
-{
+void Window::handleEvent(const SDL_Event &e) {
     switch (e.type) {
-        case SDL_EVENT_WINDOW_RESIZED:
-            width_  = e.window.data1;
-            height_ = e.window.data2;
-            break;
+    case SDL_EVENT_WINDOW_RESIZED:
+        width_  = e.window.data1;
+        height_ = e.window.data2;
+        break;
 
-        case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            is_focused_ = true;
-            break;
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        is_focused_ = true;
+        break;
 
-        case SDL_EVENT_WINDOW_FOCUS_LOST:
-            is_focused_ = false;
-            break;
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        is_focused_ = false;
+        break;
 
-        case SDL_EVENT_WINDOW_MINIMIZED:
-            is_minimized_ = true;
-            break;
+    case SDL_EVENT_WINDOW_MINIMIZED:
+        is_minimized_ = true;
+        break;
 
-        case SDL_EVENT_WINDOW_MAXIMIZED:
-            is_maximized_ = true;
-            is_minimized_ = false;
-            break;
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+        is_maximized_ = true;
+        is_minimized_ = false;
+        break;
 
-        case SDL_EVENT_WINDOW_RESTORED:
-            is_minimized_ = false;
-            is_maximized_ = false;
-            break;
+    case SDL_EVENT_WINDOW_RESTORED:
+        is_minimized_ = false;
+        is_maximized_ = false;
+        break;
 
-        default:
-            break;
+    default:
+        break;
     }
 }
 
@@ -212,8 +215,7 @@ void Window::handleEvent(const SDL_Event& e)
  *          ownership is ambiguous; consider std::span (non-owning view),
  *          std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_GPUDevice* Window::getGPUDevice() const
-{
+SDL_GPUDevice *Window::getGPUDevice() const {
     return renderer_ ? renderer_->GetDevice() : nullptr;
 }
 
@@ -226,8 +228,7 @@ SDL_GPUDevice* Window::getGPUDevice() const
  *          ownership is ambiguous; consider std::span (non-owning view),
  *          std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_WindowID Window::sdlWindowId() const
-{
+SDL_WindowID Window::sdlWindowId() const {
     return sdl_window_ ? SDL_GetWindowID(sdl_window_.get()) : 0;
 }
 
@@ -241,9 +242,9 @@ SDL_WindowID Window::sdlWindowId() const
  *          ownership is ambiguous; consider std::span (non-owning view),
  *          std::unique_ptr (transfer), or const T* (borrow)
  */
-void Window::setScene(sdlos::RenderTree* tree, sdlos::NodeHandle root)
-{
-    if (renderer_) renderer_->SetScene(tree, root);
+void Window::setScene(sdlos::RenderTree *tree, sdlos::NodeHandle root) {
+    if (renderer_)
+        renderer_->SetScene(tree, root);
 }
 
 namespace {
@@ -256,20 +257,20 @@ namespace {
 /// changed.  RenderTree::markDirty() propagates dirty *upward* (to ancestors)
 /// which is the wrong direction here; this helper propagates it *downward* into
 /// the subtree so all children are redrawn this frame.
-static void markSubtreeDirty(RenderTree& tree, NodeHandle h)
-{
-    RenderNode* n = tree.node(h);
-    if (!n) return;
+static void markSubtreeDirty(RenderTree &tree, NodeHandle h) {
+    RenderNode *n = tree.node(h);
+    if (!n)
+        return;
     n->dirty_render = true;
-    for (NodeHandle c = n->child; c.valid(); ) {
-        const RenderNode* cn   = tree.node(c);
-        const NodeHandle  next = cn ? cn->sibling : k_null_handle;
+    for (NodeHandle c = n->child; c.valid();) {
+        const RenderNode *cn  = tree.node(c);
+        const NodeHandle next = cn ? cn->sibling : k_null_handle;
         markSubtreeDirty(tree, c);
         c = next;
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 /**
  * @brief Opens
@@ -283,11 +284,8 @@ static void markSubtreeDirty(RenderTree& tree, NodeHandle h)
  *
  * @return Integer result; negative values indicate an error code
  */
-int Desktop::open(const std::string& title,
-                  int x, int y, int w, int h,
-                  SDL_WindowFlags flags)
-{
-    const int app_id = next_id_;   // do not increment yet — only on success
+int Desktop::open(const std::string &title, int x, int y, int w, int h, SDL_WindowFlags flags) {
+    const int app_id = next_id_;  // do not increment yet — only on success
 
     auto result = Window::create(app_id, title, x, y, w, h, flags);
     if (!result) {
@@ -297,8 +295,8 @@ int Desktop::open(const std::string& title,
 
     ++next_id_;
     const SDL_WindowID sdl_id = (*result)->sdlWindowId();
-    windows_[app_id]   = std::move(*result);
-    sdl_to_id_[sdl_id] = app_id;
+    windows_[app_id]          = std::move(*result);
+    sdl_to_id_[sdl_id]        = app_id;
 
     // id=1 is always the desktop window; subsequent opens are app windows.
     if (app_id == 1) {
@@ -313,10 +311,10 @@ int Desktop::open(const std::string& title,
  *
  * @param id  Unique object identifier
  */
-void Desktop::close(int id)
-{
+void Desktop::close(int id) {
     const auto it = windows_.find(id);
-    if (it == windows_.end()) return;
+    if (it == windows_.end())
+        return;
 
     // Remove the SDL_WindowID → app_id mapping before the Window (and its
     // sdl_window_) is destroyed so the key stays valid during erase.
@@ -330,16 +328,15 @@ void Desktop::close(int id)
  *
  * @param event  Interpolation parameter in [0, 1]
  */
-void Desktop::handleEvent(SDL_Event* event)
-{
-    if (!event) return;
+void Desktop::handleEvent(SDL_Event *event) {
+    if (!event)
+        return;
 
     // Global keyboard shortcuts
     if (event->type == SDL_EVENT_KEY_DOWN) {
-        const SDL_Keycode key      = event->key.key;
-        const SDL_Keymod  mod      = event->key.mod;
-        const bool        cmd_ctrl =
-            (mod & SDL_KMOD_GUI) || (mod & SDL_KMOD_CTRL);
+        const SDL_Keycode key = event->key.key;
+        const SDL_Keymod mod  = event->key.mod;
+        const bool cmd_ctrl   = (mod & SDL_KMOD_GUI) || (mod & SDL_KMOD_CTRL);
 
         if (cmd_ctrl && event->key.scancode == SDL_SCANCODE_SPACE) {
             toggleSearchOverlay();
@@ -351,27 +348,26 @@ void Desktop::handleEvent(SDL_Event* event)
         }
         if (key == SDLK_F1) {
             toggleLayoutDebug();
-            std::cout << "[Desktop] layout debug overlay: "
-                      << (debug_layout_ ? "ON" : "OFF") << "\n";
+            std::cout << "[Desktop] layout debug overlay: " << (debug_layout_ ? "ON" : "OFF")
+                      << "\n";
             return;
         }
     }
 
     // When the search overlay is open, forward input events to the InputBox
     // before falling through to window-event routing below.
-    if (search_visible_.get() &&
-        (event->type == SDL_EVENT_KEY_DOWN      ||
-         event->type == SDL_EVENT_TEXT_INPUT    ||
-         event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
+    if (search_visible_.get()
+        && (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_TEXT_INPUT
+            || event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
         routeOverlayEvent(*event);
     }
 
-    if (event->type < SDL_EVENT_WINDOW_FIRST ||
-        event->type > SDL_EVENT_WINDOW_LAST)
+    if (event->type < SDL_EVENT_WINDOW_FIRST || event->type > SDL_EVENT_WINDOW_LAST)
         return;
 
     const auto sdlIt = sdl_to_id_.find(event->window.windowID);
-    if (sdlIt == sdl_to_id_.end()) return;
+    if (sdlIt == sdl_to_id_.end())
+        return;
 
     const auto winIt = windows_.find(sdlIt->second);
     if (winIt != windows_.end()) {
@@ -379,10 +375,8 @@ void Desktop::handleEvent(SDL_Event* event)
     }
 
     // Viewport resize → re-flow the scene tree
-    if (event->type == SDL_EVENT_WINDOW_RESIZED &&
-        sdlIt->second == 1 &&          // desktop window only
-        scene_root_.valid())
-    {
+    if (event->type == SDL_EVENT_WINDOW_RESIZED && sdlIt->second == 1 &&  // desktop window only
+        scene_root_.valid()) {
         scene_tree_.markLayoutDirty(scene_root_);
     }
 }
@@ -390,8 +384,7 @@ void Desktop::handleEvent(SDL_Event* event)
 /**
  * @brief Ticks one simulation frame for
  */
-void Desktop::tick()
-{
+void Desktop::tick() {
     // The wallpaper pipeline uses SDL_GPU_LOADOP_CLEAR each frame — overlay
     // nodes must re-emit draw commands every frame or they disappear after the
     // clear.  markSubtreeDirty() propagates downward (opposite of
@@ -407,8 +400,7 @@ void Desktop::tick()
 /**
  * @brief Renders
  */
-void Desktop::render()
-{
+void Desktop::render() {
     const double t = static_cast<double>(SDL_GetTicks()) * 0.001;
     // Re-attach on every frame: SetScene stores non-owning pointers so this
     // is cheap, and it ensures windows opened after buildDesktopScene() pick
@@ -416,7 +408,7 @@ void Desktop::render()
     if (auto w = get(1); w) {
         w->setScene(&scene_tree_, scene_root_);
     }
-    for (auto& [id, win] : windows_) {
+    for (auto &[id, win] : windows_) {
         win->render(t);
     }
 }
@@ -424,30 +416,33 @@ void Desktop::render()
 /**
  * @brief Shows search overlay
  */
-void Desktop::showSearchOverlay()
-{
-    if (search_visible_.get()) return;
+void Desktop::showSearchOverlay() {
+    if (search_visible_.get())
+        return;
     search_visible_.set(true);
-    if (search_input_box_) search_input_box_->focus();
+    if (search_input_box_)
+        search_input_box_->focus();
 }
 
 /**
  * @brief Hides search overlay
  */
-void Desktop::hideSearchOverlay()
-{
-    if (!search_visible_.get()) return;
+void Desktop::hideSearchOverlay() {
+    if (!search_visible_.get())
+        return;
     search_visible_.set(false);
-    if (search_input_box_) search_input_box_->unfocus();
+    if (search_input_box_)
+        search_input_box_->unfocus();
 }
 
 /**
  * @brief Toggle search overlay
  */
-void Desktop::toggleSearchOverlay()
-{
-    if (search_visible_.get()) hideSearchOverlay();
-    else                       showSearchOverlay();
+void Desktop::toggleSearchOverlay() {
+    if (search_visible_.get())
+        hideSearchOverlay();
+    else
+        showSearchOverlay();
 }
 
 /**
@@ -455,9 +450,9 @@ void Desktop::toggleSearchOverlay()
  *
  * @param event  Interpolation parameter in [0, 1]
  */
-void Desktop::routeOverlayEvent(const SDL_Event& event)
-{
-    if (!search_input_box_) return;
+void Desktop::routeOverlayEvent(const SDL_Event &event) {
+    if (!search_input_box_)
+        return;
     search_input_box_->handleEvent(event);
 }
 
@@ -480,14 +475,13 @@ void Desktop::routeOverlayEvent(const SDL_Event& event)
 /**
  * @brief Builds desktop scene
  */
-void Desktop::buildDesktopScene()
-{
+void Desktop::buildDesktopScene() {
     // Root
     scene_root_ = scene_tree_.alloc();
     scene_tree_.setRoot(scene_root_);
     {
-        RenderNode* r = scene_tree_.node(scene_root_);
-        r->dirty_render = false;          // container only
+        RenderNode *r   = scene_tree_.node(scene_root_);
+        r->dirty_render = false;  // container only
         r->layout_kind  = LayoutKind::FlexColumn;
         // w/h are intentionally left at 0 here.  SDLRenderer::Render()
         // writes the physical swapchain pixel dimensions into these fields
@@ -498,39 +492,34 @@ void Desktop::buildDesktopScene()
     // Overlay
     search_overlay_node_ = scene_tree_.alloc();
     {
-        RenderNode* ov   = scene_tree_.node(search_overlay_node_);
+        RenderNode *ov   = scene_tree_.node(search_overlay_node_);
         ov->dirty_render = false;
         // update() runs unconditionally every frame (RenderTree::update()
         // calls it for every node regardless of dirty flags).  Mirror the
         // root dimensions so layout passes and the debug overlay get accurate
         // sizes without hardcoding 1280×800.
-        ov->update = [&tree  = scene_tree_,
-                      ov_h   = search_overlay_node_,
-                      root_h = scene_root_]()
-        {
-            const RenderNode* root = tree.node(root_h);
-            RenderNode*       ov   = tree.node(ov_h);
+        ov->update = [&tree = scene_tree_, ov_h = search_overlay_node_, root_h = scene_root_]() {
+            const RenderNode *root = tree.node(root_h);
+            RenderNode *ov         = tree.node(ov_h);
             if (root && ov) {
                 ov->w = root->w;
                 ov->h = root->h;
             }
         };
         // draw() re-dirtying is handled by tick() → markSubtreeDirty().
-        ov->draw = [vis = &search_visible_](RenderContext& ctx) {
-            if (!vis->get()) return;
+        ov->draw = [vis = &search_visible_](RenderContext &ctx) {
+            if (!vis->get())
+                return;
 
-            ctx.drawRect(0.f, 0.f, ctx.viewport_w, ctx.viewport_h,
-                         0.f, 0.f, 0.f, 0.50f);
+            ctx.drawRect(0.f, 0.f, ctx.viewport_w, ctx.viewport_h, 0.f, 0.f, 0.f, 0.50f);
 
             constexpr float kPW = 600.f;
             constexpr float kPH = 68.f;
-            const float px = (ctx.viewport_w - kPW) * 0.5f;
-            const float py = ctx.viewport_h  * 0.25f;
+            const float px      = (ctx.viewport_w - kPW) * 0.5f;
+            const float py      = ctx.viewport_h * 0.25f;
 
-            ctx.drawRect(px - 13.f, py - 13.f, kPW + 26.f, kPH + 26.f,
-                         0.30f, 0.30f, 0.32f, 0.85f);
-            ctx.drawRect(px - 12.f, py - 12.f, kPW + 24.f, kPH + 24.f,
-                         0.12f, 0.12f, 0.14f, 0.95f);
+            ctx.drawRect(px - 13.f, py - 13.f, kPW + 26.f, kPH + 26.f, 0.30f, 0.30f, 0.32f, 0.85f);
+            ctx.drawRect(px - 12.f, py - 12.f, kPW + 24.f, kPH + 24.f, 0.12f, 0.12f, 0.14f, 0.95f);
         };
     }
     scene_tree_.appendChild(scene_root_, search_overlay_node_);
@@ -546,10 +535,10 @@ void Desktop::buildDesktopScene()
     constexpr float kInputH = 44.f;
     constexpr float kRefW   = 1280.f;
     constexpr float kRefH   = 800.f;
-    const float     kPanelY = kRefH * 0.25f;
+    const float kPanelY     = kRefH * 0.25f;
 
     widgets::TextBoxConfig tbc;
-    tbc.placeholder = "Search\xe2\x80\xa6";   // UTF-8 "Search…"
+    tbc.placeholder = "Search\xe2\x80\xa6";  // UTF-8 "Search…"
     tbc.value       = &search_query_;
     tbc.w           = kInputW;
     tbc.h           = kInputH;
@@ -558,7 +547,7 @@ void Desktop::buildDesktopScene()
     search_input_box_.emplace(widgets::makeTextBox(scene_tree_, std::move(tbc)));
 
     // Absolute position in the reference viewport (TextBoxConfig has no x/y).
-    if (RenderNode* n = scene_tree_.node(search_input_box_->handle)) {
+    if (RenderNode *n = scene_tree_.node(search_input_box_->handle)) {
         n->x = (kRefW - kInputW) * 0.5f;
         n->y = kPanelY + (kInputH - kInputH) * 0.5f;  // centred in 68px panel
     }
@@ -583,21 +572,25 @@ void Desktop::buildDesktopScene()
     // debug box around itself.
     layout_debug_node_ = scene_tree_.alloc();
     {
-        RenderNode* d = scene_tree_.node(layout_debug_node_);
+        RenderNode *d   = scene_tree_.node(layout_debug_node_);
         d->dirty_render = false;
 
         d->draw = [&debug_flag = debug_layout_,
-                   &tree      = scene_tree_,
-                   &root      = scene_root_,
-                   skip       = layout_debug_node_](RenderContext& ctx)
-        {
-            if (!debug_flag) return;
+                   &tree       = scene_tree_,
+                   &root       = scene_root_,
+                   skip        = layout_debug_node_](RenderContext &ctx) {
+            if (!debug_flag)
+                return;
             // show_none = true: nodes without a LayoutKind still get a gray
             // box, making the overlay useful before the full layout migration.
-            debug::drawLayoutDebug(ctx, tree, root, {
-                .show_none    = true,
-                .skip         = skip,
-            });
+            debug::drawLayoutDebug(
+                ctx,
+                tree,
+                root,
+                {
+                    .show_none = true,
+                    .skip      = skip,
+                });
         };
     }
     scene_tree_.appendChild(scene_root_, layout_debug_node_);
@@ -615,9 +608,9 @@ void Desktop::buildDesktopScene()
  *
  * @param id  Unique object identifier
  */
-void Desktop::raise(int id)
-{
-    if (const auto w = get(id)) w->focus();
+void Desktop::raise(int id) {
+    if (const auto w = get(id))
+        w->focus();
 }
 
 /**
@@ -625,9 +618,9 @@ void Desktop::raise(int id)
  *
  * @param id  Unique object identifier
  */
-void Desktop::focus(int id)
-{
-    if (const auto w = get(id)) w->focus();
+void Desktop::focus(int id) {
+    if (const auto w = get(id))
+        w->focus();
 }
 
 // Queries
@@ -639,8 +632,7 @@ void Desktop::focus(int id)
  *
  * @return Integer result; negative values indicate an error code
  */
-std::shared_ptr<Window> Desktop::get(int id) const
-{
+std::shared_ptr<Window> Desktop::get(int id) const {
     const auto it = windows_.find(id);
     return it != windows_.end() ? it->second : nullptr;
 }
@@ -650,14 +642,13 @@ std::shared_ptr<Window> Desktop::get(int id) const
  *
  * @return Integer result; negative values indicate an error code
  */
-std::vector<int> Desktop::ids() const
-{
+std::vector<int> Desktop::ids() const {
     std::vector<int> result;
     result.reserve(windows_.size());
-    for (const auto& [id, _] : windows_) {
+    for (const auto &[id, _] : windows_) {
         result.push_back(id);
     }
     return result;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

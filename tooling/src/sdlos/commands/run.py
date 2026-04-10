@@ -293,6 +293,24 @@ def _find_cmake_file(name: str, project_root: Path) -> Optional[Path]:
     return cmake_file if cmake_file.exists() else None
 
 
+def _cmake_registered_after_configure(
+    name: str,
+    project_root: Path,
+    build_dir: Path,
+) -> bool:
+    """Return True when the app's .cmake file is newer than CMakeCache.txt.
+
+    This means the app was registered (by ``sdlos create``) *after* the last
+    cmake configure pass, so the target is not yet known to the build system.
+    Auto-reconfiguring once will fix it.
+    """
+    cache = build_dir / "CMakeCache.txt"
+    cmake_file = project_root / "examples" / "apps" / name / f"{name}.cmake"
+    if not cache.exists() or not cmake_file.exists():
+        return False
+    return cmake_file.stat().st_mtime > cache.stat().st_mtime
+
+
 def _infer_cmake_snippet(name: str, app_dir: Path) -> str:
     """Build a minimal sdlos_jade_app() cmake snippet by inspecting what files
     actually exist in the app directory."""
@@ -513,6 +531,16 @@ def run_app(
     # ── Build ─────────────────────────────────────────────────────────────────
     if not no_build:
         ok = _build(run_cfg, project_root)
+        if not ok and not reconfigure:
+            # Auto-detect: .cmake registered after last configure → reconfigure once.
+            if _cmake_registered_after_configure(name, project_root, resolved_build):
+                if not quiet:
+                    _echo(
+                        f"  [auto-reconfigure] {name}.cmake is newer than cmake cache\n"
+                        f"                     re-running configure to register the target …"
+                    )
+                if _configure(project_root, resolved_build, preset, quiet):
+                    ok = _build(run_cfg, project_root)
         if not ok:
             _die(
                 f"cmake --build failed for target '{name}'.\n"

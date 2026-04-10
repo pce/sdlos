@@ -1,34 +1,30 @@
 #pragma once
 
-#include "i_window.h"
-#include "sdl_handle.h"
-#include "render_tree.h"
-#include "widgets/widget.h"
-#include "widgets/input_text_box.h"
 #include "debug/layout_debug.h"
+#include "i_window.h"
+#include "render_tree.h"
+#include "sdl_handle.h"
+#include "widgets/input_text_box.h"
+#include "widgets/widget.h"
 
 #include <SDL3/SDL.h>
 
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
-#include <optional>
 #include <vector>
 
 namespace pce::sdlos {
 
 class SDLRenderer;
 
-
 class Window : public IWindow {
-public:
-
+  public:
     [[nodiscard]]
     static std::expected<std::unique_ptr<Window>, std::string>
-    create(int id, const std::string& title,
-           int x, int y, int w, int h,
-           SDL_WindowFlags flags);
+    create(int id, const std::string &title, int x, int y, int w, int h, SDL_WindowFlags flags);
 
     /**
      * @brief ~window
@@ -41,25 +37,24 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    Window(const Window&)            = delete;
-    Window& operator=(const Window&) = delete;
+    Window(const Window &)            = delete;
+    Window &operator=(const Window &) = delete;
     /**
      * @brief Window
      *
      * @param param0  Red channel component [0, 1]
      */
-    Window(Window&&)                 = delete;
-    Window& operator=(Window&&)      = delete;
-
+    Window(Window &&)            = delete;
+    Window &operator=(Window &&) = delete;
 
     /**
      * @brief Shows
      */
-    void show()               override;
+    void show() override;
     /**
      * @brief Hides
      */
-    void hide()               override;
+    void hide() override;
     /**
      * @brief Resizes
      *
@@ -73,56 +68,54 @@ public:
      * @param x  Horizontal coordinate in logical pixels
      * @param y  Vertical coordinate in logical pixels
      */
-    void move(int x, int y)   override;
+    void move(int x, int y) override;
     /**
      * @brief Focus
      */
-    void focus()              override;
+    void focus() override;
     /**
      * @brief Minimize
      */
-    void minimize()           override;
+    void minimize() override;
     /**
      * @brief Maximize
      */
-    void maximize()           override;
+    void maximize() override;
     /**
      * @brief Restore
      */
-    void restore()            override;
-
+    void restore() override;
 
     /**
      * @brief Checks whether minimized
      *
      * @return true on success, false on failure
      */
-    bool        isFocused()   const override { return is_focused_;   }
+    bool isFocused() const override { return is_focused_; }
     /**
      * @brief Checks whether minimized
      *
      * @return true on success, false on failure
      */
-    bool        isMinimized() const override { return is_minimized_; }
+    bool isMinimized() const override { return is_minimized_; }
     /**
      * @brief Checks whether maximized
      *
      * @return true on success, false on failure
      */
-    bool        isMaximized() const override { return is_maximized_; }
+    bool isMaximized() const override { return is_maximized_; }
     /**
      * @brief Returns title
      *
      * @return Integer result; negative values indicate an error code
      */
-    std::string getTitle()    const override { return title_;        }
+    std::string getTitle() const override { return title_; }
     /**
      * @brief Returns id
      *
      * @return Integer result; negative values indicate an error code
      */
-    int         getId()       const override { return id_;           }
-
+    int getId() const override { return id_; }
 
     /// Skips rendering while the window is minimised.
     void render(double timeSeconds);
@@ -132,14 +125,12 @@ public:
      *
      * @param e  SDL3 input or window event
      */
-    void handleEvent(const SDL_Event& e);
-
+    void handleEvent(const SDL_Event &e);
 
     /// Non-null after successful construction.
     /// Lifetime is tied to this Window — do not call SDL_DestroyGPUDevice()
     /// on the returned pointer.
-    SDL_GPUDevice* getGPUDevice() const;
-
+    SDL_GPUDevice *getGPUDevice() const;
 
     /// Used by Desktop to route SDL_PollEvent results without exposing
     /// the raw SDL_Window*.
@@ -147,9 +138,9 @@ public:
 
     /// Attach a RenderTree scene to be rendered on top of the wallpaper.
     /// Both pointers are non-owning; the scene must outlive the Window.
-    void setScene(RenderTree* tree, NodeHandle root);
+    void setScene(RenderTree *tree, NodeHandle root);
 
-private:
+  private:
     /**
      * @brief Window
      *
@@ -158,12 +149,12 @@ private:
      * @param w      Width in logical pixels
      * @param h      Opaque resource handle
      */
-    Window(int id, const std::string& title, int w, int h);
+    Window(int id, const std::string &title, int w, int h);
 
-    int         id_;
+    int id_;
     std::string title_;
-    int         width_{0};
-    int         height_{0};
+    int width_{0};
+    int height_{0};
 
     bool is_focused_{false};
     bool is_minimized_{false};
@@ -179,13 +170,12 @@ private:
     std::unique_ptr<SDLRenderer> renderer_;
 };
 
-
 class Desktop {
-public:
+  public:
     /**
      * @brief Desktop
      */
-    Desktop()  = default;
+    Desktop() = default;
     /**
      * @brief ~desktop
      */
@@ -197,28 +187,30 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    Desktop(const Desktop&)            = delete;
-    Desktop& operator=(const Desktop&) = delete;
+    Desktop(const Desktop &)            = delete;
+    Desktop &operator=(const Desktop &) = delete;
     /**
      * @brief Desktop
      *
      * @param param0  Red channel component [0, 1]
      */
-    Desktop(Desktop&&)                 = delete;
-    Desktop& operator=(Desktop&&)      = delete;
-
+    Desktop(Desktop &&)            = delete;
+    Desktop &operator=(Desktop &&) = delete;
 
     /// Open a new isolated window (SDL_Window + independent GPU context).
     /// Returns the application-level window ID (≥ 1) on success, or -1 on
     /// any failure.  Never throws; errors are printed to stderr.
-    int open(const std::string& title,
-             int x, int y, int w, int h,
-             SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE);
+    int open(
+        const std::string &title,
+        int x,
+        int y,
+        int w,
+        int h,
+        SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE);
 
     /// Close a window and free all its SDL + GPU resources immediately.
     /// Silently ignores unknown IDs.
     void close(int id);
-
 
     /// Keyboard shortcuts:
     ///   Cmd/Ctrl+Space → toggle search overlay
@@ -226,7 +218,7 @@ public:
     ///   F1             → toggle layout debug overlay
     /// Text/key events are forwarded to the focused overlay widget when the
     /// search overlay is open.
-    void handleEvent(SDL_Event* event);
+    void handleEvent(SDL_Event *event);
 
     /**
      * @brief Ticks one simulation frame for
@@ -236,7 +228,6 @@ public:
      * @brief Renders
      */
     void render();
-
 
     /// Show the search overlay and give focus to the input box.
     void showSearchOverlay();
@@ -254,11 +245,10 @@ public:
      *
      * @return true on success, false on failure
      */
-    [[nodiscard]] bool searchOverlayVisible() const noexcept
-    {
+    [[nodiscard]]
+    bool searchOverlayVisible() const noexcept {
         return search_visible_.get();
     }
-
 
     /// Toggle the F1 layout debug overlay on / off.
     /// When active, every RenderNode with a non-None LayoutKind is outlined
@@ -271,7 +261,10 @@ public:
      *
      * @return true on success, false on failure
      */
-    [[nodiscard]] bool layoutDebugVisible() const noexcept { return debug_layout_; }
+    [[nodiscard]]
+    bool layoutDebugVisible() const noexcept {
+        return debug_layout_;
+    }
 
     // Z-order / focus
 
@@ -288,7 +281,6 @@ public:
      */
     void focus(int id);
 
-
     /**
      * @brief Returns
      *
@@ -302,30 +294,28 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    std::vector<int>        ids()       const;
+    std::vector<int> ids() const;
     /**
      * @brief Empty
      *
      * @return true on success, false on failure
      */
-    bool                    empty()     const { return windows_.empty(); }
+    bool empty() const { return windows_.empty(); }
     /**
      * @brief Count
      *
      * @return Integer result; negative values indicate an error code
      */
-    std::size_t             count()     const { return windows_.size();  }
-
+    std::size_t count() const { return windows_.size(); }
 
     /**
      * @brief Scene tree
      *
      * @return Reference to the result
      */
-    RenderTree& sceneTree() noexcept { return scene_tree_; }
+    RenderTree &sceneTree() noexcept { return scene_tree_; }
 
-private:
-
+  private:
     /// Build the desktop UI scene graph inside scene_tree_.
     /// Called automatically the first time open() succeeds (desktop window).
     void buildDesktopScene();
@@ -335,24 +325,23 @@ private:
      *
      * @param event  Interpolation parameter in [0, 1]
      */
-    void routeOverlayEvent(const SDL_Event& event);
+    void routeOverlayEvent(const SDL_Event &event);
 
     std::unordered_map<int, std::shared_ptr<Window>> windows_;
-    std::unordered_map<SDL_WindowID, int>             sdl_to_id_;
+    std::unordered_map<SDL_WindowID, int> sdl_to_id_;
 
     int next_id_{1};
 
-
-    RenderTree   scene_tree_;
-    NodeHandle   scene_root_;
-    NodeHandle   search_overlay_node_;
+    RenderTree scene_tree_;
+    NodeHandle scene_root_;
+    NodeHandle search_overlay_node_;
     std::optional<widgets::TextBox> search_input_box_;
-    NodeHandle   layout_debug_node_;
+    NodeHandle layout_debug_node_;
 
-    Signal<bool>        search_visible_{false};
+    Signal<bool> search_visible_{false};
     Signal<std::string> search_query_{std::string{}};
 
     bool debug_layout_ = false;  // not reactive — just a plain bool
 };
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

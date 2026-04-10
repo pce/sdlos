@@ -44,10 +44,10 @@
 // std::unexpected(msg) carries a human-readable error string.
 // No exceptions are thrown.
 
-#include "mount.h"
-#include "uri.h"
 #include "local_mount.h"
 #include "mem_mount.h"
+#include "mount.h"
+#include "uri.h"
 
 #include <filesystem>
 #include <memory>
@@ -59,37 +59,22 @@
 
 namespace pce::vfs {
 
-
 class Vfs {
-public:
-
-    /**
-     * @brief Vfs
-     */
+  public:
     Vfs()  = default;
-    /**
-     * @brief ~vfs
-     */
     ~Vfs() = default;
 
-    // Non-copyable, non-movable: owns a std::shared_mutex and unique_ptr<IMount>
-    // members.  All callers hold Vfs via unique_ptr or as a direct member —
-    // neither requires moveability.
     /**
-     * @brief Vfs
+     * @brief Vfs  Non-copyable, non-movable: owns a std::shared_mutex and unique_ptr<IMount>
+     *             members.  All callers hold Vfs via unique_ptr or as a direct member, so
+     *             neither requires moveability.
      *
-     * @param param0  Red channel component [0, 1]
      */
-    Vfs(const Vfs&)            = delete;
-    Vfs& operator=(const Vfs&) = delete;
-    /**
-     * @brief Vfs
-     *
-     * @param param0  Red channel component [0, 1]
-     */
-    Vfs(Vfs&&)                 = delete;
-    Vfs& operator=(Vfs&&)      = delete;
+    Vfs(const Vfs &)            = delete;
+    Vfs &operator=(const Vfs &) = delete;
 
+    Vfs(Vfs &&)            = delete;
+    Vfs &operator=(Vfs &&) = delete;
 
     /// Mount a real filesystem directory at `scheme`.
     ///
@@ -119,104 +104,37 @@ public:
 
     /// Return all currently registered scheme names (unordered).
     /// Returns an empty vector on (unlikely) allocation failure.
-    [[nodiscard]] std::vector<std::string> schemes() const noexcept;
+    [[nodiscard]]
+    std::vector<std::string> schemes() const noexcept;
 
     /// Non-owning access to a mounted IMount by scheme name.
     ///
     /// Returns nullptr if the scheme is not registered.
     /// The pointer is valid as long as the mount is not replaced or unmounted.
     /// Caller must not delete the pointer.
-    /**
+    /*
      * @brief Searches for and returns
      *
      * @param scheme  Opaque resource handle
      *
-     * @return Pointer to the result, or nullptr on failure
+     * @return Pointer to the result, or nullptr if the scheme is not registered.
      */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Searches for and returns
-     *
-     * @param scheme  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    [[nodiscard]] IMount*       find(std::string_view scheme)       noexcept;
-    [[nodiscard]] const IMount* find(std::string_view scheme) const noexcept;
-
-    // When a URI string has no scheme component (e.g. "data/pipeline.pug"),
-    // Vfs routes it through the default scheme.
-    //   This lets existing code that
-    //   uses bare paths keep working
-    //   after mounts are introduced.
-    //
-    // Set to "" (default) to disable bare-path resolution: bare URIs will
-    // return std::unexpected instead of silently routing anywhere.
+    [[nodiscard]]
+    IMount *find(std::string_view scheme) noexcept;
+    [[nodiscard]]
+    const IMount *find(std::string_view scheme) const noexcept;
 
     /**
      * @brief Sets default scheme
+     *
+     * When a URI string has no scheme component (e.g. "data/pipeline.pug"),
+     * Vfs routes it through the default scheme.
+     * This lets existing code that
+     * uses bare paths keep working
+     * after mounts are introduced.
+     *
+     * Set to "" (default) to disable bare-path resolution: bare URIs will
+     * return std::unexpected instead of silently routing anywhere.
      *
      * @param scheme  Opaque resource handle
      */
@@ -224,461 +142,62 @@ public:
 
     /**
      * @brief Default scheme
+
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] const std::string& default_scheme() const noexcept;
-
+    [[nodiscard]]
+    const std::string &default_scheme() const noexcept;
 
     /// Read the entire file            into a byte vector.
     /// all accept full "scheme://path" URIs or bare paths.
-    [[nodiscard]] std::expected<std::vector<std::byte>, std::string>
-    read(std::string_view uri) noexcept;
+    [[nodiscard]]
+    std::expected<std::vector<std::byte>, std::string> read(std::string_view uri) noexcept;
 
     /// Read the entire file as a UTF-8 string.
     ///
     /// TODO atm just a wrapper around read(), simdut valid UTF-8.
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Reads text
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<std::string, std::string>
-    read_text(std::string_view uri) noexcept;
-
+    [[nodiscard]]
+    std::expected<std::string, std::string> read_text(std::string_view uri) noexcept;
 
     /// Create-or-replace a file with the given bytes.
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param data  Raw payload bytes
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<void, std::string>
+    [[nodiscard]]
+    std::expected<void, std::string>
     write(std::string_view uri, std::span<const std::byte> data) noexcept;
 
     /// Create-or-replace a file with the given UTF-8 text.
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Writes text
-     *
-     * @param uri   Red channel component [0, 1]
-     * @param text  UTF-8 text content
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<void, std::string>
+    [[nodiscard]]
+    std::expected<void, std::string>
     write_text(std::string_view uri, std::string_view text) noexcept;
 
-
     /// Remove a file or empty directory (idempotent — succeeds if absent).
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Removes
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<void, std::string>
-    remove(std::string_view uri) noexcept;
-
+    [[nodiscard]]
+    std::expected<void, std::string> remove(std::string_view uri) noexcept;
 
     /// Query metadata.  stat().exists == false if the path is not found.
-    [[nodiscard]] Stat stat(std::string_view uri) noexcept;
+    [[nodiscard]]
+    Stat stat(std::string_view uri) noexcept;
 
     /// Convenience: return stat().exists.
-    [[nodiscard]] bool exists(std::string_view uri) noexcept;
+    [[nodiscard]]
+    bool exists(std::string_view uri) noexcept;
 
     /// List immediate children of a directory.
     ///
     /// File names are returned as-is; subdirectory names have a trailing '/'.
     /// Returns an empty vector if the URI is not a directory or not found.
-    [[nodiscard]] std::vector<std::string> list(std::string_view uri) noexcept;
+    [[nodiscard]]
+    std::vector<std::string> list(std::string_view uri) noexcept;
 
-
-    /// Create a directory (and any missing parents).
     /**
      * @brief Mkdir
      *
-     * @param uri  Red channel component [0, 1]
+     * @param uri    Create a directory (and any missing parents).
      *
      * @return Integer result; negative values indicate an error code
      */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Mkdir
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<void, std::string>
-    mkdir(std::string_view uri) noexcept;
+    [[nodiscard]]
+    std::expected<void, std::string> mkdir(std::string_view uri) noexcept;
 
     /// Emit a summary of all registered mounts to stderr.
     /// Format: "[vfs] scheme://  →  <type> @ <root-or-desc>\n"
@@ -691,107 +210,36 @@ public:
     ///
     /// Returns true if both were mounted successfully.
     /// Sets "user" as the default scheme if it was mounted.
-    bool mount_platform_defaults(const char* org = "pce", const char* app = "sdlos");
+    bool mount_platform_defaults(const char *org = "pce", const char *app = "sdlos");
 
-private:
-
+  private:
     // Parsed dispatch result: a raw (non-owning) pointer to the IMount and
     // the mount-relative path string.  The pointer is valid only while the
     // shared lock is held — callers must copy the path before releasing it.
     struct Dispatch {
-        IMount*     mount = nullptr;
+        IMount *mount = nullptr;
         std::string path;
     };
 
-    /// Parse `uri`, look up the scheme (or default scheme for bare paths),
-    /// and return the mount + path.
-    ///
-    /// Returns std::unexpected if:
-    ///   - The scheme is absent and default_scheme_ is empty
-    ///   - The scheme is not registered
     /**
      * @brief Dispatches
+     * Parse `uri`, look up the scheme (or default scheme for bare paths),
+     * and return the mount + path.
      *
-     * @param uri  Red channel component [0, 1]
+     * Returns std::unexpected if:
+     *   - The scheme is absent and default_scheme_ is empty
+     *   - The scheme is not registered
+     *
+     * @param uri
      *
      * @return Integer result; negative values indicate an error code
      */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Dispatches
-     *
-     * @param uri  Red channel component [0, 1]
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]] std::expected<Dispatch, std::string>
-    dispatch(std::string_view uri) const noexcept;
+    [[nodiscard]]
+    std::expected<Dispatch, std::string> dispatch(std::string_view uri) const noexcept;
 
-    mutable std::shared_mutex                             mu_;
+    mutable std::shared_mutex mu_;
     std::unordered_map<std::string, std::unique_ptr<IMount>> mounts_;
-    std::string                                           default_scheme_;
+    std::string default_scheme_;
 };
 
-} // namespace pce::vfs
+}  // namespace pce::vfs

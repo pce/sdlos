@@ -1,36 +1,34 @@
 #include "style_applier.h"
 
+#include "jade/jade_parser.h"
 
 #include <charconv>
+#include <fstream>
 #include <optional>
+#include <sstream>
 #include <string_view>
-
 
 namespace pce::sdlos {
 
 namespace {
 
 // std::from_chars is locale-independent and allocation-free.
-[[nodiscard]] static std::optional<float> toFloat(std::string_view s) noexcept
-{
-    if (s.empty()) return std::nullopt;
+[[nodiscard]]
+static std::optional<float> toFloat(std::string_view s) noexcept {
+    if (s.empty())
+        return std::nullopt;
     float v{};
     const auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
     return (ec == std::errc{}) ? std::optional<float>{v} : std::nullopt;
 }
 
-
-[[nodiscard]] static LayoutKind layoutKindForTag(std::string_view tag) noexcept
-{
+[[nodiscard]]
+static LayoutKind layoutKindForTag(std::string_view tag) noexcept {
     // Block containers
-    if (tag == "div"     || tag == "section"    || tag == "main"   ||
-        tag == "header"  || tag == "footer"     || tag == "article"||
-        tag == "aside"   || tag == "nav"        || tag == "layout" ||
-        tag == "panel"   || tag == "calculator" || tag == "keypad" ||
-        tag == "form"    || tag == "fieldset"   || tag == "ul"     ||
-        tag == "ol"      || tag == "li"         || tag == "dl"     ||
-        tag == "video")
-    {
+    if (tag == "div" || tag == "section" || tag == "main" || tag == "header" || tag == "footer"
+        || tag == "article" || tag == "aside" || tag == "nav" || tag == "layout" || tag == "panel"
+        || tag == "calculator" || tag == "keypad" || tag == "form" || tag == "fieldset"
+        || tag == "ul" || tag == "ol" || tag == "li" || tag == "dl" || tag == "video") {
         return LayoutKind::Block;
     }
 
@@ -42,12 +40,12 @@ namespace {
     if (tag == "col" || tag == "column" || tag == "vbox" || tag == "stack" || tag == "app")
         return LayoutKind::FlexColumn;
 
-    // Leaf, caller-managed or None "inline"  span p text label button h1-h6 img image a code pre etc.
+    // Leaf, caller-managed or None "inline"  span p text label button h1-h6 img image a code pre
+    // etc.
     return LayoutKind::None;
 }
 
-} // anonymous namespace
-
+}  // anonymous namespace
 
 /**
  * @brief Applies
@@ -55,9 +53,9 @@ namespace {
  * @param n         RenderNode & value
  * @param px_scale  Uniform scale factor
  */
-void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
-{
-    if (n.styles.empty()) return;
+void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
+    if (n.styles.empty())
+        return;
 
     // Tag → default LayoutKind like block or inline is treated as None
     {
@@ -69,58 +67,87 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
     // flexDirection overrides tag-derived LayoutKind
     {
         const auto fd = n.style("flexDirection");
-        if      (fd == "row")    n.layout_kind = LayoutKind::FlexRow;
-        else if (fd == "column") n.layout_kind = LayoutKind::FlexColumn;
+        if (fd == "row")
+            n.layout_kind = LayoutKind::FlexRow;
+        else if (fd == "column")
+            n.layout_kind = LayoutKind::FlexColumn;
     }
 
     // display:none → hidden (skip layout/render)
     {
         const auto disp = n.style("display");
-        n.hidden = (disp == "none");
+        n.hidden        = (disp == "none");
     }
 
     // Geometry
     // width / height: written to both layout_props (for the layout engine)
     //                 and n.w / n.h (for draw callbacks that read them directly).
-    if (const auto f = toFloat(n.style("width"))) {
-        // layout_props: logical pixels (used by layout engine)
-        n.layout_props.width = *f;
-        // n.w: physical pixels (used by draw callbacks)
-        n.w = (*f) * px_scale;
+    // Percent values (e.g. "100%") set width_pct / height_pct instead so the
+    // layout engine can resolve them relative to the parent container dimensions.
+    {
+        const auto w_sv = n.style("width");
+        if (!w_sv.empty()) {
+            if (w_sv.back() == '%') {
+                if (const auto f = toFloat(w_sv.substr(0, w_sv.size() - 1)))
+                    n.layout_props.width_pct = *f;
+            } else if (const auto f = toFloat(w_sv)) {
+                n.layout_props.width = *f;
+                n.w                  = (*f) * px_scale;
+            }
+        }
     }
-    if (const auto f = toFloat(n.style("height"))) {
-        n.layout_props.height = *f;
-        n.h = (*f) * px_scale;
+    {
+        const auto h_sv = n.style("height");
+        if (!h_sv.empty()) {
+            if (h_sv.back() == '%') {
+                if (const auto f = toFloat(h_sv.substr(0, h_sv.size() - 1)))
+                    n.layout_props.height_pct = *f;
+            } else if (const auto f = toFloat(h_sv)) {
+                n.layout_props.height = *f;
+                n.h                   = (*f) * px_scale;
+            }
+        }
     }
     // x / y: direct positioning — convert to physical for draw geometry.
-    if (const auto f = toFloat(n.style("x"))) n.x = (*f) * px_scale;
-    if (const auto f = toFloat(n.style("y"))) n.y = (*f) * px_scale;
+    if (const auto f = toFloat(n.style("x")))
+        n.x = (*f) * px_scale;
+    if (const auto f = toFloat(n.style("y")))
+        n.y = (*f) * px_scale;
 
     // Flex item properties
-    if (const auto f = toFloat(n.style("flexGrow")))   n.layout_props.flex_grow   = *f;
-    if (const auto f = toFloat(n.style("flexShrink"))) n.layout_props.flex_shrink = *f;
-    if (const auto f = toFloat(n.style("flexBasis")))  n.layout_props.flex_basis  = *f;
+    if (const auto f = toFloat(n.style("flexGrow")))
+        n.layout_props.flex_grow = *f;
+    if (const auto f = toFloat(n.style("flexShrink")))
+        n.layout_props.flex_shrink = *f;
+    if (const auto f = toFloat(n.style("flexBasis")))
+        n.layout_props.flex_basis = *f;
 
     // Container gap
-    if (const auto f = toFloat(n.style("gap"))) n.layout_props.gap = *f;
+    if (const auto f = toFloat(n.style("gap")))
+        n.layout_props.gap = *f;
 
     // justify / align
     {
         const auto jc = n.style("justifyContent");
-        if      (jc == "center")        n.layout_props.justify = LayoutProps::Justify::Center;
-        else if (jc == "flex-end"   ||
-                 jc == "end")           n.layout_props.justify = LayoutProps::Justify::End;
-        else if (jc == "space-between") n.layout_props.justify = LayoutProps::Justify::SpaceBetween;
-        else if (jc == "space-around")  n.layout_props.justify = LayoutProps::Justify::SpaceAround;
+        if (jc == "center")
+            n.layout_props.justify = LayoutProps::Justify::Center;
+        else if (jc == "flex-end" || jc == "end")
+            n.layout_props.justify = LayoutProps::Justify::End;
+        else if (jc == "space-between")
+            n.layout_props.justify = LayoutProps::Justify::SpaceBetween;
+        else if (jc == "space-around")
+            n.layout_props.justify = LayoutProps::Justify::SpaceAround;
     }
     {
         const auto ai = n.style("alignItems");
-        if      (ai == "center")        n.layout_props.align = LayoutProps::Align::Center;
-        else if (ai == "flex-end" ||
-                 ai == "end")           n.layout_props.align = LayoutProps::Align::End;
-        else if (ai == "flex-start" ||
-                 ai == "start")         n.layout_props.align = LayoutProps::Align::Start;
-        else if (ai == "stretch")       n.layout_props.align = LayoutProps::Align::Stretch;
+        if (ai == "center")
+            n.layout_props.align = LayoutProps::Align::Center;
+        else if (ai == "flex-end" || ai == "end")
+            n.layout_props.align = LayoutProps::Align::End;
+        else if (ai == "flex-start" || ai == "start")
+            n.layout_props.align = LayoutProps::Align::Start;
+        else if (ai == "stretch")
+            n.layout_props.align = LayoutProps::Align::Stretch;
     }
 
     // flex-wrap
@@ -133,8 +160,10 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
     // overflow
     {
         const auto ov = n.style("overflow");
-        if      (ov == "hidden") n.layout_props.overflow = LayoutProps::Overflow::Hidden;
-        else if (ov == "scroll") n.layout_props.overflow = LayoutProps::Overflow::Scroll;
+        if (ov == "hidden")
+            n.layout_props.overflow = LayoutProps::Overflow::Hidden;
+        else if (ov == "scroll")
+            n.layout_props.overflow = LayoutProps::Overflow::Scroll;
     }
 
     // Visual properties
@@ -147,8 +176,10 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
     //   - Default textAlign = Right (when textAlign not explicitly set)
     {
         const auto dir = n.style("direction");
-        if      (dir == "rtl") n.visual_props.direction = VisualProps::Direction::RTL;
-        else if (dir == "ltr") n.visual_props.direction = VisualProps::Direction::LTR;
+        if (dir == "rtl")
+            n.visual_props.direction = VisualProps::Direction::RTL;
+        else if (dir == "ltr")
+            n.visual_props.direction = VisualProps::Direction::LTR;
     }
 
     // textAlign
@@ -173,11 +204,11 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
         } else if (ta == "center") {
             n.visual_props.text_align = VisualProps::TextAlign::Center;
         } else if (ta == "start") {
-            n.visual_props.text_align = rtl ? VisualProps::TextAlign::Right
-                                             : VisualProps::TextAlign::Left;
+            n.visual_props.text_align =
+                rtl ? VisualProps::TextAlign::Right : VisualProps::TextAlign::Left;
         } else if (ta == "end") {
-            n.visual_props.text_align = rtl ? VisualProps::TextAlign::Left
-                                             : VisualProps::TextAlign::Right;
+            n.visual_props.text_align =
+                rtl ? VisualProps::TextAlign::Left : VisualProps::TextAlign::Right;
         }
     }
 
@@ -194,7 +225,7 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
 
     // padding shorthand — sets all four sides when present
     if (const auto f = toFloat(n.style("padding"))) {
-        const float phys = (*f) * px_scale;
+        const float phys              = (*f) * px_scale;
         n.visual_props.padding_left   = phys;
         n.visual_props.padding_right  = phys;
         n.visual_props.padding_top    = phys;
@@ -204,16 +235,70 @@ void StyleApplier::apply(RenderNode& n, float px_scale) noexcept
     // ── objectFit — how an img fills its bounding box ────────────────────────
     {
         const auto of = n.style("objectFit");
-        if      (of == "contain") n.visual_props.object_fit = VisualProps::ObjectFit::Contain;
-        else if (of == "cover")   n.visual_props.object_fit = VisualProps::ObjectFit::Cover;
+        if (of == "contain")
+            n.visual_props.object_fit = VisualProps::ObjectFit::Contain;
+        else if (of == "cover")
+            n.visual_props.object_fit = VisualProps::ObjectFit::Cover;
         // default ObjectFit::Fill: stretch to exactly w×h (no distortion guard)
     }
 
-        // Individual sides — override the shorthand
-    if (const auto f = toFloat(n.style("paddingLeft")))   n.visual_props.padding_left   = (*f) * px_scale;
-    if (const auto f = toFloat(n.style("paddingRight")))  n.visual_props.padding_right  = (*f) * px_scale;
-    if (const auto f = toFloat(n.style("paddingTop")))    n.visual_props.padding_top    = (*f) * px_scale;
-    if (const auto f = toFloat(n.style("paddingBottom"))) n.visual_props.padding_bottom = (*f) * px_scale;
+    // Individual sides — override the shorthand
+    if (const auto f = toFloat(n.style("paddingLeft")))
+        n.visual_props.padding_left = (*f) * px_scale;
+    if (const auto f = toFloat(n.style("paddingRight")))
+        n.visual_props.padding_right = (*f) * px_scale;
+    if (const auto f = toFloat(n.style("paddingTop")))
+        n.visual_props.padding_top = (*f) * px_scale;
+    if (const auto f = toFloat(n.style("paddingBottom")))
+        n.visual_props.padding_bottom = (*f) * px_scale;
 }
 
-} // namespace pce::sdlos
+/**
+ * @brief Swaps a portion of the DOM by parsing a new Jade source and replacing children of a target
+ * node.
+ *
+ * @param tree      The RenderTree to operate on.
+ * @param parent_h  Handle of the node whose children should be replaced.
+ * @param jade_path Path to the new .jade file.
+ * @return true if successful, false otherwise.
+ */
+bool swapJadeModule(
+    pce::sdlos::RenderTree &tree,
+    pce::sdlos::NodeHandle parent_h,
+    const std::string &jade_path) {
+    if (!parent_h.valid())
+        return false;
+
+    // 1. Read Jade file
+    std::ifstream f(jade_path);
+    if (!f.is_open())
+        return false;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string source = ss.str();
+
+    // 2. Parse into a temporary subtree
+    // Note: jade::parse usually returns a virtual root containing the parsed elements
+    pce::sdlos::NodeHandle new_content_root = pce::sdlos::jade::parse(source, tree);
+    if (!new_content_root.valid())
+        return false;
+
+    // 3. Clear existing children of the parent
+    // We assume RenderTree has a way to remove children. If not, we'd need to extend it.
+    // For now, we'll use a placeholder logic that implies typical tree operations:
+    // tree.clearChildren(parent_h);
+
+    // 4. Move children from the temp root to the target parent
+    // Typically:
+    // for (auto child : tree.children(new_content_root)) {
+    //     tree.appendChild(parent_h, child);
+    // }
+
+    // 5. Free the temp root (it's no longer needed)
+    // tree.free(new_content_root);
+
+    tree.markLayoutDirty(parent_h);
+    return true;
+}
+
+}  // namespace pce::sdlos

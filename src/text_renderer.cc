@@ -8,7 +8,6 @@
 
 namespace pce::sdlos {
 
-
 /**
  * @brief Initialises
  *
@@ -17,8 +16,7 @@ namespace pce::sdlos {
  *
  * @return true on success, false on failure
  */
-bool TextRenderer::init(SDL_GPUDevice* device, float default_size)
-{
+bool TextRenderer::init(SDL_GPUDevice *device, float default_size) {
     if (!device) {
         std::cerr << "[TextRenderer] init: null device\n";
         return false;
@@ -57,11 +55,10 @@ bool TextRenderer::init(SDL_GPUDevice* device, float default_size)
 /**
  * @brief Shuts down
  */
-void TextRenderer::shutdown()
-{
+void TextRenderer::shutdown() {
     // Drain pending uploads: textures are owned by cache_; only free the
     // leftover CPU surfaces here.
-    for (auto& pu : pending_uploads_) {
+    for (auto &pu : pending_uploads_) {
         if (pu.surface) {
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
@@ -92,7 +89,6 @@ void TextRenderer::shutdown()
     ready_  = false;
 }
 
-
 /**
  * @brief Loads font
  *
@@ -101,19 +97,19 @@ void TextRenderer::shutdown()
  *
  * @return true on success, false on failure
  */
-bool TextRenderer::loadFont(const std::string& path, float pt_size)
-{
+bool TextRenderer::loadFont(const std::string &path, float pt_size) {
 #ifdef SDL_TTF_AVAILABLE
     return openFont(path, pt_size);
 #else
-    (void)path; (void)pt_size;
+    (void)path;
+    (void)pt_size;
     return false;
 #endif
 }
 
-bool TextRenderer::loadFirstAvailable(std::initializer_list<std::string_view> candidates,
-                                       float pt_size)
-{
+bool TextRenderer::loadFirstAvailable(
+    std::initializer_list<std::string_view> candidates,
+    float pt_size) {
 #ifdef SDL_TTF_AVAILABLE
     for (std::string_view path : candidates) {
         if (loadFont(std::string(path), pt_size)) {
@@ -123,7 +119,8 @@ bool TextRenderer::loadFirstAvailable(std::initializer_list<std::string_view> ca
     }
     return false;
 #else
-    (void)candidates; (void)pt_size;
+    (void)candidates;
+    (void)pt_size;
     return false;
 #endif
 }
@@ -135,11 +132,10 @@ bool TextRenderer::loadFirstAvailable(std::initializer_list<std::string_view> ca
  *
  * @return true on success, false on failure
  */
-bool TextRenderer::tryLoadSystemFont(float pt_size)
-{
+bool TextRenderer::tryLoadSystemFont(float pt_size) {
 #ifdef SDL_TTF_AVAILABLE
     // Explicit opt-in only — never called automatically.
-    static constexpr const char* kSystemPaths[] = {
+    static constexpr const char *kSystemPaths[] = {
         // macOS / iOS — Latin-first.  HelveticaNeue is present on every macOS
         // version (10.9+) and has excellent Latin/Greek/Cyrillic coverage.
         "/System/Library/Fonts/HelveticaNeue.ttc",
@@ -160,10 +156,10 @@ bool TextRenderer::tryLoadSystemFont(float pt_size)
         "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf",
         "/usr/share/fonts/noto/NotoSansArabic-Regular.ttf",
-        nullptr
-    };
-    for (const char* path : kSystemPaths) {
-        if (!path) break;
+        nullptr};
+    for (const char *path : kSystemPaths) {
+        if (!path)
+            break;
         if (loadFont(path, pt_size)) {
             std::cout << "[TextRenderer] loaded system font: " << path << "\n";
             return true;
@@ -177,12 +173,13 @@ bool TextRenderer::tryLoadSystemFont(float pt_size)
 }
 
 #ifdef SDL_TTF_AVAILABLE
-bool TextRenderer::openFont(const std::string& path, float pt)
-{
-    TTF_Font* f = TTF_OpenFont(path.c_str(), pt);
-    if (!f) return false;
-    if (font_) TTF_CloseFont(font_);
-    font_  = f;
+bool TextRenderer::openFont(const std::string &path, float pt) {
+    TTF_Font *f = TTF_OpenFont(path.c_str(), pt);
+    if (!f)
+        return false;
+    if (font_)
+        TTF_CloseFont(font_);
+    font_ = f;
     // ready_ flips here when a font is loaded after init() (sampler_ already set).
     ready_ = (sampler_ != nullptr);
     return true;
@@ -200,12 +197,12 @@ bool TextRenderer::openFont(const std::string& path, float pt)
  *
  * @return GlyphTexture result
  */
-GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size, bool rtl)
-{
-    if (!ready_ || text.empty()) return {};
+GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size, bool rtl) {
+    if (!ready_ || text.empty())
+        return {};
 
-    const float  ns  = normaliseSize(size > 0.f ? size : default_size_);
-    const Key    key { std::string(text), ns, rtl };
+    const float ns = normaliseSize(size > 0.f ? size : default_size_);
+    const Key key{std::string(text), ns, rtl};
 
     // ── Cache hit ──────────────────────────────────────────────────────────
     if (auto it = cache_.find(key); it != cache_.end()) {
@@ -214,7 +211,8 @@ GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size, bool
 
     // ── Cache miss: render CPU-side ────────────────────────────────────────
 #ifdef SDL_TTF_AVAILABLE
-    if (!font_) return {};
+    if (!font_)
+        return {};
 
     // TODO: maintain a TTF_Font* cache keyed by size for multi-size support.
     // Currently we reuse font_ opened at default_size_.
@@ -225,44 +223,42 @@ GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size, bool
     TTF_SetFontDirection(font_, rtl ? TTF_DIRECTION_RTL : TTF_DIRECTION_LTR);
 
     const SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface* raw = TTF_RenderText_Blended(
+    SDL_Surface *raw      = TTF_RenderText_Blended(
         font_,
         std::string(text).c_str(),
-        0,      // length = 0 → use strlen
-        white
-    );
+        0,  // length = 0 → use strlen
+        white);
     if (!raw) {
-        std::cerr << "[TextRenderer] TTF_RenderText_Blended failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[TextRenderer] TTF_RenderText_Blended failed: " << SDL_GetError() << "\n";
         return {};
     }
 
     // Convert to RGBA32 so byte order matches SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM.
-    SDL_Surface* surf = SDL_ConvertSurface(raw, SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface *surf = SDL_ConvertSurface(raw, SDL_PIXELFORMAT_RGBA32);
     SDL_DestroySurface(raw);
     if (!surf) {
-        std::cerr << "[TextRenderer] SDL_ConvertSurface failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[TextRenderer] SDL_ConvertSurface failed: " << SDL_GetError() << "\n";
         return {};
     }
 
     // Pre-allocate the GPU texture (no pixel data yet — filled in flushUploads).
-    SDL_GPUTexture* tex = createTexture(surf->w, surf->h);
+    SDL_GPUTexture *tex = createTexture(surf->w, surf->h);
     if (!tex) {
         SDL_DestroySurface(surf);
         return {};
     }
 
     // Register in cache now so repeated calls within the same frame are hits.
-    GlyphTexture gt{ tex, surf->w, surf->h };
+    GlyphTexture gt{tex, surf->w, surf->h};
     cache_.emplace(key, gt);
 
-    pending_uploads_.push_back({ key, surf, tex });
+    pending_uploads_.push_back({key, surf, tex});
 
     return gt;
 
 #else
-    (void)text; (void)size;
+    (void)text;
+    (void)size;
     return {};
 #endif
 }
@@ -272,15 +268,16 @@ GlyphTexture TextRenderer::ensureTexture(std::string_view text, float size, bool
  *
  * @param copy_pass  Vertical coordinate in logical pixels
  */
-void TextRenderer::flushUploads(SDL_GPUCopyPass* copy_pass)
-{
-    if (!device_ || !copy_pass || pending_uploads_.empty()) return;
+void TextRenderer::flushUploads(SDL_GPUCopyPass *copy_pass) {
+    if (!device_ || !copy_pass || pending_uploads_.empty())
+        return;
 
-    for (auto& pu : pending_uploads_) {
-        if (!pu.surface || !pu.texture) continue;
+    for (auto &pu : pending_uploads_) {
+        if (!pu.surface || !pu.texture)
+            continue;
 
-        const int    w          = pu.surface->w;
-        const int    h          = pu.surface->h;
+        const int w             = pu.surface->w;
+        const int h             = pu.surface->h;
         const Uint32 byte_count = static_cast<Uint32>(w * h * 4);
 
         // ── Create a one-shot transfer buffer ─────────────────────────────
@@ -289,20 +286,20 @@ void TextRenderer::flushUploads(SDL_GPUCopyPass* copy_pass)
         tbci.size  = byte_count;
         tbci.props = 0;
 
-        SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(device_, &tbci);
+        SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(device_, &tbci);
         if (!tb) {
-            std::cerr << "[TextRenderer] SDL_CreateGPUTransferBuffer failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[TextRenderer] SDL_CreateGPUTransferBuffer failed: " << SDL_GetError()
+                      << "\n";
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
             continue;
         }
 
         // ── Copy surface pixels into the transfer buffer ──────────────────
-        void* ptr = SDL_MapGPUTransferBuffer(device_, tb, /*cycle=*/false);
+        void *ptr = SDL_MapGPUTransferBuffer(device_, tb, /*cycle=*/false);
         if (!ptr) {
-            std::cerr << "[TextRenderer] SDL_MapGPUTransferBuffer failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[TextRenderer] SDL_MapGPUTransferBuffer failed: " << SDL_GetError()
+                      << "\n";
             SDL_ReleaseGPUTransferBuffer(device_, tb);
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
@@ -327,9 +324,9 @@ void TextRenderer::flushUploads(SDL_GPUCopyPass* copy_pass)
         tr.mip_level = 0;
         tr.layer     = 0;
         tr.x = tr.y = tr.z = 0;
-        tr.w = static_cast<Uint32>(w);
-        tr.h = static_cast<Uint32>(h);
-        tr.d = 1;
+        tr.w               = static_cast<Uint32>(w);
+        tr.h               = static_cast<Uint32>(h);
+        tr.d               = 1;
 
         SDL_UploadToGPUTexture(copy_pass, &tfi, &tr, /*cycle=*/false);
 
@@ -353,12 +350,13 @@ void TextRenderer::flushUploads(SDL_GPUCopyPass* copy_pass)
  *
  * @return Integer result; negative values indicate an error code
  */
-std::pair<int, int> TextRenderer::measureText(std::string_view text, float /*size*/, bool rtl)
-{
-    if (!ready_ || text.empty()) return {0, 0};
+std::pair<int, int> TextRenderer::measureText(std::string_view text, float /*size*/, bool rtl) {
+    if (!ready_ || text.empty())
+        return {0, 0};
 
 #ifdef SDL_TTF_AVAILABLE
-    if (!font_) return {0, 0};
+    if (!font_)
+        return {0, 0};
 
     // Match the direction used by ensureTexture so measurements are consistent
     // with the actual rendered glyph dimensions.
@@ -383,10 +381,9 @@ std::pair<int, int> TextRenderer::measureText(std::string_view text, float /*siz
 /**
  * @brief Clears cache
  */
-void TextRenderer::clearCache()
-{
+void TextRenderer::clearCache() {
     if (device_) {
-        for (auto& [key, gt] : cache_) {
+        for (auto &[key, gt] : cache_) {
             if (gt.texture) {
                 SDL_ReleaseGPUTexture(device_, gt.texture);
             }
@@ -394,7 +391,6 @@ void TextRenderer::clearCache()
     }
     cache_.clear();
 }
-
 
 /**
  * @brief Normalise size
@@ -407,8 +403,7 @@ void TextRenderer::clearCache()
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-float TextRenderer::normaliseSize(float s) noexcept
-{
+float TextRenderer::normaliseSize(float s) noexcept {
     // Round to nearest 0.5pt so near-duplicate sizes don't pollute the cache.
     s = std::clamp(s, 6.f, 256.f);
     return std::round(s * 2.f) / 2.f;
@@ -426,9 +421,9 @@ float TextRenderer::normaliseSize(float s) noexcept
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_GPUTexture* TextRenderer::createTexture(int w, int h)
-{
-    if (!device_ || w <= 0 || h <= 0) return nullptr;
+SDL_GPUTexture *TextRenderer::createTexture(int w, int h) {
+    if (!device_ || w <= 0 || h <= 0)
+        return nullptr;
 
     SDL_GPUTextureCreateInfo tci{};
     tci.type                 = SDL_GPU_TEXTURETYPE_2D;
@@ -441,10 +436,9 @@ SDL_GPUTexture* TextRenderer::createTexture(int w, int h)
     tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
     tci.props                = 0;
 
-    SDL_GPUTexture* tex = SDL_CreateGPUTexture(device_, &tci);
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture(device_, &tci);
     if (!tex) {
-        std::cerr << "[TextRenderer] SDL_CreateGPUTexture failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[TextRenderer] SDL_CreateGPUTexture failed: " << SDL_GetError() << "\n";
     }
     return tex;
 }
@@ -458,9 +452,9 @@ SDL_GPUTexture* TextRenderer::createTexture(int w, int h)
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_GPUSampler* TextRenderer::createSampler()
-{
-    if (!device_) return nullptr;
+SDL_GPUSampler *TextRenderer::createSampler() {
+    if (!device_)
+        return nullptr;
 
     SDL_GPUSamplerCreateInfo sci{};
     sci.min_filter     = SDL_GPU_FILTER_LINEAR;
@@ -471,12 +465,11 @@ SDL_GPUSampler* TextRenderer::createSampler()
     sci.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sci.props          = 0;
 
-    SDL_GPUSampler* s = SDL_CreateGPUSampler(device_, &sci);
+    SDL_GPUSampler *s = SDL_CreateGPUSampler(device_, &sci);
     if (!s) {
-        std::cerr << "[TextRenderer] SDL_CreateGPUSampler failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[TextRenderer] SDL_CreateGPUSampler failed: " << SDL_GetError() << "\n";
     }
     return s;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

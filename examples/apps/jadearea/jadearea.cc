@@ -9,12 +9,12 @@
 //
 // Behaviour overview
 // ──────────────────
-//  • A multi-line TextArea widget is injected into the #editor-wrap node.
-//  • On every keystroke the jade source is re-parsed and the result replaces
+//  - A multi-line TextArea widget is injected into the #editor-wrap node.
+//  - On every keystroke the jade source is re-parsed and the result replaces
 //    the children of #preview-wrap (live preview).
-//  • "▶ Render" button → bus event "jadearea:render"  — explicit re-render.
-//  • "Clear"    button → bus event "jadearea:clear"   — wipe editor + preview.
-//  • out_handler is set so the host event loop can forward raw
+//  - "▶ Render" button → bus event "jadearea:render"  — explicit re-render.
+//  - "Clear"    button → bus event "jadearea:clear"   — wipe editor + preview.
+//  - out_handler is set so the host event loop can forward raw
 //    SDL_Events (mouse / keyboard / text) to the TextArea widget.
 // ============================================================================
 
@@ -52,7 +52,7 @@ R"jade(col(gap="16" padding="20" backgroundColor="#0f172a")
     div(backgroundColor="#be185d" color="#fce7f3" height="28" width="70" borderRadius="6" fontSize="12") pink)jade";
 
 
-// ─── clearChildren ───────────────────────────────────────────────────────────
+// clearChildren
 // Frees every child of `parent` without freeing `parent` itself.
 // Uses tree.free() which internally calls detach() then recursively frees
 // the entire subtree — generation-bumps every freed handle so stale
@@ -69,7 +69,19 @@ static void clearChildren(pce::sdlos::RenderTree& tree,
 }
 
 
-// ─── renderToPreview ─────────────────────────────────────────────────────────
+
+static void save(std::string_view jade_text)
+{
+    using std::filesystem::path;
+
+}
+
+static std::string_view load()
+{
+
+}
+
+// renderToPreview
 // Parses `jade_text` into a new subtree, binds draw callbacks, and attaches it
 // as the sole child of `preview_h`.  Any previous preview subtree is freed first.
 // Also updates the status label if `status_h` is valid.
@@ -114,9 +126,6 @@ static void renderToPreview(pce::sdlos::RenderTree& tree,
 } // anonymous namespace
 
 
-// ============================================================================
-// jade_app_init
-// ============================================================================
 
 void jade_app_init(pce::sdlos::RenderTree&               tree,
                    pce::sdlos::NodeHandle                 root,
@@ -126,7 +135,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 {
     using namespace pce::sdlos::widgets;
 
-    // ── 1. Locate jade-declared host nodes ───────────────────────────────────
+    // 1. Locate jade-declared host nodes
     const pce::sdlos::NodeHandle editor_wrap_h =
         tree.findById(root, "editor-wrap");
     const pce::sdlos::NodeHandle preview_h =
@@ -142,7 +151,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     sdlos_log("[jadearea] nodes ok — editor-wrap + preview-wrap found");
 
-    // ── 2. Compute TextArea pixel dimensions ─────────────────────────────────
+    // 2. Compute TextArea pixel dimensions
     // SDLOS_WIN_W / SDLOS_WIN_H are compile-time defines set by CMake.
     // They are visible here because this file is #include-d into jade_host.cc.
     //
@@ -157,7 +166,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     constexpr float kPaneH =
         static_cast<float>(SDLOS_WIN_H) - 44.f - 28.f;
 
-    // ── 3. Build the TextArea config ─────────────────────────────────────────
+    // 3. Build the TextArea config
     TextAreaConfig edcfg;
     edcfg.rows        = 0;          // explicit w / h below
     edcfg.cols        = 0;
@@ -197,7 +206,26 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // explicit renderToPreview() call is needed here.
     editor.setText(kDefaultJade);
 
+
     // Bus subscriptions
+
+    bus.subscribe("jadearea:load",
+    [editor, &tree, preview_h, status_h](const std::string&) mutable {
+    	// TODO load by filenames of jade/?.jade and set text to Editor
+
+    });
+
+    bus.subscribe("jadearea:list",
+    [editor, &tree, preview_h, status_h](const std::string&) mutable {
+    	// TODO load all filenames of jade/?.jade and return as list to host for UI (e.g. dropdown in toolbar)
+
+    });
+
+    bus.subscribe("jadearea:save",
+    [editor, &tree, preview_h, status_h](const std::string&) mutable {
+        // renderToPreview(tree, preview_h, status_h, editor.getText());
+        // todo save data/jade/
+    });
 
     // "▶ Render" button — explicit re-render (useful after pasting large text
     // when live-preview might have produced a partial result).
@@ -220,7 +248,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             }
         });
 
-    // . Raw-event hook
+    // Raw-event hook
     // out_handler is the SceneState-owned slot passed in by jade_host.cc.
     // Assigning it here routes raw SDL events to the TextArea for the lifetime
     // of this scene; it is cleared automatically on the next loadScene() call.

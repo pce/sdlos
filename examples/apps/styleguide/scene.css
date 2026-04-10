@@ -1,6 +1,6 @@
 /* scene.css — 3D scene layout for the Style Guide Crystal Cluster model
  *
- * Loaded manually in styleguide.cxx after GltfScene.attach() so that
+ * Loaded manually in styleguide.cc after GltfScene.attach() so that
  * dynamically-injected proxy nodes are already in the RenderTree when
  * applyTo() runs.
  *

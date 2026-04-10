@@ -1,0 +1,13 @@
+// =============================================================================
+// styleguide/data/pipeline.pug  —  intentionally empty pipeline
+//
+// No pass declarations → SDLRenderer treats this as "suppress the built-in
+// FBM wallpaper and clear to a plain dark background instead".
+//
+// This lets the styleguide pages (UI tree composited in Pass 3c) render
+// against a neutral solid colour without any animated post-processing.
+//
+// To re-enable effects, add resource + pass blocks below (see pug/data/pipeline.pug
+// for a full three-pass FBM → cartoon → vignette → grade example).
+// =============================================================================
+

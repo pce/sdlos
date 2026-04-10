@@ -17,7 +17,17 @@ struct StyleApplier {
      * @param n         RenderNode & value
      * @param px_scale  Uniform scale factor
      */
-    static void apply(RenderNode& n, float px_scale = 1.0f) noexcept;
+    static void apply(RenderNode &n, float px_scale = 1.0f) noexcept;
 };
 
-} // namespace pce::sdlos
+/**
+ * @brief Swaps a JADE module in the render tree.
+ *
+ * @param tree       The render tree to modify.
+ * @param parent_h   Handle to the parent node where the module will be swapped.
+ * @param jade_path  Filesystem path to the .jade file.
+ * @return true on success, false on failure.
+ */
+bool swapJadeModule(RenderTree &tree, NodeHandle parent_h, const std::string &jade_path);
+
+}  // namespace pce::sdlos

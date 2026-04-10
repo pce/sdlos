@@ -10,12 +10,13 @@ namespace {
 
 // FNV-1a hash — identical to the one used in frame_graph.cc.
 // Kept here so compiled_graph.cc compiles independently.
-[[nodiscard]] inline uint32_t fnv1a(std::string_view s) noexcept {
-    uint32_t h = 2166136261u;
-    for (unsigned char c : s) h = (h ^ c) * 16777619u;
+[[nodiscard]]
+inline uint32_t fnv1a(std::string_view s) noexcept {
+    uint32_t h = 2'166'136'261u;
+    for (unsigned char c : s)
+        h = (h ^ c) * 16'777'619u;
     return h;
 }
-
 
 /// Begin a colour-only render pass targeting one texture.
 /// LOADOP_DONT_CARE — post-process passes overwrite every pixel.
@@ -29,21 +30,21 @@ namespace {
 ///               Set false for the swapchain (SDL manages its own rotation)
 ///               and for any LOADOP_LOAD pass (we need the previous contents).
 [[nodiscard]]
-inline SDL_GPURenderPass* begin_pass(SDL_GPUCommandBuffer* cmd,
-                                     SDL_GPUTexture*       target,
-                                     uint32_t              w,
-                                     uint32_t              h,
-                                     bool                  cycle) noexcept
-{
+inline SDL_GPURenderPass *begin_pass(
+    SDL_GPUCommandBuffer *cmd,
+    SDL_GPUTexture *target,
+    uint32_t w,
+    uint32_t h,
+    bool cycle) noexcept {
     SDL_GPUColorTargetInfo ct{};
-    ct.texture               = target;
-    ct.load_op               = SDL_GPU_LOADOP_DONT_CARE;
-    ct.store_op              = SDL_GPU_STOREOP_STORE;
-    ct.mip_level             = 0;
-    ct.layer_or_depth_plane  = 0;
-    ct.cycle                 = cycle;
+    ct.texture              = target;
+    ct.load_op              = SDL_GPU_LOADOP_DONT_CARE;
+    ct.store_op             = SDL_GPU_STOREOP_STORE;
+    ct.mip_level            = 0;
+    ct.layer_or_depth_plane = 0;
+    ct.cycle                = cycle;
 
-    SDL_GPURenderPass* rp = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
+    SDL_GPURenderPass *rp = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
 
     if (rp) {
         SDL_GPUViewport vp{};
@@ -67,10 +68,9 @@ inline SDL_GPURenderPass* begin_pass(SDL_GPUCommandBuffer* cmd,
 }
 
 /// Bind all sampler inputs declared in a compiled pass.
-inline void bind_samplers(SDL_GPURenderPass*    rp,
-                          const CompiledPass&   pass) noexcept
-{
-    if (pass.bind_count == 0) return;
+inline void bind_samplers(SDL_GPURenderPass *rp, const CompiledPass &pass) noexcept {
+    if (pass.bind_count == 0)
+        return;
 
     SDL_GPUTextureSamplerBinding bindings[8]{};
     for (uint8_t i = 0; i < pass.bind_count; ++i) {
@@ -82,17 +82,17 @@ inline void bind_samplers(SDL_GPURenderPass*    rp,
 }
 
 /// Push Bucket-C float uniforms to fragment binding slot 0.
-inline void push_params(SDL_GPUCommandBuffer* cmd,
-                        const CompiledParams& p) noexcept
-{
-    if (p.empty()) return;
+inline void push_params(SDL_GPUCommandBuffer *cmd, const CompiledParams &p) noexcept {
+    if (p.empty())
+        return;
     SDL_PushGPUFragmentUniformData(
-        cmd, 0,
+        cmd,
+        0,
         p.data.data(),
         p.count << 2);  // Bit shift left by 2: multiply by 4 (sizeof(float))
 }
 
-} // namespace
+}  // namespace
 
 // CompiledGraph::execute
 //
@@ -120,27 +120,31 @@ inline void push_params(SDL_GPUCommandBuffer* cmd,
  * @param vp_h       Viewport height in physical pixels
  * @param time       Wall-clock time in seconds for animation parameters
  */
-void CompiledGraph::execute(SDL_GPUCommandBuffer* cmd,
-                             SDL_GPUTexture*       swapchain,
-                             uint32_t              vp_w,
-                             uint32_t              vp_h,
-                             float                 time) noexcept
-{
-    for (const CompiledPass& pass : passes) {
-        if (!pass.enabled) [[unlikely]] continue;
-        if (!pass.pipeline) [[unlikely]] continue;
+void CompiledGraph::execute(
+    SDL_GPUCommandBuffer *cmd,
+    SDL_GPUTexture *swapchain,
+    uint32_t vp_w,
+    uint32_t vp_h,
+    float time) noexcept {
+    for (const CompiledPass &pass : passes) {
+        if (!pass.enabled) [[unlikely]]
+            continue;
+        if (!pass.pipeline) [[unlikely]]
+            continue;
 
         // The sentinel nullptr output means "write to swapchain".
-        SDL_GPUTexture* target = pass.output ? pass.output : swapchain;
-        if (!target) [[unlikely]] continue;
+        SDL_GPUTexture *target = pass.output ? pass.output : swapchain;
+        if (!target) [[unlikely]]
+            continue;
 
         // Cycle owned intermediate textures so the GPU can pipeline writes
         // without waiting for the previous frame's reads to drain.
         // The swapchain (output == nullptr, target = swapchain param) is NOT
         // cycled here — SDL rotates swapchain images internally.
-        const bool cycle = (pass.output != nullptr);
-        SDL_GPURenderPass* rp = begin_pass(cmd, target, vp_w, vp_h, cycle);
-        if (!rp) [[unlikely]] continue;
+        const bool cycle      = (pass.output != nullptr);
+        SDL_GPURenderPass *rp = begin_pass(cmd, target, vp_w, vp_h, cycle);
+        if (!rp) [[unlikely]]
+            continue;
 
         SDL_BindGPUGraphicsPipeline(rp, pass.pipeline);
         bind_samplers(rp, pass);
@@ -149,7 +153,7 @@ void CompiledGraph::execute(SDL_GPUCommandBuffer* cmd,
         // time into a stack copy before pushing — no heap traffic, no write to
         // the stored CompiledParams (patch() owns that storage).
         if (pass.time_slot != 255u) [[unlikely]] {
-            CompiledParams p = pass.params;                 // stack copy (68 bytes)
+            CompiledParams p       = pass.params;  // stack copy (68 bytes)
             p.data[pass.time_slot] = time;
             push_params(cmd, p);
         } else {
@@ -170,11 +174,11 @@ void CompiledGraph::execute(SDL_GPUCommandBuffer* cmd,
  *
  * @return Number of currently enabled passes (disabled passes not counted)
  */
-std::size_t CompiledGraph::active_count() const noexcept
-{
+std::size_t CompiledGraph::active_count() const noexcept {
     std::size_t n = 0;
-    for (const auto& p : passes)
-        if (p.enabled) ++n;
+    for (const auto &p : passes)
+        if (p.enabled)
+            ++n;
     return n;
 }
 
@@ -186,10 +190,10 @@ std::size_t CompiledGraph::active_count() const noexcept
  *
  * @return Pointer to the CompiledPass, or nullptr if not found
  */
-CompiledPass* CompiledGraph::find_pass(uint32_t id_hash) noexcept
-{
-    for (auto& p : passes)
-        if (p.id_hash == id_hash) return &p;
+CompiledPass *CompiledGraph::find_pass(uint32_t id_hash) noexcept {
+    for (auto &p : passes)
+        if (p.id_hash == id_hash)
+            return &p;
     return nullptr;
 }
 
@@ -205,21 +209,19 @@ CompiledPass* CompiledGraph::find_pass(uint32_t id_hash) noexcept
  * @param key      Parameter key string (e.g. "density")
  * @param val      New float value to set
  */
-void CompiledGraph::patch(std::string_view pass_id,
-                           std::string_view key,
-                           float            val) noexcept
-{
+void CompiledGraph::patch(std::string_view pass_id, std::string_view key, float val) noexcept {
     const uint32_t pid = fnv1a(pass_id);
-    CompiledPass* pass = find_pass(pid);
-    if (!pass) return;
+    CompiledPass *pass = find_pass(pid);
+    if (!pass)
+        return;
 
-    const uint32_t kid  = fnv1a(key);
-    const uint8_t  slot = pass->find_slot(kid);
-    if (slot == 255u) return;
+    const uint32_t kid = fnv1a(key);
+    const uint8_t slot = pass->find_slot(kid);
+    if (slot == 255u)
+        return;
 
     pass->params.set(slot, val);
 }
-
 
 /**
  * @brief Enable or disable a pass by name
@@ -227,14 +229,11 @@ void CompiledGraph::patch(std::string_view pass_id,
  * @param pass_id  Pass id string (e.g. "dof")
  * @param enabled  true to enable, false to disable the pass
  */
-void CompiledGraph::set_enabled(std::string_view pass_id,
-                                 bool             enabled) noexcept
-{
+void CompiledGraph::set_enabled(std::string_view pass_id, bool enabled) noexcept {
     const uint32_t pid = fnv1a(pass_id);
-    if (CompiledPass* pass = find_pass(pid))
+    if (CompiledPass *pass = find_pass(pid))
         pass->enabled = enabled;
 }
-
 
 /**
  * @brief Apply CSS property change to pipeline
@@ -243,10 +242,10 @@ void CompiledGraph::set_enabled(std::string_view pass_id,
  * @param key      Property key (either "enabled" or a param name)
  * @param val      Property value as string
  */
-void CompiledGraph::apply_style(std::string_view pass_id,
-                                 std::string_view key,
-                                 std::string_view val) noexcept
-{
+void CompiledGraph::apply_style(
+    std::string_view pass_id,
+    std::string_view key,
+    std::string_view val) noexcept {
     if (key == "enabled") {
         set_enabled(pass_id, val != "false" && val != "0");
         return;
@@ -263,23 +262,22 @@ void CompiledGraph::apply_style(std::string_view pass_id,
  *
  * Prints pass configuration, enabled status, bindings, and parameters
  */
-void CompiledGraph::dump() const noexcept
-{
-    std::printf("CompiledGraph  passes=%zu  active=%zu\n",
-                passes.size(), active_count());
+void CompiledGraph::dump() const noexcept {
+    std::printf("CompiledGraph  passes=%zu  active=%zu\n", passes.size(), active_count());
 
     for (std::size_t i = 0; i < passes.size(); ++i) {
-        const auto& p = passes[i];
-        std::printf("  [%zu] id_hash=0x%08x  enabled=%-5s  bindings=%u  params=%u\n",
-                    i,
-                    p.id_hash,
-                    p.enabled ? "true" : "false",
-                    static_cast<unsigned>(p.bind_count),
-                    static_cast<unsigned>(p.params.count));
+        const auto &p = passes[i];
+        std::printf(
+            "  [%zu] id_hash=0x%08x  enabled=%-5s  bindings=%u  params=%u\n",
+            i,
+            p.id_hash,
+            p.enabled ? "true" : "false",
+            static_cast<unsigned>(p.bind_count),
+            static_cast<unsigned>(p.params.count));
 
         for (uint32_t j = 0; j < p.params.count; ++j)
             std::printf("       param[%u] = %.4f\n", j, p.params.data[j]);
     }
 }
 
-} // namespace pce::sdlos::fg
+}  // namespace pce::sdlos::fg

@@ -21,14 +21,14 @@ cd tooling
 uv sync          # resolves deps, creates .venv, installs sdlos-tooling (editable)
 ----
 
-No `pip install`, no `activate`.  Every subsequent command is prefixed with
-`uv run` and uses the managed venv automatically.
+auto venv: No `pip install`, no `activate`.  Every subsequent command is prefixed with
+`uv run` and uses the managed venv automatically or manual: `pip3 install`  or  `poetry` the requirements and activate venv.
 
 [source,sh]
 ----
 uv run sdlos version      # sdlos-tooling 0.1.0
 uv run sdlos templates    # lists: camera  minimal  shader
-uv run pytest             # all tests green
+uv run pytest             # all tests green;
 ----
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,121 +124,24 @@ uv run sdlos run viz --build-dir ../build-asan --watch
 |`-q / --quiet`       |off             |Suppress sdlos status lines
 |===
 
-// ─────────────────────────────────────────────────────────────────────────────
+
+
 == Analyze
+
+// moved
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+== Mesh Tools in sdlos
 // ─────────────────────────────────────────────────────────────────────────────
 
-`sdlos analyze` runs any combination of static analysis, linting, formatting,
-docblock insertion, and code metrics on a single file or a directory tree.
-All output is rendered with Rich.  Errors use a unified error panel.
+`sdlos mesh` offers a set of tools for working with mesh data.
 
 [source,sh]
 ----
-sdlos analyze src/render_tree.cxx              # single file, dry-run
-sdlos analyze src/                             # entire tree, dry-run
-sdlos analyze src/ --no-tidy --metrics         # lizard metrics only
-sdlos analyze src/ --sca 1 --no-tidy -q        # level-1 SCA, quiet
-sdlos analyze src/ --format --write            # reformat in place (safe)
-sdlos analyze src/ --tidy --fix-tidy --write   # apply tidy fixes (safe)
-sdlos analyze src/ --fail-on-issues            # CI mode — exit 1 on findings
+➜  sdlos git:(main) ✗ uv run --project tooling sdlos mesh generate --preset cappadocia --name cappadocia --lod lowpoly --face-count 5000 --format glb --out-dir ./assets/city-meshes/cappadocia
 ----
 
-PATH is always optional; when omitted the engine `src/` is auto-resolved from
-`CMakeLists.txt` walking up from the current directory.
-
-=== Path resolution
-
-The tool tries the given path in three passes before failing:
-
-1. Relative to cwd (standard).
-2. Ancestors of cwd up to 6 levels — so `src/render_tree.cxx` typed from
-   `tooling/` resolves to `../src/render_tree.cxx` automatically.
-3. Project root / given path.
-
-When all candidates are exhausted a Rich error panel shows the cwd and
-the most likely candidate path.
-
-=== Options
-
-[cols="2,1,4"]
-|===
-|Flag |Default |Description
-
-|`--sca LEVEL`          |`2`   |libclang SCA depth: `0`=off `1`=critical `2`=+ownership `3`=+lifetime
-|`--tidy / --no-tidy`   |on    |Pure libclang lint pass (no `clang-tidy` binary required)
-|`--format / --no-format` |off |clang-format (combine with `--write` to apply)
-|`--docblocks / --no-docblocks` |on |Insert Doxygen docblocks for undocumented functions
-|`--metrics / --no-metrics` |off |lizard + radon: NLOC, cyclomatic complexity, A–F grade
-|`--write / -w`         |off   |Apply modifications in place
-|`--safe / --no-safe`   |auto  |Snapshot→process→verify→revert guard; auto-on with `--write`
-|`--fix-tidy`           |off   |Implies `--write`; reserved for future tidy fix application
-|`--compile-commands JSON` |—  |`compile_commands.json` for accurate include resolution
-|`-I / --include-dir DIR` |—   |Extra include dir forwarded to libclang (repeatable)
-|`--engine-root DIR`    |auto  |Project root for locating engine `src/` include paths
-|`--python / --no-python` |off |Include `.py` files (metrics only; SCA/tidy skipped)
-|`--fail-on-issues`     |off   |Exit 1 on any level-1 SCA issue, revert, or processor error
-|`-q / --quiet`         |off   |Suppress per-processor progress; print summary only
-|===
-
-=== Safety model
-
-With `--write` (or `--safe`), every file runs inside a transaction:
-
-1. *Snapshot* — SHA-256 the file before touching it.
-2. *Run* — execute all processors in order.
-3. *Verify* — parse the result with libclang (bracket-balance fallback).
-4. *Idempotency* — run clang-format a second time; confirm no further changes.
-5. *Revert* — if verification fails, restore the snapshot and report the reason.
-
-Pass `--no-safe` to skip the guard (useful for scripted pipelines where you
-control the environment).
-
-=== Lint profiles (`ClangLint`)
-
-Two passes run entirely in-process via the `libclang` Python bindings —
-no `clang-tidy` binary is required.
-
-*Pass 1 — Diagnostics:* parse with a curated set of `-W` flags covering
-`bugprone-*`, `modernize-*`, `readability-*`, `performance-*`, and
-`clang-analyzer-*` checks.
-
-*Pass 2 — AST checks:* targeted patterns not covered by `-W` flags:
-`cstyle_cast`, `null_macro` (NULL → nullptr), `large_val_param`
-(pass `std::string`/`vector`/`map` by const ref), `endl_perf`
-(`<< std::endl` → `'\n'`), `strcmp_eq`, `mutable_global`.
-
-Profiles: `LintProfile.OFF` · `LintProfile.SDLOS` (default) · `LintProfile.STRICT`
-(`SDLOS` + `-Wpedantic -Wcast-qual -Wformat=2`).
-
-[source,python]
-----
-from pathlib import Path
-from sdlos.features.tidy import ClangLint, LintProfile
-
-lint   = ClangLint(profile=LintProfile.SDLOS)
-issues = lint.analyze(Path("src/render_tree.cxx"))
-for i in issues:
-    print(f"[{i.level}] L{i.line} [{i.check}] {i.message}")
-----
-
-=== Processors and pipeline
-
-`PostProcessPipeline` chains any combination of:
-
-[cols="1,4"]
-|===
-|`ClangFormatProcessor`  |Format via `clang-format` binary (reads `.clang-format`)
-|`SCAProcessor`          |libclang SCA at the requested level
-|`ClangTidyProcessor`    |Calls `clang-tidy` binary with the sdlos check profile
-|`ClangLint` (tidy pass) |Pure libclang in-process lint (no binary needed)
-|`DocblocksProcessor`    |AST-reflection Doxygen insertion
-|`MetricsProcessor`      |lizard (C++/Python) + radon (Python) metrics
-|===
-
-`PostProcessResult` carries `processor`, `modified`, `issues`, `error`,
-and `metadata` (metrics stored under `"metrics"` key).
-`TransactionReport` bundles the result, the snapshot, the verification
-outcome, and an idempotency flag for each file.
 
 // ─────────────────────────────────────────────────────────────────────────────
 == Release

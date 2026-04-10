@@ -1,10 +1,10 @@
 #pragma once
 
+#include "frame_graph/frame_graph.h"
+#include "image_cache.h"
 #include "render_tree.h"
 #include "text_renderer.h"
-#include "image_cache.h"
 #include "video_texture.h"
-#include "frame_graph/frame_graph.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -12,8 +12,8 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -22,7 +22,7 @@
 namespace pce::sdlos {
 
 class SDLRenderer {
-public:
+  public:
     /**
      * @brief Sdl renderer
      */
@@ -38,36 +38,31 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    SDLRenderer(const SDLRenderer&)            = delete;
-    SDLRenderer& operator=(const SDLRenderer&) = delete;
+    SDLRenderer(const SDLRenderer &)            = delete;
+    SDLRenderer &operator=(const SDLRenderer &) = delete;
     /**
      * @brief Sdl renderer
      *
      * @param param0  Red channel component [0, 1]
      */
-    SDLRenderer(SDLRenderer&&)                 = delete;
-    SDLRenderer& operator=(SDLRenderer&&)      = delete;
-
+    SDLRenderer(SDLRenderer &&)            = delete;
+    SDLRenderer &operator=(SDLRenderer &&) = delete;
 
     /// Returns false on any unrecoverable failure.
-    bool Initialize(SDL_Window* window);
+    bool Initialize(SDL_Window *window);
 
     /// Safe to call multiple times; called automatically by the destructor.
     void Shutdown() noexcept;
 
-
     /// `timeSeconds` forwarded to the wallpaper fragment shader uniform.
     void Render(double timeSeconds);
 
-
     /// `tree` is non-owning and must outlive this renderer.
     /// Pass k_null_handle to detach.
-    void SetScene(RenderTree* tree,
-                  NodeHandle  root = k_null_handle) noexcept;
-
+    void SetScene(RenderTree *tree, NodeHandle root = k_null_handle) noexcept;
 
     /// Returns true on success; the previous pipeline stays active on failure.
-    bool ReloadShader(const std::string& shaderPath);
+    bool ReloadShader(const std::string &shaderPath);
 
     // FrameGraph (data-driven post-process pipeline)
     //
@@ -120,16 +115,16 @@ public:
 
     /// Non-null after a successful LoadPipeline().
     /// Use for CSS class mutations (add_class / remove_class) and wire_bus().
-    fg::FrameGraph*    GetFrameGraph()    noexcept;
+    fg::FrameGraph *GetFrameGraph() noexcept;
 
     /// Non-null after the first successful compile (first Render() after load).
     /// Use for per-frame param patches (apply_style / patch / set_enabled).
-    fg::CompiledGraph* GetCompiledGraph() noexcept;
+    fg::CompiledGraph *GetCompiledGraph() noexcept;
 
     /// Get the wavetable texture (1D sin wave lookup table).
     /// Returns nullptr if creation failed or the renderer is not initialized.
     /// Used by shaders to replace native sin/cos with ~2× faster lookups.
-    SDL_GPUTexture* GetWavetable() const noexcept { return wavetable_texture_; }
+    SDL_GPUTexture *GetWavetable() const noexcept { return wavetable_texture_; }
 
     /**
      * @brief Checks whether valid
@@ -145,87 +140,86 @@ public:
      */
     std::vector<std::string> EnumerateAdapters() const;
 
-
     /**
      * @brief Pixel scale x
      *
      * @return Computed floating-point value
      */
-     float pixelScaleX() const noexcept { return pixel_scale_x_; }
+    float pixelScaleX() const noexcept { return pixel_scale_x_; }
 
     /**
      * @brief Pixel scale y
      *
      * @return Computed floating-point value
      */
-     float pixelScaleY() const noexcept { return pixel_scale_y_; }
+    float pixelScaleY() const noexcept { return pixel_scale_y_; }
 
     /// Re-query SDL for the current logical→physical scale.
     /// Call this from the event loop whenever the window changes display.
     void RefreshPixelScale() noexcept;
-
 
     /**
      * @brief Sets vertex shader path
      *
      * @param path  Filesystem path
      */
-    void SetVertexShaderPath(const std::string& path)   { vertex_shader_path_ = path; }
+    void SetVertexShaderPath(const std::string &path) { vertex_shader_path_ = path; }
     /**
      * @brief Sets fragment shader path
      *
      * @param path  Filesystem path
      */
-    void SetFragmentShaderPath(const std::string& path) { shader_path_        = path; }
-
+    void SetFragmentShaderPath(const std::string &path) { shader_path_ = path; }
 
     /// Valid only after a successful Initialize().
-    SDL_GPUDevice*        GetDevice()        const noexcept { return device_;        }
+    SDL_GPUDevice *GetDevice() const noexcept { return device_; }
 
     /// Shader format selected during Initialize() (MSL, SPIRV, …).
-    SDL_GPUShaderFormat   GetShaderFormat()  const noexcept { return shader_format_; }
+    SDL_GPUShaderFormat GetShaderFormat() const noexcept { return shader_format_; }
 
     /// Non-null only after a successful Initialize().
-    TextRenderer*         GetTextRenderer()  const noexcept { return text_renderer_.get(); }
+    TextRenderer *GetTextRenderer() const noexcept { return text_renderer_.get(); }
 
     /// Non-null only after a successful Initialize().
-    ImageCache*           GetImageCache()    const noexcept { return image_cache_.get();   }
+    ImageCache *GetImageCache() const noexcept { return image_cache_.get(); }
 
     /// Non-null only after a successful Initialize().
-    VideoTexture* GetVideoTexture() const noexcept { return video_texture_.get(); }
-
+    VideoTexture *GetVideoTexture() const noexcept { return video_texture_.get(); }
 
     /**
-     * @brief Sets data base path — Set once from SDL_GetBasePath() so both the ImageCache (relative src=
-     * paths in jade) and the node shader loader (data/shaders/…) resolve
-     * paths relative to the binary's directory — the same place CMake copies
-     * each app's data/ folder as a post-build step. Font selection is handled by loadAppFonts() in jade_host
+     * @brief Sets data base path — Set once from SDL_GetBasePath() so both the ImageCache (relative
+     * src= paths in jade) and the node shader loader (data/shaders/…) resolve paths relative to the
+     * binary's directory — the same place CMake copies each app's data/ folder as a post-build
+     * step. Font selection is handled by loadAppFonts() in jade_host
      *
      * @param path  Filesystem path
      */
-    void SetDataBasePath(const std::string& path) noexcept;
+    void SetDataBasePath(const std::string &path) noexcept;
 
+    /// Returns the data base path set by SetDataBasePath().
+    /// Empty string before SetDataBasePath() is called.
+    const std::string &GetDataBasePath() const noexcept { return data_base_path_; }
 
     /**
      * @brief Sets font path — the Font selection
      *
      * Loads the TTF/OTF file at `path` at `pt_size` points and makes it the
-    * active face for all subsequent text rendering.  Relative paths are
-    * resolved against the data base path set by SetDataBasePath().
-    *
-    * Returns true on success; on failure the previously loaded font (if any)
-    * stays active and an error is printed to stderr.
-    *
-    * App-level usage — call from jade_app_init() or anywhere in the host:
-    *
-    *  renderer.SetFontPath("data/fonts/Inter-Regular.ttf");
-    *
-   *  Jade attribute — set `_font` on the root (or any) node and jade_host
-   *   will call SetFontPath() after the behaviour's jade_app_init() runs:
+     * active face for all subsequent text rendering.  Relative paths are
+     * resolved against the data base path set by SetDataBasePath().
      *
-    *   app(_font="data/fonts/Inter-Regular.ttf")
-    *     ...
-    *
+     * Returns true on success; on failure the previously loaded font (if any)
+     * stays active and an error is printed to stderr.
+     *
+     * App-level usage — call from jade_app_init() or anywhere in the host:
+     *
+     *  renderer.SetFontPath("data/fonts/Inter-Regular.ttf");
+     *
+     *  Jade attribute — set `_font` on the root (or any) node and jade_host
+     *   will call SetFontPath() after the behaviour's jade_app_init() runs:
+     *
+     *   app(_font="data/fonts/Inter-Regular.ttf")
+     *     ...
+     *
      * An optional `_font_size` attribute (float, points) is also honoured;
      * it defaults to 17 pt when absent.
      *
@@ -234,29 +228,28 @@ public:
      *
      * @return true on success, false on failure
      */
-    bool SetFontPath(const std::string& path, float pt_size = 17.f) noexcept;
+    bool SetFontPath(const std::string &path, float pt_size = 17.f) noexcept;
 
     /* 3D scene pre-pass hook
      * Called once per frame BEFORE the 2D UI pass, inside the same command
      * buffer that owns the swapchain acquire.
-    *
-    * The hook receives:
-    *   cmd          — active command buffer (do NOT submit or cancel it)
-    *   color_target — the acquired swapchain texture (LOADOP_LOAD preserves wallpaper)
-    *   vw, vh       — physical viewport size in pixels
-    *
-    * The hook is responsible for creating and ending its own SDL_GPURenderPass
-    *     (with a depth attachment if needed).
-     *    After the hook returns, the renderer
-      *   continues with the 2D UI pass using
-      *   LOADOP_LOAD on the same color_target.
      *
-    * Set by GltfScene::attach() or any other 3D subsystem. Only one hook is
+     * The hook receives:
+     *   cmd          — active command buffer (do NOT submit or cancel it)
+     *   color_target — the acquired swapchain texture (LOADOP_LOAD preserves wallpaper)
+     *   vw, vh       — physical viewport size in pixels
+     *
+     * The hook is responsible for creating and ending its own SDL_GPURenderPass
+     *     (with a depth attachment if needed).
+     *    After the hook returns, the renderer
+     *   continues with the 2D UI pass using
+     *   LOADOP_LOAD on the same color_target.
+     *
+     * Set by GltfScene::attach() or any other 3D subsystem. Only one hook is
      * active at a time — set to nullptr to disable.
      */
-    using Scene3DHook = std::function<void(SDL_GPUCommandBuffer* cmd,
-                                            SDL_GPUTexture*       color_target,
-                                            float vw, float vh)>;
+    using Scene3DHook = std::function<
+        void(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *color_target, float vw, float vh)>;
 
     /**
      * @brief Sets scene3d hook
@@ -264,6 +257,20 @@ public:
      * @param hook  Opaque resource handle
      */
     void setScene3DHook(Scene3DHook hook) noexcept { scene3d_hook_ = std::move(hook); }
+
+    /// Returns true when a scene3d render hook is currently installed.
+    /// jade_host uses this to decide whether to auto-wire a host-managed GltfScene.
+    bool hasScene3DHook() const noexcept { return static_cast<bool>(scene3d_hook_); }
+
+    /// Current swapchain texture format.  Valid after Initialize(); falls back
+    /// to B8G8R8A8_UNORM (the most common swapchain format) if queried before
+    /// the first Render() call.  Used by GltfScene::init() to build its pipeline.
+    SDL_GPUTextureFormat GetSwapchainFormat() const noexcept {
+        if (!device_ || !sdl_window_)
+            return SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+        const SDL_GPUTextureFormat f = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+        return (f == SDL_GPU_TEXTUREFORMAT_INVALID) ? SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM : f;
+    }
 
     // Fired at the top of Shutdown() before the GPU device is destroyed.
     // Use to call GltfScene::shutdown() from behaviors that own GPU resources
@@ -279,7 +286,7 @@ public:
         gpu_pre_shutdown_hook_ = std::move(hook);
     }
 
-private:
+  private:
     // Internal helpers
 
     /// Reads SDL_GetWindowSize / SDL_GetWindowSizeInPixels and updates the
@@ -289,11 +296,10 @@ private:
     // Internal pipeline builders
 
     /// Sets shader_format_ on success.
-    bool CreateDeviceForWindow(SDL_Window* window);
+    bool CreateDeviceForWindow(SDL_Window *window);
 
     /// Entry-point for both stages must be `main0`.
-    bool CreatePipeline(const std::string& vertSource,
-                        const std::string& fragSource);
+    bool CreatePipeline(const std::string &vertSource, const std::string &fragSource);
 
     /// Non-fatal if either pipeline fails; wallpaper still renders without UI.
     bool CreateUIPipelines();
@@ -306,7 +312,7 @@ private:
     /// Create the 1D wavetable texture for sin/cos lookups.
     /// 512 samples × 2 bytes = 1 KB. Called once during Initialize().
     /// Returns nullptr on failure (non-fatal; shaders will fall back to native sin/cos).
-    SDL_GPUTexture* CreateWavetableTexture() noexcept;
+    SDL_GPUTexture *CreateWavetableTexture() noexcept;
 
     // File helpers
 
@@ -317,7 +323,7 @@ private:
      *
      * @return Integer result; negative values indicate an error code
      */
-    static std::string    ReadTextFile(const std::string& path);
+    static std::string ReadTextFile(const std::string &path);
     /**
      * @brief Returns file m time
      *
@@ -325,7 +331,7 @@ private:
      *
      * @return Integer result; negative values indicate an error code
      */
-    static std::uintmax_t GetFileMTime(const std::string& path);
+    static std::uintmax_t GetFileMTime(const std::string &path);
 
     // Wallpaper fragment shader uniform
 
@@ -333,25 +339,26 @@ private:
         float time;
         float pad[3];
     };
-    static_assert(sizeof(FragmentUniform) == 16,
-                  "FragmentUniform must be 16 bytes for push-uniform alignment");
+    static_assert(
+        sizeof(FragmentUniform) == 16,
+        "FragmentUniform must be 16 bytes for push-uniform alignment");
 
-private:
+  private:
     // SDL GPU objects (all owned)
 
-    SDL_GPUDevice*           device_{nullptr};
+    SDL_GPUDevice *device_{nullptr};
 
     // Wallpaper pipeline
-    SDL_GPUShader*           vertex_shader_{nullptr};
-    SDL_GPUShader*           fragment_shader_{nullptr};
-    SDL_GPUGraphicsPipeline* pipeline_{nullptr};
+    SDL_GPUShader *vertex_shader_{nullptr};
+    SDL_GPUShader *fragment_shader_{nullptr};
+    SDL_GPUGraphicsPipeline *pipeline_{nullptr};
 
     // UI pipelines (alpha-blended; built by CreateUIPipelines)
-    SDL_GPUShader*           ui_rect_vert_{nullptr};   // shared between rect + text
-    SDL_GPUShader*           ui_rect_frag_{nullptr};
-    SDL_GPUShader*           ui_text_frag_{nullptr};
-    SDL_GPUGraphicsPipeline* ui_rect_pipeline_{nullptr};
-    SDL_GPUGraphicsPipeline* ui_text_pipeline_{nullptr};
+    SDL_GPUShader *ui_rect_vert_{nullptr};  // shared between rect + text
+    SDL_GPUShader *ui_rect_frag_{nullptr};
+    SDL_GPUShader *ui_text_frag_{nullptr};
+    SDL_GPUGraphicsPipeline *ui_rect_pipeline_{nullptr};
+    SDL_GPUGraphicsPipeline *ui_text_pipeline_{nullptr};
 
     // Persistent UI offscreen texture.
     //
@@ -363,17 +370,17 @@ private:
     //
     // Required usage flags: COLOR_TARGET (render target) + SAMPLER (composite).
     // Format: R8G8B8A8_UNORM — independent of swapchain format.
-    SDL_GPUTexture* ui_texture_{nullptr};
-    Uint32          ui_texture_w_{0};
-    Uint32          ui_texture_h_{0};
+    SDL_GPUTexture *ui_texture_{nullptr};
+    Uint32 ui_texture_w_{0};
+    Uint32 ui_texture_h_{0};
 
     // Wavetable texture for sin/cos lookup in shaders.
     // 512 samples × 2 bytes = 1 KB of GPU memory.
     // Used by desktop wallpaper shader for ~25-40% faster sin/cos evaluations.
-    SDL_GPUTexture* wavetable_texture_{nullptr};
+    SDL_GPUTexture *wavetable_texture_{nullptr};
 
     // Non-owning reference; lifetime managed by Window.
-    SDL_Window* sdl_window_{nullptr};
+    SDL_Window *sdl_window_{nullptr};
 
     // HiDPI scale (logical → physical pixels)
     float pixel_scale_x_{1.f};
@@ -381,23 +388,22 @@ private:
 
     // Text renderer
     std::unique_ptr<TextRenderer> text_renderer_;
-    std::unique_ptr<ImageCache>   image_cache_;
+    std::unique_ptr<ImageCache> image_cache_;
     std::unique_ptr<VideoTexture> video_texture_;
 
     // UI scene (non-owning)
-    RenderTree* scene_tree_{nullptr};
-    NodeHandle  scene_root_{k_null_handle};
+    RenderTree *scene_tree_{nullptr};
+    NodeHandle scene_root_{k_null_handle};
 
     // State
-    std::atomic<bool>   initialized_{false};
+    std::atomic<bool> initialized_{false};
     SDL_GPUShaderFormat shader_format_{SDL_GPU_SHADERFORMAT_INVALID};
-    std::string         shader_path_;
-    std::string         vertex_shader_path_;
-    std::uintmax_t      shader_mtime_{0};
-
+    std::string shader_path_;
+    std::string vertex_shader_path_;
+    std::uintmax_t shader_mtime_{0};
 
     struct NodeShaderEntry {
-        SDL_GPUGraphicsPipeline* pipeline = nullptr;
+        SDL_GPUGraphicsPipeline *pipeline = nullptr;
     };
 
     std::unordered_map<std::string, NodeShaderEntry> node_shader_cache_;
@@ -424,19 +430,19 @@ private:
     //   This guarantees compiled_graph_ always holds live pointers.
     //
     std::optional<fg::FrameGraph> frame_graph_;
-    fg::CompiledGraph             compiled_graph_;
+    fg::CompiledGraph compiled_graph_;
 
-    bool                 fg_needs_compile_{false};     ///< set by LoadPipeline
-    uint32_t             fg_compiled_w_{0};            ///< swapchain w at last compile
-    uint32_t             fg_compiled_h_{0};            ///< swapchain h at last compile
-    SDL_GPUTextureFormat fg_swapchain_fmt_{            ///< swapchain fmt at last compile
-        SDL_GPU_TEXTUREFORMAT_INVALID};
+    bool fg_needs_compile_{false};         ///< set by LoadPipeline
+    uint32_t fg_compiled_w_{0};            ///< swapchain w at last compile
+    uint32_t fg_compiled_h_{0};            ///< swapchain h at last compile
+    SDL_GPUTextureFormat fg_swapchain_fmt_{///< swapchain fmt at last compile
+                                           SDL_GPU_TEXTUREFORMAT_INVALID};
 
     // Pending inline pipeline source (SubmitPipelineSource → Render deferred path)
-    std::string       pending_pipeline_source_;
-    bool              pending_pipeline_dirty_{false};
+    std::string pending_pipeline_source_;
+    bool pending_pipeline_dirty_{false};
 
-    SDL_GPUGraphicsPipeline*
+    SDL_GPUGraphicsPipeline *
     /**
      * @brief Ensure node shader pipeline
      *
@@ -444,7 +450,7 @@ private:
      *
      * @return Pointer to the result, or nullptr on failure
      */
-    ensureNodeShaderPipeline(const std::string& name) noexcept;
+    ensureNodeShaderPipeline(const std::string &name) noexcept;
 };
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

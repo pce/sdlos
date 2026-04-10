@@ -1,11 +1,11 @@
 #include "sdl_renderer.h"
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
-#include <cstring>
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 namespace pce::sdlos {
 namespace fs = std::filesystem;
@@ -24,7 +24,7 @@ SDLRenderer::~SDLRenderer() {
  *
  * @return Integer result; negative values indicate an error code
  */
-std::string SDLRenderer::ReadTextFile(const std::string& path) {
+std::string SDLRenderer::ReadTextFile(const std::string &path) {
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) {
         return {};
@@ -41,11 +41,13 @@ std::string SDLRenderer::ReadTextFile(const std::string& path) {
  *
  * @return Integer result; negative values indicate an error code
  */
-std::uintmax_t SDLRenderer::GetFileMTime(const std::string& path) {
+std::uintmax_t SDLRenderer::GetFileMTime(const std::string &path) {
     std::error_code ec;
-    if (!fs::exists(path, ec) || ec) return 0;
+    if (!fs::exists(path, ec) || ec)
+        return 0;
     const auto t = fs::last_write_time(path, ec);
-    if (ec) return 0;
+    if (ec)
+        return 0;
     return static_cast<std::uintmax_t>(t.time_since_epoch().count());
 }
 
@@ -58,7 +60,7 @@ std::vector<std::string> SDLRenderer::EnumerateAdapters() const {
     std::vector<std::string> result;
     int n = SDL_GetNumGPUDrivers();
     for (int i = 0; i < n; ++i) {
-        const char* name = SDL_GetGPUDriver(i);
+        const char *name = SDL_GetGPUDriver(i);
         if (name) {
             result.emplace_back(name);
         }
@@ -73,7 +75,7 @@ std::vector<std::string> SDLRenderer::EnumerateAdapters() const {
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
+bool SDLRenderer::CreateDeviceForWindow(SDL_Window *window) {
     if (!window) {
         std::cerr << "SDLRenderer::CreateDeviceForWindow - null window\n";
         return false;
@@ -85,12 +87,14 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
         device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, false, nullptr);
     }
     if (!device_) {
-        std::cerr << "SDLRenderer::CreateDeviceForWindow - SDL_CreateGPUDevice failed: " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::CreateDeviceForWindow - SDL_CreateGPUDevice failed: "
+                  << SDL_GetError() << "\n";
         return false;
     }
 
     if (!SDL_ClaimWindowForGPUDevice(device_, window)) {
-        std::cerr << "SDLRenderer::CreateDeviceForWindow - SDL_ClaimWindowForGPUDevice failed: " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::CreateDeviceForWindow - SDL_ClaimWindowForGPUDevice failed: "
+                  << SDL_GetError() << "\n";
         SDL_DestroyGPUDevice(device_);
         device_ = nullptr;
         return false;
@@ -110,8 +114,8 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
     } else if (avail & SDL_GPU_SHADERFORMAT_DXIL) {
         shader_format_ = SDL_GPU_SHADERFORMAT_DXIL;
     } else {
-        std::cerr << "SDLRenderer::CreateDeviceForWindow - no recognised shader format in "
-                  << avail << "\n";
+        std::cerr << "SDLRenderer::CreateDeviceForWindow - no recognised shader format in " << avail
+                  << "\n";
     }
 
     return true;
@@ -125,41 +129,43 @@ bool SDLRenderer::CreateDeviceForWindow(SDL_Window* window) {
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::string& fragSource) {
+bool SDLRenderer::CreatePipeline(const std::string &vertSource, const std::string &fragSource) {
     if (!device_ || !sdl_window_) {
         std::cerr << "SDLRenderer::CreatePipeline - device/window not initialized\n";
         return false;
     }
 
     SDL_GPUShaderCreateInfo vsc{};
-    vsc.code = reinterpret_cast<const Uint8*>(vertSource.data());
-    vsc.code_size = vertSource.size();
-    vsc.entrypoint = "main0";
-    vsc.format = SDL_GPU_SHADERFORMAT_MSL;
-    vsc.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-    vsc.num_samplers = 0;
+    vsc.code                = reinterpret_cast<const Uint8 *>(vertSource.data());
+    vsc.code_size           = vertSource.size();
+    vsc.entrypoint          = "main0";
+    vsc.format              = SDL_GPU_SHADERFORMAT_MSL;
+    vsc.stage               = SDL_GPU_SHADERSTAGE_VERTEX;
+    vsc.num_samplers        = 0;
     vsc.num_uniform_buffers = 1;
-    vsc.props = 0;
+    vsc.props               = 0;
 
-    SDL_GPUShader* newVertex = SDL_CreateGPUShader(device_, &vsc);
+    SDL_GPUShader *newVertex = SDL_CreateGPUShader(device_, &vsc);
     if (!newVertex) {
-        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUShader (vertex) failed: " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUShader (vertex) failed: "
+                  << SDL_GetError() << "\n";
         return false;
     }
 
     SDL_GPUShaderCreateInfo fsc{};
-    fsc.code = reinterpret_cast<const Uint8*>(fragSource.data());
-    fsc.code_size = fragSource.size();
-    fsc.entrypoint = "main0";
-    fsc.format = SDL_GPU_SHADERFORMAT_MSL;
-    fsc.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-    fsc.num_samplers = 0;
+    fsc.code                = reinterpret_cast<const Uint8 *>(fragSource.data());
+    fsc.code_size           = fragSource.size();
+    fsc.entrypoint          = "main0";
+    fsc.format              = SDL_GPU_SHADERFORMAT_MSL;
+    fsc.stage               = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    fsc.num_samplers        = 0;
     fsc.num_uniform_buffers = 1;
-    fsc.props = 0;
+    fsc.props               = 0;
 
-    SDL_GPUShader* newFragment = SDL_CreateGPUShader(device_, &fsc);
+    SDL_GPUShader *newFragment = SDL_CreateGPUShader(device_, &fsc);
     if (!newFragment) {
-        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUShader (fragment) failed: " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUShader (fragment) failed: "
+                  << SDL_GetError() << "\n";
         SDL_ReleaseGPUShader(device_, newVertex);
         return false;
     }
@@ -168,14 +174,14 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
     // No vertex buffer: geometry generated from vertex_id in the shader.
     SDL_GPUVertexInputState vis{};
     vis.vertex_buffer_descriptions = nullptr;
-    vis.num_vertex_buffers = 0;
-    vis.vertex_attributes = nullptr;
-    vis.num_vertex_attributes = 0;
-    pci.vertex_input_state = vis;
+    vis.num_vertex_buffers         = 0;
+    vis.vertex_attributes          = nullptr;
+    vis.num_vertex_attributes      = 0;
+    pci.vertex_input_state         = vis;
 
-    pci.vertex_shader = newVertex;
+    pci.vertex_shader   = newVertex;
     pci.fragment_shader = newFragment;
-    pci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pci.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
     SDL_GPURasterizerState ras{};
     pci.rasterizer_state = ras;
@@ -190,13 +196,14 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
     colorDesc.format = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
     SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
     targetInfo.color_target_descriptions = &colorDesc;
-    targetInfo.num_color_targets = 1;
-    targetInfo.has_depth_stencil_target = false;
-    pci.target_info = targetInfo;
+    targetInfo.num_color_targets         = 1;
+    targetInfo.has_depth_stencil_target  = false;
+    pci.target_info                      = targetInfo;
 
-    SDL_GPUGraphicsPipeline* newPipeline = SDL_CreateGPUGraphicsPipeline(device_, &pci);
+    SDL_GPUGraphicsPipeline *newPipeline = SDL_CreateGPUGraphicsPipeline(device_, &pci);
     if (!newPipeline) {
-        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUGraphicsPipeline failed: " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::CreatePipeline - SDL_CreateGPUGraphicsPipeline failed: "
+                  << SDL_GetError() << "\n";
         SDL_ReleaseGPUShader(device_, newVertex);
         SDL_ReleaseGPUShader(device_, newFragment);
         return false;
@@ -216,8 +223,8 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
         fragment_shader_ = nullptr;
     }
 
-    pipeline_ = newPipeline;
-    vertex_shader_ = newVertex;
+    pipeline_        = newPipeline;
+    vertex_shader_   = newVertex;
     fragment_shader_ = newFragment;
 
     std::cerr << "SDLRenderer::CreatePipeline - pipeline created successfully\n";
@@ -231,7 +238,7 @@ bool SDLRenderer::CreatePipeline(const std::string& vertSource, const std::strin
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::Initialize(SDL_Window* window) {
+bool SDLRenderer::Initialize(SDL_Window *window) {
     if (!window) {
         std::cerr << "SDLRenderer::Initialize - null window\n";
         return false;
@@ -251,21 +258,27 @@ bool SDLRenderer::Initialize(SDL_Window* window) {
     //   2. data/shaders/msl/ — next to the binary (CMake deploy target)
     //   3. assets/shaders/msl/ — source-tree path when running from repo root
     //   4. inline fallback (chrome SDF gradient, always works)
-    auto pickPath = [](const std::string& forced,
-                       std::initializer_list<const char*> candidates) -> std::string {
-        if (!forced.empty()) return forced;
-        for (const char* p : candidates)
-            if (fs::exists(p)) return p;
+    auto pickPath = [](const std::string &forced,
+                       std::initializer_list<const char *> candidates) -> std::string {
+        if (!forced.empty())
+            return forced;
+        for (const char *p : candidates)
+            if (fs::exists(p))
+                return p;
         return {};
     };
-    std::string vertPath = pickPath(vertex_shader_path_, {
-        "data/shaders/msl/desktop.vert.metal",
-        "assets/shaders/msl/desktop.vert.metal",
-    });
-    std::string fragPath = pickPath(shader_path_, {
-        "data/shaders/msl/desktop.frag.metal",
-        "assets/shaders/msl/desktop.frag.metal",
-    });
+    std::string vertPath = pickPath(
+        vertex_shader_path_,
+        {
+            "data/shaders/msl/desktop.vert.metal",
+            "assets/shaders/msl/desktop.vert.metal",
+        });
+    std::string fragPath = pickPath(
+        shader_path_,
+        {
+            "data/shaders/msl/desktop.frag.metal",
+            "assets/shaders/msl/desktop.frag.metal",
+        });
 
     std::string vertCode = ReadTextFile(vertPath);
     if (vertCode.empty()) {
@@ -343,7 +356,7 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform& u [[buffer(
     }
 
     if (fs::exists(fragPath)) {
-        shader_path_ = fragPath;
+        shader_path_  = fragPath;
         shader_mtime_ = GetFileMTime(fragPath);
     } else {
         shader_path_.clear();
@@ -369,12 +382,14 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform& u [[buffer(
         // repo root still gets a font; in normal installed builds this will miss
         // and the system font below serves as a temporary placeholder until
         // SetDataBasePath() loads the bundled typeface.
-        const bool font_ok = text_renderer_->loadFirstAvailable({
-            "assets/fonts/InterVariable.ttf",
-            "assets/fonts/Inter-Regular.ttf",
-            "assets/fonts/Roboto-Regular.ttf",
-            "assets/fonts/LiberationSans-Regular.ttf",
-        }, 17.f);
+        const bool font_ok = text_renderer_->loadFirstAvailable(
+            {
+                "assets/fonts/InterVariable.ttf",
+                "assets/fonts/Inter-Regular.ttf",
+                "assets/fonts/Roboto-Regular.ttf",
+                "assets/fonts/LiberationSans-Regular.ttf",
+            },
+            17.f);
 
         if (!font_ok) {
             // Expected in normal builds — SetDataBasePath() will override this
@@ -425,8 +440,7 @@ fragment float4 main0(VertOut in [[stage_in]], constant FragUniform& u [[buffer(
  *
  * @param path  Filesystem path
  */
-void SDLRenderer::SetDataBasePath(const std::string& path) noexcept
-{
+void SDLRenderer::SetDataBasePath(const std::string &path) noexcept {
     data_base_path_ = path;
     // Ensure trailing slash so we can concatenate sub-paths directly.
     if (!data_base_path_.empty() && data_base_path_.back() != '/')
@@ -450,8 +464,8 @@ void SDLRenderer::SetDataBasePath(const std::string& path) noexcept
         if (LoadPipeline(pug_path)) {
             std::cout << "[SDLRenderer] pipeline.pug loaded from: " << pug_path << "\n";
         } else {
-            std::cerr << "[SDLRenderer] pipeline.pug found but failed to load: "
-                      << pug_path << "\n";
+            std::cerr << "[SDLRenderer] pipeline.pug found but failed to load: " << pug_path
+                      << "\n";
         }
     }
 }
@@ -479,14 +493,12 @@ void SDLRenderer::SetDataBasePath(const std::string& path) noexcept
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::SetFontPath(const std::string& path, float pt_size) noexcept
-{
-    if (!text_renderer_) return false;
+bool SDLRenderer::SetFontPath(const std::string &path, float pt_size) noexcept {
+    if (!text_renderer_)
+        return false;
 
     // Absolute paths bypass the base path; relative paths are resolved under it.
-    const std::string full = (!path.empty() && path[0] == '/')
-                             ? path
-                             : data_base_path_ + path;
+    const std::string full = (!path.empty() && path[0] == '/') ? path : data_base_path_ + path;
 
     if (text_renderer_->loadFont(full, pt_size)) {
         std::cout << "[SDLRenderer] font set: " << full << "\n";
@@ -515,8 +527,7 @@ bool SDLRenderer::SetFontPath(const std::string& path, float pt_size) noexcept
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept
-{
+bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept {
     if (!device_) {
         std::cerr << "[SDLRenderer] LoadPipeline: device not ready\n";
         return false;
@@ -528,9 +539,11 @@ bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept
     // This mirrors the convention used by ensureNodeShaderPipeline().
     std::string shader_dir;
     {
-        const char* platform_dir = "spv";
-        if (shader_format_ & SDL_GPU_SHADERFORMAT_MSL)        platform_dir = "msl";
-        else if (shader_format_ & SDL_GPU_SHADERFORMAT_DXIL)  platform_dir = "dxil";
+        const char *platform_dir = "spv";
+        if (shader_format_ & SDL_GPU_SHADERFORMAT_MSL)
+            platform_dir = "msl";
+        else if (shader_format_ & SDL_GPU_SHADERFORMAT_DXIL)
+            platform_dir = "dxil";
         shader_dir  = data_base_path_;
         shader_dir += "data/shaders/";
         shader_dir += platform_dir;
@@ -568,9 +581,10 @@ bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept
     fg_compiled_h_    = 0;
     fg_swapchain_fmt_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
-    SDL_Log("[SDLRenderer] LoadPipeline: %zu passes parsed from '%s'",
-            frame_graph_->passes().size(),
-            std::string(pug_path).c_str());
+    SDL_Log(
+        "[SDLRenderer] LoadPipeline: %zu passes parsed from '%s'",
+        frame_graph_->passes().size(),
+        std::string(pug_path).c_str());
     return true;
 }
 
@@ -579,8 +593,7 @@ bool SDLRenderer::LoadPipeline(std::string_view pug_path) noexcept
  *
  * @param source  Red channel component [0, 1]
  */
-void SDLRenderer::SubmitPipelineSource(std::string source) noexcept
-{
+void SDLRenderer::SubmitPipelineSource(std::string source) noexcept {
     pending_pipeline_source_ = std::move(source);
     pending_pipeline_dirty_  = true;
 }
@@ -590,8 +603,7 @@ void SDLRenderer::SubmitPipelineSource(std::string source) noexcept
  *
  * @return Pointer to the result, or nullptr on failure
  */
-fg::FrameGraph* SDLRenderer::GetFrameGraph() noexcept
-{
+fg::FrameGraph *SDLRenderer::GetFrameGraph() noexcept {
     return frame_graph_.has_value() ? &*frame_graph_ : nullptr;
 }
 
@@ -600,26 +612,23 @@ fg::FrameGraph* SDLRenderer::GetFrameGraph() noexcept
  *
  * @return Pointer to the result, or nullptr on failure
  */
-fg::CompiledGraph* SDLRenderer::GetCompiledGraph() noexcept
-{
-    return (frame_graph_.has_value() && !compiled_graph_.empty())
-               ? &compiled_graph_
-               : nullptr;
+fg::CompiledGraph *SDLRenderer::GetCompiledGraph() noexcept {
+    return (frame_graph_.has_value() && !compiled_graph_.empty()) ? &compiled_graph_ : nullptr;
 }
 
 /// Lazily load, compile, and cache a node shader pipeline.
 /// Reuses ui_rect_vert_ (already compiled) plus a custom fragment shader
 /// loaded from data/shaders/{platform}/{name}.frag.{ext}.
-SDL_GPUGraphicsPipeline*
-/**
- * @brief Ensure node shader pipeline
- *
- * @param name  Human-readable name or identifier string
- *
- * @return Pointer to the result, or nullptr on failure
- */
-SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
-{
+SDL_GPUGraphicsPipeline
+    *
+    /**
+     * @brief Ensure node shader pipeline
+     *
+     * @param name  Human-readable name or identifier string
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
+    SDLRenderer::ensureNodeShaderPipeline(const std::string &name) noexcept {
     // Cache hit (including previously-failed loads stored as null).
     auto it = node_shader_cache_.find(name);
     if (it != node_shader_cache_.end())
@@ -632,7 +641,7 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
 
     // Determine shader file path and GPU format from what the device supports.
     SDL_GPUShaderFormat avail = SDL_GetGPUShaderFormats(device_);
-    std::string  frag_path;
+    std::string frag_path;
     SDL_GPUShaderFormat fmt = SDL_GPU_SHADERFORMAT_INVALID;
 
     if (avail & SDL_GPU_SHADERFORMAT_MSL) {
@@ -650,8 +659,8 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
     // Load source / bytecode.
     std::string source;
     std::vector<Uint8> binary;
-    const Uint8*  code      = nullptr;
-    std::size_t   code_size = 0;
+    const Uint8 *code     = nullptr;
+    std::size_t code_size = 0;
 
     if (fmt == SDL_GPU_SHADERFORMAT_MSL) {
         source = ReadTextFile(frag_path);
@@ -660,7 +669,7 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
             node_shader_cache_[name] = {};
             return nullptr;
         }
-        code      = reinterpret_cast<const Uint8*>(source.data());
+        code      = reinterpret_cast<const Uint8 *>(source.data());
         code_size = source.size();
     } else {
         // SPIRV — read raw bytes.
@@ -673,7 +682,7 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
         const auto sz = f.tellg();
         f.seekg(0);
         binary.resize(static_cast<std::size_t>(sz));
-        f.read(reinterpret_cast<char*>(binary.data()), sz);
+        f.read(reinterpret_cast<char *>(binary.data()), sz);
         code      = binary.data();
         code_size = binary.size();
     }
@@ -689,24 +698,23 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
     fci.num_uniform_buffers = 1;
     fci.props               = 0;
 
-    SDL_GPUShader* frag = SDL_CreateGPUShader(device_, &fci);
+    SDL_GPUShader *frag = SDL_CreateGPUShader(device_, &fci);
     if (!frag) {
-        std::cerr << "[NodeShader] compile failed for '" << name
-                  << "': " << SDL_GetError() << "\n";
+        std::cerr << "[NodeShader] compile failed for '" << name << "': " << SDL_GetError() << "\n";
         node_shader_cache_[name] = {};
         return nullptr;
     }
 
     // Build pipeline — same blend state as the existing text/image pipeline.
     SDL_GPUColorTargetDescription colorDesc{};
-    colorDesc.format = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
-    colorDesc.blend_state.enable_blend            = true;
-    colorDesc.blend_state.src_color_blendfactor   = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    colorDesc.blend_state.dst_color_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    colorDesc.blend_state.color_blend_op          = SDL_GPU_BLENDOP_ADD;
-    colorDesc.blend_state.src_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE;
-    colorDesc.blend_state.dst_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    colorDesc.blend_state.alpha_blend_op          = SDL_GPU_BLENDOP_ADD;
+    colorDesc.format                   = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+    colorDesc.blend_state.enable_blend = true;
+    colorDesc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    colorDesc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.color_blend_op        = SDL_GPU_BLENDOP_ADD;
+    colorDesc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    colorDesc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.alpha_blend_op        = SDL_GPU_BLENDOP_ADD;
 
     SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
     targetInfo.color_target_descriptions = &colorDesc;
@@ -719,14 +727,14 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
     vis.num_vertex_attributes      = 0;
 
     SDL_GPUGraphicsPipelineCreateInfo pci{};
-    pci.vertex_shader   = ui_rect_vert_;
-    pci.fragment_shader = frag;
+    pci.vertex_shader      = ui_rect_vert_;
+    pci.fragment_shader    = frag;
     pci.vertex_input_state = vis;
-    pci.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-    pci.target_info     = targetInfo;
-    pci.props           = 0;
+    pci.primitive_type     = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pci.target_info        = targetInfo;
+    pci.props              = 0;
 
-    SDL_GPUGraphicsPipeline* pipe = SDL_CreateGPUGraphicsPipeline(device_, &pci);
+    SDL_GPUGraphicsPipeline *pipe = SDL_CreateGPUGraphicsPipeline(device_, &pci);
     SDL_ReleaseGPUShader(device_, frag);  // pipeline holds the only ref
 
     if (!pipe) {
@@ -736,7 +744,7 @@ SDLRenderer::ensureNodeShaderPipeline(const std::string& name) noexcept
         return nullptr;
     }
 
-    node_shader_cache_[name] = { pipe };
+    node_shader_cache_[name] = {pipe};
     std::cerr << "[NodeShader] loaded '" << name << "' (" << frag_path << ")\n";
     return pipe;
 }
@@ -772,29 +780,64 @@ void SDLRenderer::Shutdown() noexcept {
     scene_tree_ = nullptr;
     scene_root_ = k_null_handle;
 
-    if (ui_texture_) { SDL_ReleaseGPUTexture(device_, ui_texture_); ui_texture_ = nullptr; ui_texture_w_ = 0; ui_texture_h_ = 0; }
+    if (ui_texture_) {
+        SDL_ReleaseGPUTexture(device_, ui_texture_);
+        ui_texture_   = nullptr;
+        ui_texture_w_ = 0;
+        ui_texture_h_ = 0;
+    }
 
-    if (ui_rect_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_); ui_rect_pipeline_ = nullptr; }
-    if (ui_text_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(device_, ui_text_pipeline_); ui_text_pipeline_ = nullptr; }
-    if (ui_rect_vert_)     { SDL_ReleaseGPUShader(device_, ui_rect_vert_);               ui_rect_vert_     = nullptr; }
-    if (ui_rect_frag_)     { SDL_ReleaseGPUShader(device_, ui_rect_frag_);               ui_rect_frag_     = nullptr; }
-    if (ui_text_frag_)     { SDL_ReleaseGPUShader(device_, ui_text_frag_);               ui_text_frag_     = nullptr; }
+    if (ui_rect_pipeline_) {
+        SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_);
+        ui_rect_pipeline_ = nullptr;
+    }
+    if (ui_text_pipeline_) {
+        SDL_ReleaseGPUGraphicsPipeline(device_, ui_text_pipeline_);
+        ui_text_pipeline_ = nullptr;
+    }
+    if (ui_rect_vert_) {
+        SDL_ReleaseGPUShader(device_, ui_rect_vert_);
+        ui_rect_vert_ = nullptr;
+    }
+    if (ui_rect_frag_) {
+        SDL_ReleaseGPUShader(device_, ui_rect_frag_);
+        ui_rect_frag_ = nullptr;
+    }
+    if (ui_text_frag_) {
+        SDL_ReleaseGPUShader(device_, ui_text_frag_);
+        ui_text_frag_ = nullptr;
+    }
 
-    if (pipeline_)        { SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);        pipeline_        = nullptr; }
-    if (vertex_shader_)   { SDL_ReleaseGPUShader(device_, vertex_shader_);             vertex_shader_   = nullptr; }
-    if (fragment_shader_) { SDL_ReleaseGPUShader(device_, fragment_shader_);           fragment_shader_ = nullptr; }
+    if (pipeline_) {
+        SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);
+        pipeline_ = nullptr;
+    }
+    if (vertex_shader_) {
+        SDL_ReleaseGPUShader(device_, vertex_shader_);
+        vertex_shader_ = nullptr;
+    }
+    if (fragment_shader_) {
+        SDL_ReleaseGPUShader(device_, fragment_shader_);
+        fragment_shader_ = nullptr;
+    }
 
     // Release lazily-compiled node shader pipelines.
-    for (auto& [unused_name, entry] : node_shader_cache_) {
+    for (auto &[unused_name, entry] : node_shader_cache_) {
         if (entry.pipeline)
             SDL_ReleaseGPUGraphicsPipeline(device_, entry.pipeline);
     }
     node_shader_cache_.clear();
 
-    if (video_texture_) { video_texture_->shutdown(); video_texture_.reset(); }
+    if (video_texture_) {
+        video_texture_->shutdown();
+        video_texture_.reset();
+    }
 
     // Release wavetable texture (1D sin wave lookup).
-    if (wavetable_texture_) { SDL_ReleaseGPUTexture(device_, wavetable_texture_); wavetable_texture_ = nullptr; }
+    if (wavetable_texture_) {
+        SDL_ReleaseGPUTexture(device_, wavetable_texture_);
+        wavetable_texture_ = nullptr;
+    }
 
     // Release frame graph resources (ResourcePool textures + ShaderLibrary PSOs)
     // BEFORE the GPU device is destroyed.  The CompiledGraph holds only
@@ -825,27 +868,22 @@ void SDLRenderer::Shutdown() noexcept {
 /**
  * @brief Updates pixel scale
  */
-void SDLRenderer::UpdatePixelScale() noexcept
-{
-    if (!sdl_window_) return;
+void SDLRenderer::UpdatePixelScale() noexcept {
+    if (!sdl_window_)
+        return;
 
     int lw = 0, lh = 0, pw = 0, ph = 0;
     SDL_GetWindowSize(sdl_window_, &lw, &lh);
     SDL_GetWindowSizeInPixels(sdl_window_, &pw, &ph);
 
-    pixel_scale_x_ = (lw > 0 && pw > 0)
-                         ? static_cast<float>(pw) / static_cast<float>(lw)
-                         : 1.f;
-    pixel_scale_y_ = (lh > 0 && ph > 0)
-                         ? static_cast<float>(ph) / static_cast<float>(lh)
-                         : 1.f;
+    pixel_scale_x_ = (lw > 0 && pw > 0) ? static_cast<float>(pw) / static_cast<float>(lw) : 1.f;
+    pixel_scale_y_ = (lh > 0 && ph > 0) ? static_cast<float>(ph) / static_cast<float>(lh) : 1.f;
 }
 
 /**
  * @brief Refresh pixel scale
  */
-void SDLRenderer::RefreshPixelScale() noexcept
-{
+void SDLRenderer::RefreshPixelScale() noexcept {
     UpdatePixelScale();
 }
 
@@ -859,10 +897,11 @@ void SDLRenderer::RefreshPixelScale() noexcept
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept
-{
-    if (!device_ || w == 0 || h == 0) return false;
-    if (ui_texture_ && ui_texture_w_ == w && ui_texture_h_ == h) return true;
+bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept {
+    if (!device_ || w == 0 || h == 0)
+        return false;
+    if (ui_texture_ && ui_texture_w_ == w && ui_texture_h_ == h)
+        return true;
 
     // Release the old texture first (safe to call even if null).
     if (ui_texture_) {
@@ -876,13 +915,12 @@ bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept
     // format) can render into this texture without a separate pipeline variant.
     SDL_GPUTextureFormat fmt = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
     if (fmt == SDL_GPU_TEXTUREFORMAT_INVALID)
-        fmt = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;   // safe fallback
+        fmt = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;  // safe fallback
 
     SDL_GPUTextureCreateInfo tci{};
     tci.type                 = SDL_GPU_TEXTURETYPE_2D;
     tci.format               = fmt;
-    tci.usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-                             | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     tci.width                = w;
     tci.height               = h;
     tci.layer_count_or_depth = 1;
@@ -892,8 +930,8 @@ bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept
 
     ui_texture_ = SDL_CreateGPUTexture(device_, &tci);
     if (!ui_texture_) {
-        std::cerr << "SDLRenderer: failed to create UI texture ("
-                  << w << "×" << h << "): " << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer: failed to create UI texture (" << w << "×" << h
+                  << "): " << SDL_GetError() << "\n";
         return false;
     }
 
@@ -913,9 +951,7 @@ bool SDLRenderer::CreateOrResizeUITexture(Uint32 w, Uint32 h) noexcept
  *          ownership is ambiguous; consider std::span (non-owning view),
  *          std::unique_ptr (transfer), or const T* (borrow)
  */
-void SDLRenderer::SetScene(RenderTree* tree,
-                            NodeHandle  root) noexcept
-{
+void SDLRenderer::SetScene(RenderTree *tree, NodeHandle root) noexcept {
     scene_tree_ = tree;
     scene_root_ = root;
 }
@@ -925,9 +961,9 @@ void SDLRenderer::SetScene(RenderTree* tree,
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::CreateUIPipelines()
-{
-    if (!device_ || !sdl_window_) return false;
+bool SDLRenderer::CreateUIPipelines() {
+    if (!device_ || !sdl_window_)
+        return false;
 
     //  Load shader sources
 
@@ -984,13 +1020,12 @@ fragment float4 main0(VertOut in[[stage_in]],
 
     //  Compile shaders
 
-    auto make_shader = [&](const std::string& src,
-                            SDL_GPUShaderStage stage,
-                            Uint32 num_samplers,
-                            Uint32 num_uniform_buffers) -> SDL_GPUShader*
-    {
+    auto make_shader = [&](const std::string &src,
+                           SDL_GPUShaderStage stage,
+                           Uint32 num_samplers,
+                           Uint32 num_uniform_buffers) -> SDL_GPUShader * {
         SDL_GPUShaderCreateInfo ci{};
-        ci.code                = reinterpret_cast<const Uint8*>(src.data());
+        ci.code                = reinterpret_cast<const Uint8 *>(src.data());
         ci.code_size           = src.size();
         ci.entrypoint          = "main0";
         ci.format              = SDL_GPU_SHADERFORMAT_MSL;
@@ -1001,16 +1036,25 @@ fragment float4 main0(VertOut in[[stage_in]],
         return SDL_CreateGPUShader(device_, &ci);
     };
 
-    ui_rect_vert_ = make_shader(vert_src,      SDL_GPU_SHADERSTAGE_VERTEX,   0, 1);
+    ui_rect_vert_ = make_shader(vert_src, SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
     ui_rect_frag_ = make_shader(rect_frag_src, SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
     ui_text_frag_ = make_shader(text_frag_src, SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
 
     if (!ui_rect_vert_ || !ui_rect_frag_ || !ui_text_frag_) {
-        std::cerr << "SDLRenderer::CreateUIPipelines - shader compile failed: "
-                  << SDL_GetError() << "\n";
-        if (ui_rect_vert_) { SDL_ReleaseGPUShader(device_, ui_rect_vert_); ui_rect_vert_ = nullptr; }
-        if (ui_rect_frag_) { SDL_ReleaseGPUShader(device_, ui_rect_frag_); ui_rect_frag_ = nullptr; }
-        if (ui_text_frag_) { SDL_ReleaseGPUShader(device_, ui_text_frag_); ui_text_frag_ = nullptr; }
+        std::cerr << "SDLRenderer::CreateUIPipelines - shader compile failed: " << SDL_GetError()
+                  << "\n";
+        if (ui_rect_vert_) {
+            SDL_ReleaseGPUShader(device_, ui_rect_vert_);
+            ui_rect_vert_ = nullptr;
+        }
+        if (ui_rect_frag_) {
+            SDL_ReleaseGPUShader(device_, ui_rect_frag_);
+            ui_rect_frag_ = nullptr;
+        }
+        if (ui_text_frag_) {
+            SDL_ReleaseGPUShader(device_, ui_text_frag_);
+            ui_text_frag_ = nullptr;
+        }
         return false;
     }
 
@@ -1025,14 +1069,14 @@ fragment float4 main0(VertOut in[[stage_in]],
 
     // Straight-alpha blending (SRC_ALPHA / ONE_MINUS_SRC_ALPHA).
     SDL_GPUColorTargetDescription colorDesc{};
-    colorDesc.format                              = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
-    colorDesc.blend_state.enable_blend            = true;
-    colorDesc.blend_state.src_color_blendfactor   = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    colorDesc.blend_state.dst_color_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    colorDesc.blend_state.color_blend_op          = SDL_GPU_BLENDOP_ADD;
-    colorDesc.blend_state.src_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE;
-    colorDesc.blend_state.dst_alpha_blendfactor   = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    colorDesc.blend_state.alpha_blend_op          = SDL_GPU_BLENDOP_ADD;
+    colorDesc.format                   = SDL_GetGPUSwapchainTextureFormat(device_, sdl_window_);
+    colorDesc.blend_state.enable_blend = true;
+    colorDesc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    colorDesc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.color_blend_op        = SDL_GPU_BLENDOP_ADD;
+    colorDesc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    colorDesc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    colorDesc.blend_state.alpha_blend_op        = SDL_GPU_BLENDOP_ADD;
 
     SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
     targetInfo.color_target_descriptions = &colorDesc;
@@ -1050,18 +1094,21 @@ fragment float4 main0(VertOut in[[stage_in]],
 
     ui_rect_pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &rpci);
     if (!ui_rect_pipeline_) {
-        std::cerr << "SDLRenderer::CreateUIPipelines - rect pipeline failed: "
-                  << SDL_GetError() << "\n";
-        SDL_ReleaseGPUShader(device_, ui_rect_vert_); ui_rect_vert_ = nullptr;
-        SDL_ReleaseGPUShader(device_, ui_rect_frag_); ui_rect_frag_ = nullptr;
-        SDL_ReleaseGPUShader(device_, ui_text_frag_); ui_text_frag_ = nullptr;
+        std::cerr << "SDLRenderer::CreateUIPipelines - rect pipeline failed: " << SDL_GetError()
+                  << "\n";
+        SDL_ReleaseGPUShader(device_, ui_rect_vert_);
+        ui_rect_vert_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_rect_frag_);
+        ui_rect_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_text_frag_);
+        ui_text_frag_ = nullptr;
         return false;
     }
 
     //  ui_text pipeline (same vert, sampled frag)
 
     SDL_GPUGraphicsPipelineCreateInfo tpci{};
-    tpci.vertex_shader      = ui_rect_vert_;   // shared vertex shader
+    tpci.vertex_shader      = ui_rect_vert_;  // shared vertex shader
     tpci.fragment_shader    = ui_text_frag_;
     tpci.primitive_type     = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     tpci.vertex_input_state = vis;
@@ -1069,12 +1116,16 @@ fragment float4 main0(VertOut in[[stage_in]],
 
     ui_text_pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &tpci);
     if (!ui_text_pipeline_) {
-        std::cerr << "SDLRenderer::CreateUIPipelines - text pipeline failed: "
-                  << SDL_GetError() << "\n";
-        SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_); ui_rect_pipeline_ = nullptr;
-        SDL_ReleaseGPUShader(device_, ui_rect_vert_); ui_rect_vert_ = nullptr;
-        SDL_ReleaseGPUShader(device_, ui_rect_frag_); ui_rect_frag_ = nullptr;
-        SDL_ReleaseGPUShader(device_, ui_text_frag_); ui_text_frag_ = nullptr;
+        std::cerr << "SDLRenderer::CreateUIPipelines - text pipeline failed: " << SDL_GetError()
+                  << "\n";
+        SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_);
+        ui_rect_pipeline_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_rect_vert_);
+        ui_rect_vert_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_rect_frag_);
+        ui_rect_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_text_frag_);
+        ui_text_frag_ = nullptr;
         return false;
     }
 
@@ -1092,14 +1143,14 @@ void SDLRenderer::Render(double timeSeconds) {
         return;
     }
 
-    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device_);
     if (!cmd) {
-        std::cerr << "SDLRenderer::Render - SDL_AcquireGPUCommandBuffer failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "SDLRenderer::Render - SDL_AcquireGPUCommandBuffer failed: " << SDL_GetError()
+                  << "\n";
         return;
     }
 
-    SDL_GPUTexture* swap = nullptr;
+    SDL_GPUTexture *swap = nullptr;
     Uint32 width = 0, height = 0;
 
     if (!SDL_AcquireGPUSwapchainTexture(cmd, sdl_window_, &swap, &width, &height)) {
@@ -1133,9 +1184,11 @@ void SDLRenderer::Render(double timeSeconds) {
 
         std::string shader_dir;
         {
-            const char* platform_dir = "spv";
-            if (shader_format_ & SDL_GPU_SHADERFORMAT_MSL)       platform_dir = "msl";
-            else if (shader_format_ & SDL_GPU_SHADERFORMAT_DXIL) platform_dir = "dxil";
+            const char *platform_dir = "spv";
+            if (shader_format_ & SDL_GPU_SHADERFORMAT_MSL)
+                platform_dir = "msl";
+            else if (shader_format_ & SDL_GPU_SHADERFORMAT_DXIL)
+                platform_dir = "dxil";
             shader_dir  = data_base_path_;
             shader_dir += "data/shaders/";
             shader_dir += platform_dir;
@@ -1143,7 +1196,8 @@ void SDLRenderer::Render(double timeSeconds) {
         }
 
         int pw = 0, ph = 0;
-        if (sdl_window_) SDL_GetWindowSizeInPixels(sdl_window_, &pw, &ph);
+        if (sdl_window_)
+            SDL_GetWindowSizeInPixels(sdl_window_, &pw, &ph);
 
         auto result = fg::FrameGraph::from_pug(
             pending_pipeline_source_,
@@ -1160,11 +1214,11 @@ void SDLRenderer::Render(double timeSeconds) {
             fg_compiled_w_    = 0;
             fg_compiled_h_    = 0;
             fg_swapchain_fmt_ = SDL_GPU_TEXTUREFORMAT_INVALID;
-            SDL_Log("[SDLRenderer] SubmitPipelineSource: %zu passes compiled",
-                    frame_graph_->passes().size());
+            SDL_Log(
+                "[SDLRenderer] SubmitPipelineSource: %zu passes compiled",
+                frame_graph_->passes().size());
         } else {
-            SDL_Log("[SDLRenderer] SubmitPipelineSource failed: %s",
-                    result.error().c_str());
+            SDL_Log("[SDLRenderer] SubmitPipelineSource failed: %s", result.error().c_str());
         }
 
         pending_pipeline_source_.clear();
@@ -1181,16 +1235,15 @@ void SDLRenderer::Render(double timeSeconds) {
     // and swapchain format change (extremely rare but possible on display
     // reconfiguration).
     if (frame_graph_.has_value()) {
-        const bool size_changed = (width  != fg_compiled_w_ ||
-                                   height != fg_compiled_h_);
+        const bool size_changed = (width != fg_compiled_w_ || height != fg_compiled_h_);
 
         // SDL_GetGPUSwapchainTextureFormat is only called when we actually
         // need to (re)compile — not every frame.  On the steady-state hot
         // path (nothing changed) the check short-circuits here with zero
         // API calls.  The format is cached in fg_swapchain_fmt_ after the
         // first successful compile and changes only on display reconfiguration.
-        const bool needs_compile = fg_needs_compile_ || size_changed ||
-                                   (fg_swapchain_fmt_ == SDL_GPU_TEXTUREFORMAT_INVALID);
+        const bool needs_compile = fg_needs_compile_ || size_changed
+                                || (fg_swapchain_fmt_ == SDL_GPU_TEXTUREFORMAT_INVALID);
 
         if (needs_compile) {
             const SDL_GPUTextureFormat sc_fmt =
@@ -1215,9 +1268,10 @@ void SDLRenderer::Render(double timeSeconds) {
                 compiled_graph_   = frame_graph_->compile(fg_swapchain_fmt_);
                 fg_needs_compile_ = false;
 
-                SDL_Log("[SDLRenderer] frame graph compiled: %zu passes (%zu active)",
-                        compiled_graph_.pass_count(),
-                        compiled_graph_.active_count());
+                SDL_Log(
+                    "[SDLRenderer] frame graph compiled: %zu passes (%zu active)",
+                    compiled_graph_.pass_count(),
+                    compiled_graph_.active_count());
             }
         }
     }
@@ -1242,18 +1296,22 @@ void SDLRenderer::Render(double timeSeconds) {
     // upload commands recorded here complete before the render pass begins.
     {
         // Pull the latest camera frame (CPU-side) before opening the copy pass.
-        if (video_texture_) video_texture_->updateFrame();
+        if (video_texture_)
+            video_texture_->updateFrame();
 
         const bool needText  = text_renderer_ && text_renderer_->hasPendingUploads();
-        const bool needImage = image_cache_   && image_cache_->hasPendingUploads();
+        const bool needImage = image_cache_ && image_cache_->hasPendingUploads();
         const bool needVideo = video_texture_ && video_texture_->hasPendingUpload();
 
         if (needText || needImage || needVideo) {
-            SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cmd);
+            SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
             if (cp) {
-                if (needText)  text_renderer_->flushUploads(cp);
-                if (needImage) image_cache_->flushUploads(cp);
-                if (needVideo) video_texture_->flushUpload(cp);
+                if (needText)
+                    text_renderer_->flushUploads(cp);
+                if (needImage)
+                    image_cache_->flushUploads(cp);
+                if (needVideo)
+                    video_texture_->flushUpload(cp);
                 SDL_EndGPUCopyPass(cp);
             }
         }
@@ -1277,14 +1335,13 @@ void SDLRenderer::Render(double timeSeconds) {
     // meaningful: static nodes never install an update callback that sets
     // dirty_render; only setStyle() / markDirty() / Animated<T> ticks do.
 
-    const bool scene_active = scene_tree_ && scene_root_.valid()
-                           && ui_rect_pipeline_ && ui_text_pipeline_
-                           && ui_texture_;
+    const bool scene_active =
+        scene_tree_ && scene_root_.valid() && ui_rect_pipeline_ && ui_text_pipeline_ && ui_texture_;
 
     if (scene_active) {
         //  Update root dimensions (may trigger markLayoutDirty)
         {
-            RenderNode* root = scene_tree_->node(scene_root_);
+            RenderNode *root = scene_tree_->node(scene_root_);
             if (root) {
                 // Size the root node to the physical backbuffer dimensions.
                 // This ensures the RenderTree matches the UI texture size
@@ -1323,7 +1380,7 @@ void SDLRenderer::Render(double timeSeconds) {
             ui_ct.clear_color = {0.f, 0.f, 0.f, 0.f};  // transparent black
             ui_ct.cycle       = true;
 
-            SDL_GPURenderPass* ui_pass = SDL_BeginGPURenderPass(cmd, &ui_ct, 1, nullptr);
+            SDL_GPURenderPass *ui_pass = SDL_BeginGPURenderPass(cmd, &ui_ct, 1, nullptr);
             if (ui_pass) {
                 RenderContext ctx;
                 ctx.backend       = GPUBackend::Metal;
@@ -1335,7 +1392,7 @@ void SDLRenderer::Render(double timeSeconds) {
                 ctx.arena         = &scene_tree_->arena();
                 ctx.text_renderer = text_renderer_.get();
                 ctx.image_cache   = image_cache_.get();
-                ctx.video_texture  = video_texture_.get();
+                ctx.video_texture = video_texture_.get();
 
                 ctx.pipelines["rect"]  = ui_rect_pipeline_;
                 ctx.pipelines["text"]  = ui_text_pipeline_;
@@ -1359,27 +1416,51 @@ void SDLRenderer::Render(double timeSeconds) {
 
     //  Pass 3a: background — frame graph OR built-in FBM wallpaper
     //
-    // When pipeline.pug is loaded and compiled:
+    // When pipeline.pug is loaded and compiled with ≥1 passes:
     //   CompiledGraph::execute() drives the scene.  Each enabled pass opens
     //   and closes its own SDL_GPURenderPass; the final pass writes to the
     //   swapchain (pass.output == nullptr sentinel).  Any "time" param is
     //   injected per-frame via a stack copy — no heap traffic.
     //
+    // When pipeline.pug is loaded but declares NO passes (empty pipeline):
+    //   Interpreted as "suppress FBM — plain dark background".  A single
+    //   render pass clears the swapchain to a neutral dark colour with no
+    //   shader draws.  Useful for apps that supply their own page backgrounds
+    //   and do not want the animated wallpaper (e.g. the styleguide).
+    //
     // When no pipeline.pug (or compile failed):
     //   The built-in animated FBM wallpaper runs in a single render pass
     //   with LOADOP_CLEAR — preserving the original behaviour exactly.
-    SDL_GPURenderPass* pass = nullptr;
+    SDL_GPURenderPass *pass = nullptr;
 
     if (frame_graph_.has_value() && !compiled_graph_.empty()) {
-
         // execute() manages its own SDL_GPURenderPass per enabled pass.
         // On success, `swap` contains the frame graph's final output.
         // On a pass failure (null pipeline/target), execute() skips that
         // pass in O(1) — no crash, no partial GPU state.
-        compiled_graph_.execute(cmd, swap, width, height,
-                                static_cast<float>(timeSeconds));
-    } else {
+        compiled_graph_.execute(cmd, swap, width, height, static_cast<float>(timeSeconds));
 
+    } else if (frame_graph_.has_value()) {
+        // pipeline.pug loaded but has zero passes → plain solid-colour clear.
+        // No FBM, no shader draw — just wipe the swapchain to a neutral dark bg.
+        SDL_GPUColorTargetInfo ct{};
+        ct.texture     = swap;
+        ct.load_op     = SDL_GPU_LOADOP_CLEAR;
+        ct.store_op    = SDL_GPU_STOREOP_STORE;
+        ct.clear_color = {0.08f, 0.08f, 0.10f, 1.f};
+        ct.cycle       = true;
+
+        pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
+        if (!pass) {
+            std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass (solid clear) failed: "
+                      << SDL_GetError() << "\n";
+            SDL_SubmitGPUCommandBuffer(cmd);
+            return;
+        }
+        SDL_EndGPURenderPass(pass);
+        pass = nullptr;
+
+    } else {
         SDL_GPUColorTargetInfo ct{};
         ct.texture     = swap;
         ct.load_op     = SDL_GPU_LOADOP_CLEAR;
@@ -1389,8 +1470,8 @@ void SDLRenderer::Render(double timeSeconds) {
 
         pass = SDL_BeginGPURenderPass(cmd, &ct, 1, nullptr);
         if (!pass) {
-            std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "SDLRenderer::Render - SDL_BeginGPURenderPass failed: " << SDL_GetError()
+                      << "\n";
             SDL_SubmitGPUCommandBuffer(cmd);
             return;
         }
@@ -1399,7 +1480,7 @@ void SDLRenderer::Render(double timeSeconds) {
         SDL_BindGPUGraphicsPipeline(pass, pipeline_);
 
         FragmentUniform fu{};
-        fu.time      = static_cast<float>(timeSeconds);
+        fu.time   = static_cast<float>(timeSeconds);
         fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
         SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
@@ -1412,9 +1493,7 @@ void SDLRenderer::Render(double timeSeconds) {
     // The hook begins its own render pass (LOADOP_LOAD on swap) with a
     // depth buffer. Runs after the wallpaper but before UI composite.
     if (scene3d_hook_) {
-        scene3d_hook_(cmd, swap,
-                      static_cast<float>(width),
-                      static_cast<float>(height));
+        scene3d_hook_(cmd, swap, static_cast<float>(width), static_cast<float>(height));
     }
 
     // 3c. UI composite (re-open swapchain pass, LOADOP_LOAD)
@@ -1424,10 +1503,10 @@ void SDLRenderer::Render(double timeSeconds) {
     // regions correctly reveal the wallpaper underneath.
     if (ui_texture_ && ui_text_pipeline_) {
         SDL_GPUColorTargetInfo ct2{};
-        ct2.texture   = swap;
-        ct2.load_op   = SDL_GPU_LOADOP_LOAD;   // preserve wallpaper + 3D scene
-        ct2.store_op  = SDL_GPU_STOREOP_STORE;
-        ct2.cycle     = false;
+        ct2.texture  = swap;
+        ct2.load_op  = SDL_GPU_LOADOP_LOAD;  // preserve wallpaper + 3D scene
+        ct2.store_op = SDL_GPU_STOREOP_STORE;
+        ct2.cycle    = false;
 
         pass = SDL_BeginGPURenderPass(cmd, &ct2, 1, nullptr);
         if (pass) {
@@ -1445,26 +1524,35 @@ void SDLRenderer::Render(double timeSeconds) {
                 float uv_w, uv_h;
                 float _p0, _p1;
             };
-            static_assert(sizeof(RectUniform) == 48,
-                          "RectUniform must be 48 bytes to match the vertex shader");
+            static_assert(
+                sizeof(RectUniform) == 48,
+                "RectUniform must be 48 bytes to match the vertex shader");
             const RectUniform vu{
-                0.f, 0.f,
-                static_cast<float>(width), static_cast<float>(height),
-                static_cast<float>(width), static_cast<float>(height),
-                0.f, 0.f, 1.f, 1.f,   // uv_x=0, uv_y=0, uv_w=1, uv_h=1 — full texture
-                0.f, 0.f
-            };
+                0.f,
+                0.f,
+                static_cast<float>(width),
+                static_cast<float>(height),
+                static_cast<float>(width),
+                static_cast<float>(height),
+                0.f,
+                0.f,
+                1.f,
+                1.f,  // uv_x=0, uv_y=0, uv_w=1, uv_h=1 — full texture
+                0.f,
+                0.f};
             SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 
-            struct alignas(4) TintUniform { float r, g, b, a; };
-            const TintUniform tu{ 1.f, 1.f, 1.f, 1.f };
+            struct alignas(4) TintUniform {
+                float r, g, b, a;
+            };
+            const TintUniform tu{1.f, 1.f, 1.f, 1.f};
             SDL_PushGPUFragmentUniformData(cmd, 0, &tu, sizeof(tu));
 
             // Prefer image_cache sampler; fall back to text_renderer sampler.
             // Both are bilinear / clamp-to-edge — identical result at 1:1 mapping.
-            SDL_GPUSampler* samp = image_cache_   ? image_cache_->sampler()
+            SDL_GPUSampler *samp = image_cache_   ? image_cache_->sampler()
                                  : text_renderer_ ? text_renderer_->sampler()
-                                 : nullptr;
+                                                  : nullptr;
             if (samp) {
                 SDL_GPUTextureSamplerBinding sb{};
                 sb.texture = ui_texture_;
@@ -1488,7 +1576,7 @@ void SDLRenderer::Render(double timeSeconds) {
  *
  * @return true on success, false on failure
  */
-bool SDLRenderer::ReloadShader(const std::string& path) {
+bool SDLRenderer::ReloadShader(const std::string &path) {
     std::error_code ec;
 
     if (!fs::exists(path, ec) || ec) {
@@ -1498,7 +1586,7 @@ bool SDLRenderer::ReloadShader(const std::string& path) {
 
     const auto mtime = GetFileMTime(path);
     if (mtime == shader_mtime_) {
-        return true;   // unchanged — nothing to do
+        return true;  // unchanged — nothing to do
     }
 
     const std::string source = ReadTextFile(path);
@@ -1508,8 +1596,7 @@ bool SDLRenderer::ReloadShader(const std::string& path) {
     }
 
     std::string vertSource;
-    if (!vertex_shader_path_.empty() &&
-        fs::exists(vertex_shader_path_, ec) && !ec) {
+    if (!vertex_shader_path_.empty() && fs::exists(vertex_shader_path_, ec) && !ec) {
         vertSource = ReadTextFile(vertex_shader_path_);
     }
 
@@ -1548,7 +1635,7 @@ vertex VertOut main0(uint vid [[vertex_id]]) {
  *
  * @return Pointer to the texture, or nullptr on failure
  */
-SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
+SDL_GPUTexture *SDLRenderer::CreateWavetableTexture() noexcept {
     if (!device_) {
         std::cerr << "SDLRenderer::CreateWavetableTexture - device not initialized\n";
         return nullptr;
@@ -1559,23 +1646,23 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
 
     // Generate sin(0 to 2π) as 16-bit normalized
     for (int i = 0; i < SIZE; ++i) {
-        float t = static_cast<float>(i) / static_cast<float>(SIZE);
+        float t     = static_cast<float>(i) / static_cast<float>(SIZE);
         float angle = t * 6.28318530718f;  // 2π
 
         // sin maps [-1, 1] to [0, 1] for 16-bit storage
-        float sin_val = (std::sin(angle) + 1.0f) * 0.5f;
+        float sin_val                   = (std::sin(angle) + 1.0f) * 0.5f;
         samples[static_cast<size_t>(i)] = static_cast<uint16_t>(sin_val * 65535.0f);
     }
 
     SDL_GPUTextureCreateInfo info = {};
-    info.type = SDL_GPU_TEXTURETYPE_2D;  // Use 2D texture 512×1 (SDL3 doesn't have 1D)
-    info.format = SDL_GPU_TEXTUREFORMAT_R16_UNORM;
-    info.width = SIZE;
-    info.height = 1;
+    info.type       = SDL_GPU_TEXTURETYPE_2D;  // Use 2D texture 512×1 (SDL3 doesn't have 1D)
+    info.format     = SDL_GPU_TEXTUREFORMAT_R16_UNORM;
+    info.width      = SIZE;
+    info.height     = 1;
     info.num_levels = 1;
-    info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.usage      = SDL_GPU_TEXTUREUSAGE_SAMPLER;
 
-    SDL_GPUTexture* tex = SDL_CreateGPUTexture(device_, &info);
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture(device_, &info);
     if (!tex) {
         std::cerr << "SDLRenderer::CreateWavetableTexture - SDL_CreateGPUTexture failed: "
                   << SDL_GetError() << "\n";
@@ -1584,11 +1671,11 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
 
     // Upload data
     SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = SIZE * sizeof(uint16_t);
-    transfer_info.props = 0;
+    transfer_info.usage                           = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size                            = SIZE * sizeof(uint16_t);
+    transfer_info.props                           = 0;
 
-    SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &transfer_info);
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device_, &transfer_info);
     if (!transfer) {
         std::cerr << "SDLRenderer::CreateWavetableTexture - SDL_CreateGPUTransferBuffer failed: "
                   << SDL_GetError() << "\n";
@@ -1596,7 +1683,7 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
         return nullptr;
     }
 
-    void* mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
+    void *mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
     if (mapped) {
         std::memcpy(mapped, samples.data(), SIZE * sizeof(uint16_t));
         SDL_UnmapGPUTransferBuffer(device_, transfer);
@@ -1607,7 +1694,7 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
         return nullptr;
     }
 
-    SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device_);
     if (!cmd) {
         std::cerr << "SDLRenderer::CreateWavetableTexture - SDL_AcquireGPUCommandBuffer failed\n";
         SDL_ReleaseGPUTransferBuffer(device_, transfer);
@@ -1615,22 +1702,22 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
         return nullptr;
     }
 
-    SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUCopyPass *pass = SDL_BeginGPUCopyPass(cmd);
 
     SDL_GPUTextureTransferInfo source_info = {};
-    source_info.transfer_buffer = transfer;
-    source_info.offset = 0;
+    source_info.transfer_buffer            = transfer;
+    source_info.offset                     = 0;
 
     SDL_GPUTextureRegion destination = {};
-    destination.texture = tex;
-    destination.x = 0;
-    destination.y = 0;
-    destination.z = 0;
-    destination.w = SIZE;
-    destination.h = 1;
-    destination.d = 1;
-    destination.mip_level = 0;
-    destination.layer = 0;
+    destination.texture              = tex;
+    destination.x                    = 0;
+    destination.y                    = 0;
+    destination.z                    = 0;
+    destination.w                    = SIZE;
+    destination.h                    = 1;
+    destination.d                    = 1;
+    destination.mip_level            = 0;
+    destination.layer                = 0;
 
     SDL_UploadToGPUTexture(pass, &source_info, &destination, false);
     SDL_EndGPUCopyPass(pass);
@@ -1642,4 +1729,4 @@ SDL_GPUTexture* SDLRenderer::CreateWavetableTexture() noexcept {
     return tex;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

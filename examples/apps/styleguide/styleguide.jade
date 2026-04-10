@@ -22,40 +22,41 @@
 // CSS:  styleguide.css  (auto-loaded by jade_host)
 //       scene.css       (manually loaded by styleguide.cxx for PBR overrides)
 
-app.sg-root
-
+app.sg-root(flexGrow="1")
   // 3D scene node
   // LayoutKind::None → 0×0 in 2-D layout; 3-D renders via GPU pre-pass.
   // src is replaced in jade_app_init() before GltfScene.attach() runs.
   scene3d#sg-3d(src="data/models/Crystal_Small_03.glb" mesh-id="sg-crystal" display="none")
+  scene3d#animal-scene(src="data/models/animal_farm/animal-parrot.glb" mesh-id="parrot-mesh" display="none")
 
   // Main layout column
-  col.sg-main
+  col.sg-main(flexGrow="1" width="100%")
 
-    // Page content — children replaced by loadPage() on each navigation
+  // Page content — children replaced by loadPage() on each navigation
     // col (FlexColumn) so flex-grow:1 on the page root distributes height.
     col#page-container.sg-page
 
     // Navigation HUD — auto-show/hide
     // Starts collapsed (height=0, overflow=hidden → clips to 0 px).
-    // styleguide.cxx sets layout_props.height + markLayoutDirty to reveal.
+    // styleguide.cc sets layout_props.height + markLayoutDirty to reveal.
     col#nav-bar.sg-nav(height="0" overflow="hidden")
 
       // Inner row: ❮  dots  ▶  ❯  centred in the nav bar
       row.sg-nav-row(justifyContent="center" alignItems="center" gap="24" flexGrow="1")
 
         // Prev button — inline text so dispatchClick fires on this node
-        div#nav-prev.sg-nav-btn(onclick="sg:prev" data-value="") ❮
+        div#nav-prev.sg-nav-btn(onclick="sg:prev" data-value="") PREV
 
         // Page-indicator dots (explicit width+height for stable flex sizing)
-        row#nav-dots.sg-dots(height="44" width="96" justifyContent="center" alignItems="center" gap="10")
+        row#nav-dots.sg-dots(height="44" width="120" justifyContent="center" alignItems="center" gap="10")
           div#dot-0.sg-dot
           div#dot-1.sg-dot
           div#dot-2.sg-dot
           div#dot-3.sg-dot
+          div#dot-4.sg-dot
 
         // Play / Pause toggle — inline text
-        div#nav-play.sg-nav-btn(onclick="sg:playpause" data-value="") ▶
+        div#nav-play.sg-nav-btn(onclick="sg:playpause" data-value="") PLAY
 
         // Next button — inline text
-        div#nav-next.sg-nav-btn(onclick="sg:next" data-value="") ❯
+        div#nav-next.sg-nav-btn(onclick="sg:next" data-value="") NEXT

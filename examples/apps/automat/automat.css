@@ -99,7 +99,7 @@
 
 /* Hotspot info modal */
 /* Starts collapsed via jade attr height="0" overflow="hidden".           */
-/* automat.cc reveals it by writing height + overflow directly onto the  */
+/* box.cc reveals it by writing height + overflow directly onto the  */
 /* RenderNode's StyleMap (no compound-selector magic needed).             */
 
 .modal {

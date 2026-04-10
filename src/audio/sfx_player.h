@@ -34,6 +34,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace pce::vfs { class Vfs; }
@@ -50,8 +51,31 @@ struct SfxClip {
 };
 
 
+/// A group of clips that can be played in sequence or randomly.
+struct SfxGroup {
+    enum class Mode {
+        Sequential, ///< Round-robin (one per play call)
+        Random,     ///< Random selection (one per play call)
+        Unisono,    ///< Play all clips in the group at the same time
+        Chase       ///< Play clips one after another (trigger next onEnd of previous)
+    };
+
+    std::vector<std::string> names;
+    std::size_t              next_index = 0;
+    Mode                     mode = Mode::Sequential;
+
+    // Used for Chase mode tracking (not strictly used by play() since it's fire-and-forget,
+    // but useful for state management).
+};
+
+
 class SfxPlayer {
 public:
+    static constexpr SfxGroup::Mode Sequential = SfxGroup::Mode::Sequential;
+    static constexpr SfxGroup::Mode Random     = SfxGroup::Mode::Random;
+    static constexpr SfxGroup::Mode Unisono    = SfxGroup::Mode::Unisono;
+    static constexpr SfxGroup::Mode Chase      = SfxGroup::Mode::Chase;
+
     SfxPlayer()  = default;
     ~SfxPlayer() = default;
 
@@ -78,7 +102,13 @@ public:
     /// Load a WAV from raw bytes (e.g. already fetched from VFS / network).
     bool load_bytes(const std::string& name, const std::vector<std::byte>& wav_bytes);
 
-    /// Play a previously loaded clip.  Fire-and-forget: the stream drains
+    /// Load a group of clips under a single name. When played, one clip
+    /// from the group is selected (round-robin or random).
+    bool load_group(const std::string& group_name,
+                    const std::vector<std::string>& paths_or_uris,
+                    SfxGroup::Mode mode = SfxGroup::Mode::Sequential);
+
+    /// Play a previously loaded clip or group. Fire-and-forget: the stream drains
     /// and SDL3 reclaims it automatically.
     void play(const std::string& name);
 
@@ -88,18 +118,24 @@ public:
     /// Remove a previously loaded clip.
     void unload(const std::string& name);
 
-    /// Remove all loaded clips.
+    /// Remove all loaded clips and groups.
     void clear();
 
-    /// Number of loaded clips.
+    /// Total number of individual clips loaded.
     [[nodiscard]] std::size_t size() const;
 
 private:
+    /// Internal helper to play a single clip by its low-level name.
+    /// Returns the stream handle if successful (caller should NOT destroy it,
+    /// fire-and-forget handles it).
+    SDL_AudioStream* play_single(const std::string& clip_name);
+
     /// Decode a WAV from an SDL_IOStream into a SfxClip.
     static bool decode_wav(SDL_IOStream* io, SfxClip& out, const std::string& label);
 
     mutable std::mutex                             mu_;
     std::unordered_map<std::string, SfxClip>       clips_;
+    std::unordered_map<std::string, SfxGroup>      groups_;
     pce::vfs::Vfs*                                 vfs_ = nullptr;
 };
 

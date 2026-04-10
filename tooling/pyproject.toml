@@ -30,6 +30,17 @@ dev = [
     "mypy>=1.9",
     "ruff>=0.4",
 ]
+# OSM region mesh generation.  Install with:
+#   uv add --optional mesh osmnx trimesh shapely numpy requests mapbox-earcut
+mesh = [
+    "fast-simplification>=0.1.13",
+    "mapbox-earcut>=2.0.0",
+    "numpy>=2.4.4",
+    "osmnx>=2.1.0",
+    "requests>=2.33.1",
+    "shapely>=2.1.2",
+    "trimesh>=4.11.5",
+]
 
 [project.scripts]
 sdlos = "sdlos.cli:main"

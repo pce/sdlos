@@ -1,6 +1,5 @@
 ==  Jade Editor behaviour
 
-jadearea_behavior.cxx
 
 Events:
    jade:load  - load a named jade, render on the canvas

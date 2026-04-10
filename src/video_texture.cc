@@ -13,20 +13,20 @@ namespace pce::sdlos {
  *
  * @return true on success, false on failure
  */
-bool VideoTexture::init(SDL_GPUDevice* device) noexcept
-{
+bool VideoTexture::init(SDL_GPUDevice *device) noexcept {
     device_ = device;
-    if (!device_) return false;
+    if (!device_)
+        return false;
 
     // Create the shared sampler (bilinear, clamp-to-edge).
     SDL_GPUSamplerCreateInfo sci{};
-    sci.min_filter        = SDL_GPU_FILTER_LINEAR;
-    sci.mag_filter        = SDL_GPU_FILTER_LINEAR;
-    sci.mipmap_mode       = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
-    sci.address_mode_u    = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sci.address_mode_v    = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sci.address_mode_w    = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_ = SDL_CreateGPUSampler(device_, &sci);
+    sci.min_filter     = SDL_GPU_FILTER_LINEAR;
+    sci.mag_filter     = SDL_GPU_FILTER_LINEAR;
+    sci.mipmap_mode    = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    sci.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sci.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sci.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_           = SDL_CreateGPUSampler(device_, &sci);
     if (!sampler_) {
         std::cerr << "[VideoTexture] sampler creation failed: " << SDL_GetError() << "\n";
         return false;
@@ -37,13 +37,21 @@ bool VideoTexture::init(SDL_GPUDevice* device) noexcept
 /**
  * @brief Shuts down
  */
-void VideoTexture::shutdown() noexcept
-{
+void VideoTexture::shutdown() noexcept {
     close();
     if (device_) {
-        if (tex_)      { SDL_ReleaseGPUTexture(device_, tex_);               tex_      = nullptr; }
-        if (sampler_)  { SDL_ReleaseGPUSampler(device_, sampler_);           sampler_  = nullptr; }
-        if (transfer_) { SDL_ReleaseGPUTransferBuffer(device_, transfer_);   transfer_ = nullptr; }
+        if (tex_) {
+            SDL_ReleaseGPUTexture(device_, tex_);
+            tex_ = nullptr;
+        }
+        if (sampler_) {
+            SDL_ReleaseGPUSampler(device_, sampler_);
+            sampler_ = nullptr;
+        }
+        if (transfer_) {
+            SDL_ReleaseGPUTransferBuffer(device_, transfer_);
+            transfer_ = nullptr;
+        }
     }
     device_       = nullptr;
     w_            = 0;
@@ -57,18 +65,18 @@ void VideoTexture::shutdown() noexcept
  *
  * @return Integer result; negative values indicate an error code
  */
-std::vector<VideoTexture::DeviceInfo> VideoTexture::enumerate() const noexcept
-{
+std::vector<VideoTexture::DeviceInfo> VideoTexture::enumerate() const noexcept {
     std::vector<DeviceInfo> result;
-    int count = 0;
-    SDL_CameraID* ids = SDL_GetCameras(&count);
-    if (!ids) return result;
+    int count         = 0;
+    SDL_CameraID *ids = SDL_GetCameras(&count);
+    if (!ids)
+        return result;
     result.reserve(static_cast<std::size_t>(count));
     for (int i = 0; i < count; ++i) {
         DeviceInfo info;
-        info.id   = ids[i];
-        const char* name = SDL_GetCameraName(ids[i]);
-        info.name = name ? name : ("Camera " + std::to_string(i));
+        info.id          = ids[i];
+        const char *name = SDL_GetCameraName(ids[i]);
+        info.name        = name ? name : ("Camera " + std::to_string(i));
         result.push_back(std::move(info));
     }
     SDL_free(ids);
@@ -82,20 +90,19 @@ std::vector<VideoTexture::DeviceInfo> VideoTexture::enumerate() const noexcept
  *
  * @return true on success, false on failure
  */
-bool VideoTexture::open(SDL_CameraID id) noexcept
-{
+bool VideoTexture::open(SDL_CameraID id) noexcept {
     close();
 
     // Preferred spec: RGBA32, 1280x720, 30fps.
     // SDL will match the closest supported spec; AcquireCameraFrame still
     // returns the actual format so we always convert to RGBA32 ourselves.
     SDL_CameraSpec spec{};
-    spec.format                 = SDL_PIXELFORMAT_RGBA32;
-    spec.colorspace             = SDL_COLORSPACE_SRGB;
-    spec.width                  = 1280;
-    spec.height                 = 720;
-    spec.framerate_numerator    = 30;
-    spec.framerate_denominator  = 1;
+    spec.format                = SDL_PIXELFORMAT_RGBA32;
+    spec.colorspace            = SDL_COLORSPACE_SRGB;
+    spec.width                 = 1'280;
+    spec.height                = 720;
+    spec.framerate_numerator   = 30;
+    spec.framerate_denominator = 1;
 
     cam_ = SDL_OpenCamera(id, &spec);
     if (!cam_) {
@@ -113,16 +120,17 @@ bool VideoTexture::open(SDL_CameraID id) noexcept
  *
  * @return true on success, false on failure
  */
-bool VideoTexture::openByIndex(int index) noexcept
-{
-    int count = 0;
-    SDL_CameraID* ids = SDL_GetCameras(&count);
+bool VideoTexture::openByIndex(int index) noexcept {
+    int count         = 0;
+    SDL_CameraID *ids = SDL_GetCameras(&count);
     if (!ids || count == 0) {
         std::cerr << "[VideoTexture] no cameras available\n";
-        if (ids) SDL_free(ids);
+        if (ids)
+            SDL_free(ids);
         return false;
     }
-    if (index < 0 || index >= count) index = 0;
+    if (index < 0 || index >= count)
+        index = 0;
     const SDL_CameraID id = ids[index];
     SDL_free(ids);
     return open(id);
@@ -131,8 +139,7 @@ bool VideoTexture::openByIndex(int index) noexcept
 /**
  * @brief Closes
  */
-void VideoTexture::close() noexcept
-{
+void VideoTexture::close() noexcept {
     if (cam_) {
         SDL_CloseCamera(cam_);
         cam_ = nullptr;
@@ -145,9 +152,9 @@ void VideoTexture::close() noexcept
  *
  * @return Integer result; negative values indicate an error code
  */
-int VideoTexture::permissionState() const noexcept
-{
-    if (!cam_) return -1;
+int VideoTexture::permissionState() const noexcept {
+    if (!cam_)
+        return -1;
     return SDL_GetCameraPermissionState(cam_);
 }
 
@@ -159,10 +166,11 @@ int VideoTexture::permissionState() const noexcept
  *
  * @return true on success, false on failure
  */
-bool VideoTexture::ensureTexture(int w, int h) noexcept
-{
-    if (!device_ || w <= 0 || h <= 0) return false;
-    if (tex_ && w_ == w && h_ == h) return true;
+bool VideoTexture::ensureTexture(int w, int h) noexcept {
+    if (!device_ || w <= 0 || h <= 0)
+        return false;
+    if (tex_ && w_ == w && h_ == h)
+        return true;
 
     if (tex_) {
         SDL_ReleaseGPUTexture(device_, tex_);
@@ -200,11 +208,12 @@ bool VideoTexture::ensureTexture(int w, int h) noexcept
  *
  * @return true on success, false on failure
  */
-bool VideoTexture::ensureTransferBuffer(int w, int h) noexcept
-{
-    if (!device_) return false;
+bool VideoTexture::ensureTransferBuffer(int w, int h) noexcept {
+    if (!device_)
+        return false;
     const int needed = w * h * 4;
-    if (transfer_ && transfer_cap_ >= needed) return true;
+    if (transfer_ && transfer_cap_ >= needed)
+        return true;
 
     if (transfer_) {
         SDL_ReleaseGPUTransferBuffer(device_, transfer_);
@@ -229,14 +238,16 @@ bool VideoTexture::ensureTransferBuffer(int w, int h) noexcept
 /**
  * @brief Updates frame
  */
-void VideoTexture::updateFrame() noexcept
-{
-    if (!cam_ || !device_) return;
-    if (permissionState() != 1) return;  // still waiting for permission
+void VideoTexture::updateFrame() noexcept {
+    if (!cam_ || !device_)
+        return;
+    if (permissionState() != 1)
+        return;  // still waiting for permission
 
-    Uint64 ts = 0;
-    SDL_Surface* frame = SDL_AcquireCameraFrame(cam_, &ts);
-    if (!frame) return;  // no new frame yet
+    Uint64 ts          = 0;
+    SDL_Surface *frame = SDL_AcquireCameraFrame(cam_, &ts);
+    if (!frame)
+        return;  // no new frame yet
 
     // Ensure GPU resources match frame dimensions.
     const int fw = frame->w;
@@ -247,29 +258,32 @@ void VideoTexture::updateFrame() noexcept
     }
 
     // Convert to RGBA32 if the camera delivers a different format.
-    SDL_Surface* rgba = frame;
-    bool converted = false;
+    SDL_Surface *rgba = frame;
+    bool converted    = false;
     if (frame->format != SDL_PIXELFORMAT_RGBA32) {
-        rgba = SDL_ConvertSurface(frame, SDL_PIXELFORMAT_RGBA32);
+        rgba      = SDL_ConvertSurface(frame, SDL_PIXELFORMAT_RGBA32);
         converted = (rgba != nullptr);
-        if (!converted) rgba = frame;  // fallback: upload whatever we have
+        if (!converted)
+            rgba = frame;  // fallback: upload whatever we have
     }
 
     // Map the transfer buffer and copy pixel rows (handles non-power-of-2 pitch).
-    void* map = SDL_MapGPUTransferBuffer(device_, transfer_, false);
+    void *map = SDL_MapGPUTransferBuffer(device_, transfer_, false);
     if (map) {
-        const int   stride = fw * 4;
-        const auto* src    = static_cast<const Uint8*>(rgba->pixels);
-        auto*       dst    = static_cast<Uint8*>(map);
+        const int stride = fw * 4;
+        const auto *src  = static_cast<const Uint8 *>(rgba->pixels);
+        auto *dst        = static_cast<Uint8 *>(map);
         for (int row = 0; row < fh; ++row)
-            SDL_memcpy(dst + row * stride,
-                       src + row * rgba->pitch,
-                       static_cast<std::size_t>(stride));
+            SDL_memcpy(
+                dst + row * stride,
+                src + row * rgba->pitch,
+                static_cast<std::size_t>(stride));
         SDL_UnmapGPUTransferBuffer(device_, transfer_);
         has_pending_ = true;
     }
 
-    if (converted) SDL_DestroySurface(rgba);
+    if (converted)
+        SDL_DestroySurface(rgba);
     SDL_ReleaseCameraFrame(cam_, frame);
 }
 
@@ -278,9 +292,9 @@ void VideoTexture::updateFrame() noexcept
  *
  * @param copy_pass  Vertical coordinate in logical pixels
  */
-void VideoTexture::flushUpload(SDL_GPUCopyPass* copy_pass) noexcept
-{
-    if (!has_pending_ || !tex_ || !transfer_ || !copy_pass) return;
+void VideoTexture::flushUpload(SDL_GPUCopyPass *copy_pass) noexcept {
+    if (!has_pending_ || !tex_ || !transfer_ || !copy_pass)
+        return;
 
     SDL_GPUTextureTransferInfo src_info{};
     src_info.transfer_buffer = transfer_;
@@ -305,4 +319,4 @@ void VideoTexture::flushUpload(SDL_GPUCopyPass* copy_pass) noexcept
     has_pending_ = false;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

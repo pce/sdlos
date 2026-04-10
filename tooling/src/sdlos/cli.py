@@ -11,6 +11,7 @@ Commands
   sdlos create   <name>    — scaffold a new jade app from a template
   sdlos run      <name>    — build and launch a jade app (with optional watch)
   sdlos pipeline [target]  — visualise a pipeline.pug render pipeline
+  sdlos mesh     generate  — generate a 3D region mesh from OpenStreetMap data
   sdlos templates          — list available scaffold templates
   sdlos version            — print tooling version
 
@@ -28,6 +29,12 @@ Examples
   sdlos run calc --clean                # --clean-first rebuild, then launch
   sdlos run calc --build-dir ../mybuild # explicit cmake binary dir
   sdlos run calc --no-build             # skip build, just launch
+
+  sdlos mesh generate --place "Mainz, Germany" --name mainz
+  sdlos mesh generate --bbox "50.05,49.90,8.35,8.15" --name mainz_bbox
+  sdlos mesh generate --place "Altstadt, Mainz" --name mainz_lp \
+          --lod lowpoly --face-count 3000 --dem --app flatshader
+  sdlos mesh info output/mainz.gltf
 
   sdlos pipeline                        # auto-detect pipeline.pug from cwd
   sdlos pipeline viz                    # by app name
@@ -52,6 +59,7 @@ from .templates.renderer import list_available
 from .commands.run import run_app
 from .commands.pipeline import cmd_pipeline
 from .commands.analyze import cmd_analyze
+from .commands.mesh import cmd_mesh
 
 
 def _is_tty() -> bool:
@@ -78,7 +86,7 @@ def main(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
         print_banner(
             "sdlos tooling",
-            subtitle=f"v{__version__}  ·  create · run · pipeline · analyze · templates",
+            subtitle=f"v{__version__}  ·  create · run · pipeline · mesh · analyze · templates",
         )
         click.echo(ctx.get_help())
 
@@ -112,6 +120,7 @@ def cmd_templates() -> None:
 
 main.add_command(cmd_pipeline)
 main.add_command(cmd_analyze)
+main.add_command(cmd_mesh)
 
 # ── sdlos run ─────────────────────────────────────────────────────────────────
 
@@ -434,6 +443,37 @@ def cmd_create(
         create_app(cfg, root_dir)
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
+
+    # ── Optional: reconfigure so the new target is immediately known ──────────
+    # When the build directory is already configured (CMakeCache.txt present)
+    # the cmake glob that discovers app .cmake files will NOT pick up the new
+    # file until cmake re-runs.  Offer a one-time reconfigure on interactive
+    # terminals so the user can go straight to `sdlos run <name>` without the
+    # extra --reconfigure flag.
+    if not cfg.dry_run and _is_tty():
+        build_dir = _resolve_build_dir(None, root_dir)
+        if (build_dir / "CMakeCache.txt").exists():
+            try:
+                import questionary as _q
+                from .commands.interactive import _STYLE
+                should_reconfigure = _q.confirm(
+                    f"Build system already configured — reconfigure now to register '{cfg.name}'?",
+                    default=True,
+                    style=_STYLE,
+                ).ask()
+            except ImportError:
+                # questionary not available (e.g. minimal install) — fall back to input()
+                try:
+                    raw = input(
+                        f"\n  Reconfigure cmake now to register '{cfg.name}'? [Y/n] "
+                    ).strip().lower()
+                    should_reconfigure = raw in ("", "y", "yes")
+                except (EOFError, KeyboardInterrupt):
+                    should_reconfigure = False
+
+            if should_reconfigure:
+                from .commands.run import _configure
+                _configure(root_dir, build_dir, preset=None, quiet=False)
 
 
 # ── Standalone entry point ────────────────────────────────────────────────────

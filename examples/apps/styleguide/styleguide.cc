@@ -72,6 +72,16 @@ struct CrystalAnimState {
     bool boost_pending = false;               // flag for click-based speed boost
 };
 
+struct AnimalAnimState {
+    pce::sdlos::Animated<float> hop_y;
+    pce::sdlos::Animated<float> roll_x;
+    pce::sdlos::NodeHandle      parrot_h = pce::sdlos::k_null_handle;
+
+    int current_animal_idx = 0;
+    bool name_revealed = false;
+    pce::sdlos::Animated<float> reveal_y; // 0 to 1 for name reveal animation
+};
+
 struct PageDesc {
     const char* file;    ///< relative to binary-dir (SDL_GetBasePath())
     const char* title;   ///< human-readable name for log messages
@@ -82,13 +92,50 @@ constexpr PageDesc k_pages[] = {
     { "data/pages/style.jade",   "Styles"     },
     { "data/pages/layout.jade",  "Layout"     },
     { "data/pages/scene3d.jade", "3D Scene"   },
+    { "data/pages/animal_farm.jade", "Animal Farm" },
 };
+
+const char* k_animal_models[] = {
+    "data/models/animal_farm/animal-beaver.glb",
+    "data/models/animal_farm/animal-bee.glb",
+    "data/models/animal_farm/animal-bunny.glb",
+    "data/models/animal_farm/animal-cat.glb",
+    "data/models/animal_farm/animal-caterpillar.glb",
+    "data/models/animal_farm/animal-chick.glb",
+    "data/models/animal_farm/animal-cow.glb",
+    "data/models/animal_farm/animal-crab.glb",
+    "data/models/animal_farm/animal-deer.glb",
+    "data/models/animal_farm/animal-dog.glb",
+    "data/models/animal_farm/animal-elephant.glb",
+    "data/models/animal_farm/animal-fish.glb",
+    "data/models/animal_farm/animal-fox.glb",
+    "data/models/animal_farm/animal-giraffe.glb",
+    "data/models/animal_farm/animal-hog.glb",
+    "data/models/animal_farm/animal-koala.glb",
+    "data/models/animal_farm/animal-lion.glb",
+    "data/models/animal_farm/animal-monkey.glb",
+    "data/models/animal_farm/animal-panda.glb",
+    "data/models/animal_farm/animal-parrot.glb",
+    "data/models/animal_farm/animal-penguin.glb",
+    "data/models/animal_farm/animal-pig.glb",
+    "data/models/animal_farm/animal-polar.glb",
+    "data/models/animal_farm/animal-tiger.glb"
+};
+
+const char* k_animal_names[] = {
+    "Beaver", "Bee", "Bunny", "Cat", "Caterpillar", "Chick", "Cow", "Crab", "Deer", "Dog",
+    "Elephant", "Fish", "Fox", "Giraffe", "Hog", "Koala", "Lion", "Monkey", "Panda", "Parrot",
+    "Penguin", "Pig", "Polar Bear", "Tiger"
+};
+
+constexpr int k_animal_count = static_cast<int>(sizeof(k_animal_models) / sizeof(k_animal_models[0]));
 
 constexpr int   k_page_count    = static_cast<int>(sizeof(k_pages) / sizeof(k_pages[0]));
 constexpr float k_nav_h         = 72.f;   ///< nav bar pixel height when shown
 constexpr float k_nav_hide_time = 3.f;    ///< seconds until auto-hide
 constexpr float k_auto_advance  = 5.f;    ///< seconds per slide in play mode
-constexpr int   k_3d_page_idx   = k_page_count - 1;  ///< index of scene3d page
+constexpr int   k_3d_page_idx   = k_page_count - 2;  ///< index of scene3d page
+constexpr int   k_animal_page_idx = k_page_count - 1;
 
 // Page-transition fade durations (seconds).
 // k_fade_out: old page fades to black.  k_fade_in: new page revealed.
@@ -118,6 +165,7 @@ Uint64 g_last_ns    = 0;
 std::string g_base_path;
 
 std::unique_ptr<CrystalAnimState> g_crystal_state;
+std::unique_ptr<AnimalAnimState>  g_animal_state;
 
 // Page-transition fade state machine
 // FadingOut: old page disappears behind a black overlay (k_fade_out_dur s).
@@ -131,9 +179,7 @@ float     g_fade_t           = 0.f;    ///< elapsed time inside current fade pha
 int       g_fade_target_page = -1;     ///< page queued during FadingOut
 
 // Orbit camera state (used on the scene3d page)
-float  g_yaw_deg   =  20.f;
-float  g_pitch_deg =  18.f;
-float  g_dist      =   5.f;
+// Angles and distance are now stored in GltfCamera::orbit_* fields.
 bool   g_dragging  = false;
 float  g_drag_mx   =  0.f;
 float  g_drag_my   =  0.f;
@@ -223,6 +269,7 @@ static void setOverlayAlpha(float a)
     n->dirty_render = true;
 }
 
+
 /// navigatePage  —  animated page change
 //  Drop-in replacement for bare loadPage() calls.  When not already in a
 //  transition it kicks off a FadingOut phase; when a transition is in flight
@@ -261,17 +308,7 @@ static void clearChildren(pce::sdlos::RenderTree& tree,
 }
 
 
-static void updateOrbitCamera()
-{
-    // recompute eye position from yaw/pitch/dist
-    constexpr float kD2R = 3.14159265f / 180.f;
-    const float pitch_r  = g_pitch_deg * kD2R;
-    const float yaw_r    = g_yaw_deg   * kD2R;
-    const float ex = g_dist * std::cos(pitch_r) * std::sin(yaw_r);
-    const float ey = g_dist * std::sin(pitch_r);
-    const float ez = g_dist * std::cos(pitch_r) * std::cos(yaw_r);
-    g_scene.camera().lookAt(ex, ey, ez,   0.f, 1.f, 0.f);
-}
+
 
 
 static void showNav()
@@ -328,7 +365,8 @@ static void updateDots()
             const bool active = (i == g_page);
             // Active dot: white, wide pill.  Inactive: dim, small square.
             n->setStyle("backgroundColor", active ? "#ffffffff" : "#ffffff33");
-            n->setStyle("width",           active ? "24" : "8");
+            const char* width_val = active ? "24" : "8";
+            n->setStyle("width",           width_val);
             n->layout_props.width = active ? 24.f : 8.f;
             n->w                  = active ? 24.f : 8.f;
             n->dirty_render       = true;
@@ -362,13 +400,53 @@ static void update3DVisibility()
     if (!g_tree) return;
 
     const NodeHandle sg3d = g_tree->findById(g_root, "sg-3d");
-    if (!sg3d.valid()) return;
-
-    if (RenderNode* n = g_tree->node(sg3d)) {
-        const bool show = (g_page == k_3d_page_idx);
-        n->setStyle("display", show ? "block" : "none");
-        g_tree->markDirty(sg3d);
+    if (sg3d.valid()) {
+        if (RenderNode* n = g_tree->node(sg3d)) {
+            const bool show = (g_page == k_3d_page_idx);
+            n->setStyle("display", show ? "block" : "none");
+            g_tree->markDirty(sg3d);
+        }
     }
+
+    const NodeHandle animal_scene = g_tree->findById(g_root, "animal-scene");
+    if (animal_scene.valid()) {
+        if (RenderNode* n = g_tree->node(animal_scene)) {
+            const bool show = (g_page == k_animal_page_idx);
+            n->setStyle("display", show ? "block" : "none");
+            g_tree->markDirty(animal_scene);
+        }
+    }
+}
+
+static void updateAnimalScene()
+{
+    using namespace pce::sdlos;
+    if (!g_tree || !g_animal_state) return;
+
+    const NodeHandle scene_h = g_tree->findById(g_root, "animal-scene");
+    if (!scene_h.valid()) return;
+
+    RenderNode* n = g_tree->node(scene_h);
+    if (!n) return;
+
+    const int idx = g_animal_state->current_animal_idx;
+    n->setStyle("src", k_animal_models[idx]);
+    g_tree->markDirty(scene_h);
+
+    // Update UI text (hidden by default)
+    const NodeHandle name_h = g_tree->findById(g_root, "animal-name-text");
+    if (name_h.valid()) {
+        if (RenderNode* nn = g_tree->node(name_h)) {
+            nn->setStyle("text", k_animal_names[idx]);
+            nn->dirty_render = true;
+        }
+    }
+
+    // Reset reveal state
+    g_animal_state->name_revealed = false;
+    g_animal_state->reveal_y.set(0.f);
+
+    sdlos_log("[styleguide] animal changed to: " + std::string(k_animal_names[idx]));
 }
 
 static void loadPage(int page)
@@ -411,16 +489,22 @@ static void loadPage(int page)
     }
 
     // 3. Cascade a full re-layout + re-render from the root.
-    // markLayoutDirty propagates dirty_layout up to the root so that the
-    // FlexColumn page-container distributes its height to the new children.
-    // forceAllDirty ensures every node re-emits draw commands on the next
-    // frame (required because the UI offscreen texture was cleared).
     g_tree->markLayoutDirty(g_page_container);
     g_tree->forceAllDirty(g_tree->root());
+
 
     // 4. Update chrome that reflects page state.
     update3DVisibility();
     updateDots();
+
+    // Reset animal handle on page load
+    if (g_animal_state) {
+        // g_animal_state->parrot_h = k_null_handle; // Removed to avoid resetting on simple page loads
+    }
+
+    if (g_page == k_animal_page_idx) {
+        updateAnimalScene();
+    }
 
     sdlos_log("[styleguide] page " + std::to_string(g_page)
               + " → " + k_pages[g_page].title
@@ -501,9 +585,6 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     g_nav_timer    = 0.f;
     g_play_timer   = 0.f;
     g_dragging     = false;
-    g_yaw_deg      = 20.f;
-    g_pitch_deg    = 18.f;
-    g_dist         =  5.f;
     g_last_ns      = SDL_GetTicksNS();
 
     // Fade state — always start clean so a hot-reload or sdlos:navigate
@@ -545,32 +626,16 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         renderer.setGpuPreShutdownHook([]() noexcept { g_scene.shutdown(); });
     }
 
+    // Allocate animal state early
+    g_animal_state = std::make_unique<AnimalAnimState>();
+
     // 3. Override scene3d src before attach()
     //
     // jade_host's resolveAssetPaths() already ran and resolved the jade's
     // src="data/models/Crystal_Small_03.glb" relative to the JADE SOURCE
     // directory.  Override it here to point at the binary-dir copy that
     // CMake placed next to the executable.
-    if (init_ok) {
-        const NodeHandle sg3d = tree.findById(root, "sg-3d");
-        if (sg3d.valid()) {
-            if (RenderNode* n = tree.node(sg3d)) {
-                n->setStyle("src",
-                    g_base_path + "data/models/Crystal_Small_03.glb");
-            }
-        }
-    }
 
-    // 4. Attach scene (scans tree for scene3d nodes)
-    if (init_ok) {
-        const int mc = g_scene.attach(tree, root, g_base_path);
-        if (mc > 0)
-            sdlos_log("[styleguide] attached " + std::to_string(mc)
-                      + " mesh primitive(s)");
-        else
-            sdlos_log("[styleguide] attach(): no meshes — "
-                      "check data/models/Crystal_Small_03.glb");
-    }
 
     // 5. Load scene.css — 3-D material overrides
     if (init_ok) {
@@ -630,11 +695,24 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             }
         }
 
+        // Initialize Animal handle if found
+        const NodeHandle parrot_h = tree.findById(root, "parrot-mesh");
+        if (parrot_h.valid()) {
+            g_animal_state->parrot_h = parrot_h;
+            if (RenderNode* n = tree.node(parrot_h)) {
+                n->setStyle("--scale", "3.0");
+                n->setStyle("--translate-y", "0");
+                n->setStyle("--rotation-x", "0");
+            }
+        }
+
         // Perspective camera — initial orbital position.
+        // Target at (0, 1, 0) so the model center (mid-height) is in view.
         g_scene.camera().perspective(
             45.f,
             static_cast<float>(SDLOS_WIN_W) / static_cast<float>(SDLOS_WIN_H));
-        updateOrbitCamera();
+        g_scene.camera().setOrbitTarget(0.f, 1.f, 0.f);
+        g_scene.camera().orbit(20.f, 18.f, 5.f);
     }
 
     // 6. Load first page into #page-container
@@ -686,9 +764,47 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
              }
 
              // Page-transition fade (fade-to-black between pages).
-             // tickFade() returns true while animating so we can keep
-             // dirty_render live without touching the nav timers.
              tickFade(dt);
+
+             // Animal animation update
+             if (g_animal_state && g_animal_state->parrot_h.valid() && g_page == k_animal_page_idx) {
+                 if (RenderNode* n = g_tree->node(g_animal_state->parrot_h)) {
+                     char buf_y[32], buf_r[32];
+                     std::snprintf(buf_y, sizeof(buf_y), "%.3f", g_animal_state->hop_y.current());
+                     std::snprintf(buf_r, sizeof(buf_r), "%.1f", g_animal_state->roll_x.current());
+                     n->setStyle("--translate-y", buf_y);
+                     n->setStyle("--rotation-x", buf_r);
+                     n->dirty_render = true;
+                     g_tree->markDirty(g_animal_state->parrot_h);
+                 }
+
+                 // Update name reveal UI animation
+                 const NodeHandle reveal_h = g_tree->findById(g_root, "animal-name-container");
+                 if (reveal_h.valid()) {
+                     if (RenderNode* rn = g_tree->node(reveal_h)) {
+                         const float t = g_animal_state->reveal_y.current();
+                         // Animate background alpha: hidden=fully transparent, revealed=semi-opaque
+                         const unsigned ab = static_cast<unsigned>(t * 153.f + 0.5f); // 0→0, 1→99 (60%)
+                         char buf[12];
+                         std::snprintf(buf, sizeof(buf), "#000000%02x", ab);
+                         rn->setStyle("backgroundColor", buf);
+                         rn->dirty_render = true;
+                     }
+                 }
+                 // Update name text visibility
+                 const NodeHandle name_h = g_tree->findById(g_root, "animal-name-text");
+                 if (name_h.valid()) {
+                     if (RenderNode* rn = g_tree->node(name_h)) {
+                         const float t = g_animal_state->reveal_y.current();
+                         // Color alpha: fully transparent when hidden, white when revealed
+                         const unsigned ab = static_cast<unsigned>(t * 255.f + 0.5f);
+                         char buf[12];
+                         std::snprintf(buf, sizeof(buf), "#ffffff%02x", ab);
+                         rn->setStyle("color", buf);
+                         rn->dirty_render = true;
+                     }
+                 }
+             }
 
              // Auto-advance slideshow.
              if (g_playing) {
@@ -721,6 +837,43 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         showNav();
     });
 
+    bus.subscribe("animal:hop", [](const std::string&) {
+        if (!g_animal_state) return;
+        g_animal_state->hop_y.transition(0.4f, 250.f, pce::sdlos::easing::easeOutSpringBouncy);
+    });
+
+    bus.subscribe("animal:roll", [](const std::string&) {
+        if (!g_animal_state) return;
+        g_animal_state->roll_x.transition(25.f, 300.f, pce::sdlos::easing::easeOutSpringSnappy);
+    });
+
+    bus.subscribe("animal:next", [](const std::string&) {
+        if (!g_animal_state) return;
+        g_animal_state->current_animal_idx = (g_animal_state->current_animal_idx + 1) % k_animal_count;
+        updateAnimalScene();
+    });
+
+    bus.subscribe("animal:prev", [](const std::string&) {
+        if (!g_animal_state) return;
+        g_animal_state->current_animal_idx = (g_animal_state->current_animal_idx + k_animal_count - 1) % k_animal_count;
+        updateAnimalScene();
+    });
+
+    bus.subscribe("animal:reveal", [](const std::string&) {
+        if (!g_animal_state) return;
+        g_animal_state->name_revealed = !g_animal_state->name_revealed;
+        // Wrap easeOutBack to match EasingFn signature (float->float)
+        auto ease_fn = [](float t) -> float { return pce::sdlos::easing::easeOutBack(t); };
+        g_animal_state->reveal_y.transition(g_animal_state->name_revealed ? 1.0f : 0.0f, 400.f, ease_fn);
+    });
+
+    bus.subscribe("animal:sound", [](const std::string&) {
+        sdlos_log("[styleguide] Mooo! Baaa! (Sound system placeholder triggered)");
+        // Trigger a tiny hop to acknowledge
+        if (g_animal_state)
+            g_animal_state->hop_y.transition(0.2f, 150.f, pce::sdlos::easing::easeOutSpringBouncy);
+    });
+
      // hotspot:select — update the info line on the scene3d page (if loaded)
      bus.subscribe("hotspot:select", [](const std::string& payload) {
          if (!g_tree) return;
@@ -730,8 +883,8 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
              // Accelerate: complete one more full rotation at faster speed
              const float current_rot = g_crystal_state->rotation_z.current();
              g_crystal_state->rotation_z.transition(
-                 current_rot + 360.f,       // one extra revolution from current position
-                 2000.f,                    // faster: 2 seconds instead of 4
+                 current_rot + 360.f,         // one extra revolution from current position
+                 2000.f,                      // faster: 2 seconds instead of 4
                  pce::sdlos::easing::easeOut  // smooth deceleration at the end
              );
              sdlos_log("[styleguide] crystal boost spin triggered");
@@ -773,7 +926,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
 
     // Event Handlers
-    out_handler = [](const SDL_Event& ev) -> bool {
+    out_handler = [&bus](const SDL_Event& ev) -> bool {
 
         switch (ev.type) {
 
@@ -784,10 +937,9 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             if (g_tree && !g_scene_css.hover.empty())
                 g_scene_css.tickHover(*g_tree, ev.motion.x, ev.motion.y);
             if (g_dragging) {
-                g_yaw_deg   += ev.motion.xrel * 0.45f;
-                g_pitch_deg  = std::clamp(
-                    g_pitch_deg - ev.motion.yrel * 0.45f, -60.f, 80.f);
-                updateOrbitCamera();
+                g_scene.camera().orbitBy(
+                    ev.motion.xrel *  0.45f,
+                    ev.motion.yrel * -0.45f);
             }
             return false;   // let jade_host dispatch click / tickHover
 
@@ -807,8 +959,11 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
         case SDL_EVENT_MOUSE_WHEEL:
             showNav();
-            g_dist = std::clamp(g_dist - ev.wheel.y * 0.3f, 1.5f, 20.f);
-            updateOrbitCamera();
+            {
+                auto& cam = g_scene.camera();
+                cam.orbit_dist = std::clamp(cam.orbit_dist - ev.wheel.y * 0.3f, 1.5f, 20.f);
+                cam.updateOrbit();
+            }
             return false;
 
         case SDL_EVENT_KEY_DOWN:
@@ -816,11 +971,25 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             switch (ev.key.scancode) {
 
             case SDL_SCANCODE_LEFT:
+                if (g_page == k_animal_page_idx) {
+                    g_animal_state->current_animal_idx = (g_animal_state->current_animal_idx + k_animal_count - 1) % k_animal_count;
+                    updateAnimalScene();
+                    return true;
+                }
                 case SDL_SCANCODE_UP:
+                    if (g_page == k_animal_page_idx) {
+                        bus.publish("animal:reveal", "");
+                        return true;
+                    }
                     navigatePage(g_page - 1);
                     return true;
 
                 case SDL_SCANCODE_RIGHT:
+                    if (g_page == k_animal_page_idx) {
+                        g_animal_state->current_animal_idx = (g_animal_state->current_animal_idx + 1) % k_animal_count;
+                        updateAnimalScene();
+                        return true;
+                    }
                 case SDL_SCANCODE_DOWN:
                     navigatePage(g_page + 1);
                     return true;
@@ -880,6 +1049,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             }
             // Fully transparent to start; tickFade() writes the alpha byte.
             n->setStyle("backgroundColor", "#00000000");
+            //n->setStyle("backgroundColor", "#000000FF");
             n->dirty_render = false;
         }
         bindDrawCallbacks(tree, overlay);

@@ -375,13 +375,19 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     auto state = std::make_shared<VfsState>();
 
-    // ── Load UI sound effects ─────────────────────────────────────────────────
+    // Load UI sound effects
+    //
     {
+        // TODO vfd
         const char* bp = SDL_GetBasePath();
-        const std::string snd = bp ? std::string(bp) + "data/sounds/" : "data/sounds/";
-        state->sfx.load("click",  snd + "neueis_7.wav");
-        state->sfx.load("nav",    snd + "neueis_8.wav");
-        state->sfx.load("action", snd + "neueis_9.wav");
+        const std::string snd = bp ? std::string(bp) + "data/sounds/ui/" : "data/sounds/ui";
+        state->sfx.load("click",  snd + "shakeregment-1.wav");
+        state->sfx.load("nav",    snd + "shakeregment-9.wav");
+        state->sfx.load_group("action", {
+            snd + "shakeregment-1.wav",
+            snd + "shakeregment-9.wav",
+            snd + "shakeregment-17.wav",
+        }, pce::sdlos::SfxPlayer::Unisono);
     }
 
     // VFS mounts
@@ -441,10 +447,10 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
               + " file-list=" + (state->file_list_h.valid()     ? "ok" : "MISSING")
               + " audio="     + (state->audio_node_h.valid()    ? "ok" : "MISSING"));
 
-    // ── Build scheme chips from live vfs.schemes() ────────────────────────────
+    // ── Build scheme chips from live vfs.schemes()
     rebuildSchemeChips(tree, bus, *state);
 
-    // ── Default view: asset://sounds/ ─────────────────────────────────────────
+    //  Default view: asset://sounds/
     // Select the "asset" scheme and navigate into sounds/ so the user sees the
     // list of audio files immediately on launch.
     {
@@ -455,7 +461,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         populateFileList(tree, bus, *state);
     }
 
-    // ── Auto-play a static src= on the audio node (if any) ───────────────────
+    // Auto-play a static src= on the audio node (if any)
     // If the jade source has  audio(src="asset://audio/ambient.wav")  the URI
     // is preserved verbatim (resolveAssetPaths skips "://") so we can play it
     // here before the user interacts with the file browser.
@@ -473,7 +479,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         }
     }
 
-    // ── Bus subscriptions ──────────────────────────────────────────────────────
+    // Bus subscriptions
 
     // Scheme chip clicked → list that scheme's root directory.
     bus.subscribe("vfs:scheme",

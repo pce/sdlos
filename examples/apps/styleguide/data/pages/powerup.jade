@@ -1,0 +1,21 @@
+
+
+
+      div
+        code
+          const std::string snd = "data/sounds/ui/";
+
+          // Play all 3 simultaneously
+          state->sfx.load_group("powerup", {
+          snd + "energy_hum.wav",
+              snd + "spark.wav",
+              snd + "burst.wav",
+              }, pce::sdlos::SfxPlayer::Unisono);
+
+          // Play all 3 in immediate succession (concatenated)
+          state->sfx.load_group("combo", {
+          snd + "hit_1.wav",
+              snd + "hit_2.wav",
+              snd + "hit_3.wav",
+              }, pce::sdlos::SfxPlayer::Chase);
+

@@ -8,7 +8,6 @@
 // parsed, styled, and layout-bound.
 //
 // FrameGraph integration
-// ----------------------
 // The render pipeline lives in data/pipeline.pug (three passes):
 //
 //   pass#bg        — animated FBM noise background     → bg_color (rgba16f)
@@ -20,38 +19,32 @@
 // scoped theme rules (e.g. pipeline.night #grade { … }) take effect.
 //
 // Theme switching
-// ---------------
 // Theme chips fire {$name$}:theme (payload = "default"|"night"|"vivid").
 // The callback calls FrameGraph::add_class / remove_class, which re-runs all
 // scoped CSS rules for the new class — no recompile needed for Bucket-C changes.
 //
 // Quality switching
-// -----------------
 // Quality chips fire {$name$}:quality (payload = "normal"|"low").
 // "low"    → adds "low-power" CSS class  → disables vignette pass (zero cost).
 // "normal" → removes "low-power" class   → re-enables vignette.
 //
 // Live parameter controls
-// -----------------------
 // +/– steppers fire {$name$}:inc / {$name$}:dec (payload = "pass:key").
 // The callback calls CompiledGraph::patch(pass, key, val) — one float write,
 // no string map lookup in the hot path.  The GPU sees the change next frame.
 //
 // Lifecycle note on GetCompiledGraph()
-// ------------------------------------
 // CompiledGraph is built on the first Render() call (swapchain format is
 // needed).  By the time any bus callback fires (user interaction), the first
 // frame will already have rendered.  All callbacks guard against null anyway.
 //
 // EventBus topics consumed
-// ────────────────────────
 //   {$name$}:theme    payload = "default" | "night" | "vivid"
 //   {$name$}:quality  payload = "normal"  | "low"
 //   {$name$}:inc      payload = "pass:key"  (e.g. "bg:speed")
 //   {$name$}:dec      payload = "pass:key"
 //
 // Customisation guide
-// -------------------
 //   1. Add rows to the params vector inside the user region — make sure the
 //      pass_id and key match an attr declared in data/pipeline.pug, and add
 //      a matching val node id in {$name$}.jade.
@@ -62,16 +55,14 @@
 //   4. Run  sdlos pipeline {$name$}  to validate pipeline wiring in the terminal.
 //
 // Regeneration
-// ------------
 //   sdlos create {$name$} --overwrite
 //   Code between "enter the forrest" / "back to the sea" markers is preserved.
 //
 // Performance notes
-// -----------------
-//   • CompiledGraph::patch() is O(pass_count) — called only on UI interaction.
-//   • FrameGraph::add_class() / remove_class() walk CSS rules once per call —
+//   - CompiledGraph::patch() is O(pass_count) — called only on UI interaction.
+//   - FrameGraph::add_class() / remove_class() walk CSS rules once per call —
 //     never called per frame.
-//   • GetCompiledGraph() returns a cached pointer; no allocation or lock.
+//   - GetCompiledGraph() returns a cached pointer; no allocation or lock.
 // =============================================================================
 
 #include <algorithm>
@@ -144,7 +135,7 @@ struct {$pascal_name$}State {
     };
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 static std::string fmtParam(float v) noexcept
 {
@@ -222,7 +213,7 @@ static std::size_t resolveParam(const {$pascal_name$}State& s,
 
 } // namespace
 
-// ── jade_app_init ─────────────────────────────────────────────────────────────
+// jade_app_init
 
 void jade_app_init(pce::sdlos::RenderTree&               tree,
                    pce::sdlos::NodeHandle                 root,
@@ -232,7 +223,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 {
     auto state = std::make_shared<{$pascal_name$}State>();
 
-    // ── Locate nodes ──────────────────────────────────────────────────────────
+    // Locate nodes
     state->chip_default_h = tree.findById(root, "chip-default");
     state->chip_night_h   = tree.findById(root, "chip-night");
     state->chip_vivid_h   = tree.findById(root, "chip-vivid");
@@ -249,7 +240,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
               + std::string(state->chip_default_h.valid() ? "chips=ok" : "chips=MISSING")
               + "  params=" + std::to_string(state->params.size()));
 
-    // ── Load and apply pipeline.css ───────────────────────────────────────────
+    // Load and apply pipeline.css
     // SDLRenderer::SetDataBasePath() auto-loads pipeline.pug but NOT pipeline.css
     // into the FrameGraph — load it here so base and scoped CSS rules take effect
     // (e.g. pipeline.night #grade { exposure: 0.75; }).
@@ -273,7 +264,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         }
     }
 
-    // ── Theme subscription ────────────────────────────────────────────────────
+    // Theme subscription
     // payload = "default" | "night" | "vivid"  (or any custom class you add)
     //
     // Sequence:
@@ -306,7 +297,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                       + (new_class.empty() ? "default" : new_class));
         });
 
-    // ── Quality subscription ──────────────────────────────────────────────────
+    // Quality subscription
     // payload = "normal" | "low"
     //
     // "low"    → adds "low-power" CSS class (pipeline.css disables vignette).
@@ -329,7 +320,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             sdlos_log("[{$name$}] quality → " + quality);
         });
 
-    // ── Param increment ───────────────────────────────────────────────────────
+    // Param increment
     // payload = "pass:key"  (e.g. "bg:speed", "grade:exposure")
     bus.subscribe("{$name$}:inc",
         [&tree, &renderer, state](const std::string& payload) {
@@ -340,7 +331,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             applyParam(tree, p, renderer.GetCompiledGraph());
         });
 
-    // ── Param decrement ───────────────────────────────────────────────────────
+    // Param decrement
     bus.subscribe("{$name$}:dec",
         [&tree, &renderer, state](const std::string& payload) {
             const std::size_t idx = resolveParam(*state, payload);
@@ -350,7 +341,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             applyParam(tree, p, renderer.GetCompiledGraph());
         });
 
-    // ── User extension point ──────────────────────────────────────────────────
+    // User extension point
     // --- enter the forrest ---
 
     // Add custom bus subscriptions here.  Examples:
@@ -369,7 +360,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     // --- back to the sea ---
 
-    // ── Initial chip highlight ────────────────────────────────────────────────
+    // Initial chip highlight
     // Set the "Default" theme chip active and "Normal" quality chip active
     // to match the initial state (no CSS class set on the pipeline root).
     refreshThemeChips(tree, *state);

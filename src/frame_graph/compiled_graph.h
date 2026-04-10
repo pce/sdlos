@@ -34,8 +34,8 @@ namespace pce::sdlos::fg {
 // Pushed to the GPU via SDL_PushGPUFragmentUniformData once per pass.
 // Maximum 16 floats (64 bytes) per pass — covers all practical post-FX needs.
 struct CompiledParams {
-    std::array<float, 16> data  {};
-    uint32_t              count = 0;   ///< populated slots; only this many bytes pushed
+    std::array<float, 16> data{};
+    uint32_t count = 0;  ///< populated slots; only this many bytes pushed
 
     /**
      * @brief Set a uniform parameter by slot
@@ -46,7 +46,8 @@ struct CompiledParams {
     void set(uint32_t slot, float v) noexcept {
         if (slot < 16u) {
             data[slot] = v;
-            if (slot + 1u > count) count = slot + 1u;
+            if (slot + 1u > count)
+                count = slot + 1u;
         }
     }
 
@@ -55,13 +56,11 @@ struct CompiledParams {
      *
      * @return true when no parameters have been set
      */
-    constexpr bool  empty()     const noexcept { return count == 0; }
+    constexpr bool empty() const noexcept { return count == 0; }
     constexpr float operator[](uint32_t i) const noexcept { return data[i]; }
 
     /// Raw byte span pushed to SDL_PushGPUFragmentUniformData.
-    std::span<const float> span() const noexcept {
-        return { data.data(), count };
-    }
+    std::span<const float> span() const noexcept { return {data.data(), count}; }
 };
 
 // ResourceBinding
@@ -70,9 +69,9 @@ struct CompiledParams {
 // slot.  Resolved from the ResourcePool during compile(); never a string
 // lookup at execute() time.
 struct ResourceBinding {
-    SDL_GPUTexture* texture = nullptr;  ///< non-owning; owned by ResourcePool
-    SDL_GPUSampler* sampler = nullptr;  ///< shared linear sampler from device
-    uint32_t        slot    = 0;
+    SDL_GPUTexture *texture = nullptr;  ///< non-owning; owned by ResourcePool
+    SDL_GPUSampler *sampler = nullptr;  ///< shared linear sampler from device
+    uint32_t slot           = 0;
 };
 
 // CompiledPass
@@ -88,13 +87,13 @@ struct ResourceBinding {
 //   - id_hash last (only used by patch(), never by execute())
 struct CompiledPass {
     // Hot fields
-    SDL_GPUGraphicsPipeline* pipeline   = nullptr;  ///< pre-selected PSO
-    SDL_GPUTexture*          output     = nullptr;  ///< render target for this pass
-    bool                     enabled    = true;     ///< false → skip, forward input
+    SDL_GPUGraphicsPipeline *pipeline = nullptr;  ///< pre-selected PSO
+    SDL_GPUTexture *output            = nullptr;  ///< render target for this pass
+    bool enabled                      = true;     ///< false → skip, forward input
 
     // Bindings
-    uint8_t                        bind_count = 0;
-    std::array<ResourceBinding, 8> bindings   = {};
+    uint8_t bind_count                      = 0;
+    std::array<ResourceBinding, 8> bindings = {};
 
     // Params (Bucket C uniforms)
     CompiledParams params;
@@ -106,19 +105,23 @@ struct CompiledPass {
     uint8_t time_slot = 255u;
 
     // Cold fields (patch() only — never read in execute())
-    uint32_t id_hash = 0;   ///< fnv1a(pass_id) — dispatch key for patch()
+    uint32_t id_hash = 0;  ///< fnv1a(pass_id) — dispatch key for patch()
 
     // Param slot reverse-map (for named patch by key string)
     // Maps fnv1a(key) → slot index.  Built at compile time; used only in
     // the cold patch() path, not in execute().
-    struct SlotEntry { uint32_t key_hash; uint8_t slot; };
-    std::array<SlotEntry, 16> slot_map   = {};
-    uint8_t                   slot_count = 0;
+    struct SlotEntry {
+        uint32_t key_hash;
+        uint8_t slot;
+    };
+    std::array<SlotEntry, 16> slot_map = {};
+    uint8_t slot_count                 = 0;
 
     /// Look up a param slot by key hash.  Returns 255 if not found.
     uint8_t find_slot(uint32_t key_hash) const noexcept {
         for (uint8_t i = 0; i < slot_count; ++i)
-            if (slot_map[i].key_hash == key_hash) return slot_map[i].slot;
+            if (slot_map[i].key_hash == key_hash)
+                return slot_map[i].slot;
         return 255u;
     }
 };
@@ -134,10 +137,8 @@ struct CompiledPass {
 //     in SDL3 GPU; the pool holds the intermediate targets which are stable).
 //   - No heap allocation.  No string operations.  No map lookups.
 struct CompiledGraph {
-    std::vector<CompiledPass> passes;       ///< topological order, baked
-    SDL_GPUSampler*           sampler = nullptr;  ///< shared linear clamp sampler
-
-
+    std::vector<CompiledPass> passes;   ///< topological order, baked
+    SDL_GPUSampler *sampler = nullptr;  ///< shared linear clamp sampler
 
     /// Execute the compiled pipeline.
     ///
@@ -161,12 +162,12 @@ struct CompiledGraph {
     /// @param vp_h       Viewport height in physical pixels.
     /// @param time       Wall-clock time in seconds, forwarded to any pass
     ///                   that declares a "time" param.  Defaults to 0.
-    void execute(SDL_GPUCommandBuffer* cmd,
-                 SDL_GPUTexture*       swapchain,
-                 uint32_t              vp_w,
-                 uint32_t              vp_h,
-                 float                 time = 0.f) noexcept;
-
+    void execute(
+        SDL_GPUCommandBuffer *cmd,
+        SDL_GPUTexture *swapchain,
+        uint32_t vp_w,
+        uint32_t vp_h,
+        float time = 0.f) noexcept;
 
     /// Update a single float param on a named pass.
     ///
@@ -176,9 +177,7 @@ struct CompiledGraph {
     /// @param pass_id  Pass id string, e.g. "fog".
     /// @param key      Param key string, e.g. "density".
     /// @param val      New float value.
-    void patch(std::string_view pass_id,
-               std::string_view key,
-               float            val) noexcept;
+    void patch(std::string_view pass_id, std::string_view key, float val) noexcept;
 
     /// Enable or disable a pass by name.
     ///
@@ -190,36 +189,33 @@ struct CompiledGraph {
     ///
     /// Called by the CSS integration layer for every property change on a
     /// pipeline node.  Converts string value to float for numeric properties.
-    void apply_style(std::string_view pass_id,
-                     std::string_view key,
-                     std::string_view val) noexcept;
-
+    void apply_style(std::string_view pass_id, std::string_view key, std::string_view val) noexcept;
 
     /**
      * @brief Check if graph is empty
      *
      * @return true when no passes are present
      */
-    bool              empty()       const noexcept { return passes.empty(); }
+    bool empty() const noexcept { return passes.empty(); }
     /**
      * @brief Get total number of passes
      *
      * @return Number of passes in the compiled graph
      */
-    std::size_t       pass_count()  const noexcept { return passes.size();  }
+    std::size_t pass_count() const noexcept { return passes.size(); }
     /**
      * @brief Get number of enabled passes
      *
      * @return Number of currently enabled passes (disabled passes skipped)
      */
-    std::size_t       active_count() const noexcept;
+    std::size_t active_count() const noexcept;
 
     /// pass states to stdout for development.
     void dump() const noexcept;
 
-private:
+  private:
     /// Find a pass by FNV hash.  Returns nullptr if not found.
-    CompiledPass* find_pass(uint32_t id_hash) noexcept;
+    CompiledPass *find_pass(uint32_t id_hash) noexcept;
 };
 
-} // namespace pce::sdlos::fg
+}  // namespace pce::sdlos::fg

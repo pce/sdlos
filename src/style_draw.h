@@ -31,6 +31,6 @@ namespace pce::sdlos {
  * @param tree  Red channel component [0, 1]
  * @param root  Red channel component [0, 1]
  */
-void bindDrawCallbacks(RenderTree& tree, NodeHandle root);
+void bindDrawCallbacks(RenderTree &tree, NodeHandle root);
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

@@ -21,7 +21,7 @@ This means that:
 Template lookup
 ---------------
 Templates live under  src/sdlos/templates/<template_name>/<kind>.j2
-where <kind> is one of:  jade  css  behavior_cxx
+where <kind> is one of:  jade  css  behavior_cc
 
 The renderer is usable without installing the package: it resolves the
 templates directory relative to this file via FileSystemLoader.
@@ -46,13 +46,13 @@ from ..core.naming import pascal as _pascal
 
 # ── Template kinds ────────────────────────────────────────────────────────────
 
-KINDS = ("jade", "css", "behavior_cxx")
+KINDS = ("jade", "css", "behavior_cc")
 
 # Maps kind → output filename template  (receives *name* as a format arg)
 _FILENAME_MAP: dict[str, str] = {
-    "jade":         "{name}.jade",
-    "css":          "{name}.css",
-    "behavior_cxx": "{name}_behavior.cxx",
+    "jade":        "{name}.jade",
+    "css":         "{name}.css",
+    "behavior_cc": "{name}_behavior.cxx",
 }
 
 _TEMPLATES_DIR = Path(__file__).parent
@@ -104,7 +104,7 @@ def render_template(template_name: str, kind: str, cfg: "AppConfig") -> str:
         One of ``minimal``, ``shader``, ``camera`` (matches a subdirectory
         under ``src/sdlos/templates/``).
     kind:
-        One of ``jade``, ``css``, ``behavior_cxx``.
+        One of ``jade``, ``css``, ``behavior_cc``.
     cfg:
         The :class:`~sdlos.config.schema.AppConfig` that drives generation.
 
@@ -146,7 +146,7 @@ def output_filename(kind: str, name: str) -> str:
 
     >>> output_filename("jade", "my_app")
     'my_app.jade'
-    >>> output_filename("behavior_cxx", "my_app")
+    >>> output_filename("behavior_cc", "my_app")
     'my_app_behavior.cxx'
     """
     if kind not in _FILENAME_MAP:

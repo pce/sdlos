@@ -90,12 +90,11 @@
 namespace pce::vfs {
 
 class UnionMount final : public IMount {
-public:
-
+  public:
     /**
      * @brief Union mount
      */
-    UnionMount()  = default;
+    UnionMount() = default;
     /**
      * @brief ~union mount
      */
@@ -107,15 +106,15 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    UnionMount(const UnionMount&)            = delete;
-    UnionMount& operator=(const UnionMount&) = delete;
+    UnionMount(const UnionMount &)            = delete;
+    UnionMount &operator=(const UnionMount &) = delete;
     /**
      * @brief Union mount
      *
      * @param param0  Red channel component [0, 1]
      */
-    UnionMount(UnionMount&&)                 = delete;
-    UnionMount& operator=(UnionMount&&)      = delete;
+    UnionMount(UnionMount &&)            = delete;
+    UnionMount &operator=(UnionMount &&) = delete;
 
     // =========================================================================
     // Layer management
@@ -123,9 +122,9 @@ public:
 
     // Layer descriptor — returned by layers() for inspection / debugging.
     struct LayerInfo {
-        int         priority  = 0;
-        bool        read_only = false;
-        IMount*     mount     = nullptr;   // non-owning view
+        int priority   = 0;
+        bool read_only = false;
+        IMount *mount  = nullptr;  // non-owning view
     };
 
     /// Add a layer.  Ownership is transferred.
@@ -139,9 +138,7 @@ public:
     ///
     /// Returns a raw non-owning pointer to the added mount (useful for
     /// configuring the mount after insertion, e.g. seeding a MemMount).
-    IMount* add(std::unique_ptr<IMount> mount,
-                int  priority  = 0,
-                bool read_only = false);
+    IMount *add(std::unique_ptr<IMount> mount, int priority = 0, bool read_only = false);
 
     /// Add a shared-ownership layer.  Use this when you need to retain a
     /// reference outside the UnionMount (e.g. to hot-patch a MemMount):
@@ -149,9 +146,7 @@ public:
     ///   auto mem = std::make_shared<MemMount>();
     ///   union_mount->add_shared(mem, 10);
     ///   mem->put_text("config.json", "{}");  // override after registration
-    IMount* add_shared(std::shared_ptr<IMount> mount,
-                       int  priority  = 0,
-                       bool read_only = false);
+    IMount *add_shared(std::shared_ptr<IMount> mount, int priority = 0, bool read_only = false);
 
     /// Remove all layers with the given priority.
     /// No-op if none match.
@@ -161,16 +156,19 @@ public:
     void clear() noexcept;
 
     /// Return a snapshot of current layer descriptors (priority desc order).
-    [[nodiscard]] std::vector<LayerInfo> layers() const noexcept;
+    [[nodiscard]]
+    std::vector<LayerInfo> layers() const noexcept;
 
     /// Return the number of registered layers.
-    [[nodiscard]] std::size_t layer_count() const noexcept;
+    [[nodiscard]]
+    std::size_t layer_count() const noexcept;
 
     // =========================================================================
     // IMount
     // =========================================================================
 
-    [[nodiscard]] std::expected<std::vector<std::byte>, std::string>
+    [[nodiscard]]
+    std::expected<std::vector<std::byte>, std::string>
     read(std::string_view path) noexcept override;
 
     /**
@@ -261,7 +259,16 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string>
     write(std::string_view path, std::span<const std::byte> data) noexcept override;
 
     /**
@@ -341,8 +348,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    remove(std::string_view path) noexcept override;
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> remove(std::string_view path) noexcept override;
 
     /**
      * @brief Stat
@@ -421,8 +435,15 @@ public:
      *
      * @return Stat result
      */
-    [[nodiscard]] Stat
-    stat(std::string_view path) noexcept override;
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
+    [[nodiscard]]
+    Stat stat(std::string_view path) noexcept override;
 
     /**
      * @brief List
@@ -501,8 +522,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::vector<std::string>
-    list(std::string_view path) noexcept override;
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::vector<std::string> list(std::string_view path) noexcept override;
 
     /**
      * @brief Mkdir
@@ -581,19 +609,25 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    mkdir(std::string_view path) noexcept override;
+    /**
+     * @brief Mkdir
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> mkdir(std::string_view path) noexcept override;
 
-private:
-
+  private:
     // =========================================================================
     // Internal
     // =========================================================================
 
     struct Layer {
-        std::shared_ptr<IMount> mount;     // shared so add_shared() works cleanly
-        int                     priority  = 0;
-        bool                    read_only = false;
+        std::shared_ptr<IMount> mount;  // shared so add_shared() works cleanly
+        int priority   = 0;
+        bool read_only = false;
     };
 
     /// Insert a Layer into layers_, maintaining priority-descending order.
@@ -608,12 +642,13 @@ private:
     /// Because mount lifetimes extend beyond the lock (shared_ptr keeps them
     /// alive even after remove()), callers that hold a shared_ptr snapshot
     /// are safe even if another thread concurrently removes layers.
-    [[nodiscard]] std::vector<Layer> snapshot() const noexcept;
+    [[nodiscard]]
+    std::vector<Layer> snapshot() const noexcept;
 
     // ---- State -------------------------------------------------------
 
     mutable std::shared_mutex mu_;
-    std::vector<Layer>        layers_;  // sorted priority desc
+    std::vector<Layer> layers_;  // sorted priority desc
 };
 
-} // namespace pce::vfs
+}  // namespace pce::vfs

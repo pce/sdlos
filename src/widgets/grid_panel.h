@@ -39,9 +39,11 @@
 //   the pipeline.pug string — the index is visual state, the value is the param.
 //
 
-#include "widget.h"
 #include "../render_tree.h"
+#include "widget.h"
+
 #include <SDL3/SDL.h>
+
 #include <functional>
 #include <span>
 #include <string>
@@ -53,23 +55,23 @@ struct GridPanelConfig {
     // 1D mode
     // Set `values` for a flat list of N buttons (single row or wrapped rows).
     // The cell at index i has value values[i] and displays labels[i] if present.
-    std::span<const float>       values;    // e.g. {1,2,3,4,5,6,7,8} octaves
-    std::span<const char* const> labels;    // optional; falls back to fmtVal(values[i])
+    std::span<const float> values;        // e.g. {1,2,3,4,5,6,7,8} octaves
+    std::span<const char *const> labels;  // optional; falls back to fmtVal(values[i])
 
     // 2D mode
     // Set both col_values AND row_values for a matrix picker.
     // Selecting cell (r, c) fires on_change_2d(col_values[c], row_values[r]).
-    std::span<const float>       col_values; // X axis (columns)
-    std::span<const float>       row_values; // Y axis (rows)
-    std::span<const char* const> col_labels;
-    std::span<const char* const> row_labels;
+    std::span<const float> col_values;  // X axis (columns)
+    std::span<const float> row_values;  // Y axis (rows)
+    std::span<const char *const> col_labels;
+    std::span<const char *const> row_labels;
 
     /// Layout
-    uint8_t cols     = 8;    // cells per row
-    uint8_t rows     = 1;    // number of rows
-    float   cell_w   = 32.f;
-    float   cell_h   = 28.f;
-    float   gap      = 2.f;
+    uint8_t cols = 8;  // cells per row
+    uint8_t rows = 1;  // number of rows
+    float cell_w = 32.f;
+    float cell_h = 28.f;
+    float gap    = 2.f;
 
     // Initial selection
     /// 1D: index of initially selected cell
@@ -79,20 +81,20 @@ struct GridPanelConfig {
     std::size_t initial_col = 0;
 
     // Palette
-    Color bg_cell        = Color::hex(0x2c, 0x2c, 0x2e, 0xff);
-    Color bg_selected    = Color::hex(0x63, 0x66, 0xf1, 0xff);
-    Color bg_hover       = Color::hex(0x3a, 0x3a, 0x3c, 0xff);
-    Color text_color     = Color::hex(0xcc, 0xcc, 0xcc, 0xff);
-    Color text_selected  = Color::hex(0xff, 0xff, 0xff, 0xff);
-    float font_size      = 11.f;
-    float border_radius  = 4.f;  // informational; used by drawRect fallback
+    Color bg_cell       = Color::hex(0x2c, 0x2c, 0x2e, 0xff);
+    Color bg_selected   = Color::hex(0x63, 0x66, 0xf1, 0xff);
+    Color bg_hover      = Color::hex(0x3a, 0x3a, 0x3c, 0xff);
+    Color text_color    = Color::hex(0xcc, 0xcc, 0xcc, 0xff);
+    Color text_selected = Color::hex(0xff, 0xff, 0xff, 0xff);
+    float font_size     = 11.f;
+    float border_radius = 4.f;  // informational; used by drawRect fallback
 
     // Two-way binding
-    Signal<float>* value_signal = nullptr;
+    Signal<float> *value_signal = nullptr;
 
     // Callbacks
     /// 1D: value is values[selected_idx]
-    std::function<void(float value)>                  on_change;
+    std::function<void(float value)> on_change;
     /// 2D: x = col_values[selected_col], y = row_values[selected_row]
     std::function<void(float x_value, float y_value)> on_change_2d;
 };
@@ -102,14 +104,14 @@ struct GridPanelConfig {
 // ============================================================================
 struct GridPanelState {
     // Owned copies of the value/label arrays (from Config spans):
-    std::vector<float>       values;
+    std::vector<float> values;
     std::vector<std::string> labels;
-    std::vector<float>       col_values;
-    std::vector<float>       row_values;
+    std::vector<float> col_values;
+    std::vector<float> row_values;
     std::vector<std::string> col_labels;
     std::vector<std::string> row_labels;
 
-    bool        is_2d        = false;
+    bool is_2d = false;
 
     // 1D selection:
     std::size_t selected_idx = 0;
@@ -128,27 +130,35 @@ struct GridPanelState {
     // selected_idx is visual state; current_value() is the param value.
 
     /// The real float value for the current 1D selection.
-    [[nodiscard]] float current_value() const noexcept {
-        if (values.empty()) return 0.f;
+    [[nodiscard]]
+    float current_value() const noexcept {
+        if (values.empty())
+            return 0.f;
         const std::size_t i = std::min(selected_idx, values.size() - 1);
         return values[i];
     }
 
     /// X (column) value for 2D selection.
-    [[nodiscard]] float current_x() const noexcept {
-        if (col_values.empty()) return 0.f;
+    [[nodiscard]]
+    float current_x() const noexcept {
+        if (col_values.empty())
+            return 0.f;
         return col_values[std::min(selected_col, col_values.size() - 1)];
     }
 
     /// Y (row) value for 2D selection.
-    [[nodiscard]] float current_y() const noexcept {
-        if (row_values.empty()) return 0.f;
+    [[nodiscard]]
+    float current_y() const noexcept {
+        if (row_values.empty())
+            return 0.f;
         return row_values[std::min(selected_row, row_values.size() - 1)];
     }
 
     /// Display label for cell i (1D).
-    [[nodiscard]] std::string_view label_for(std::size_t i) const noexcept {
-        if (i < labels.size() && !labels[i].empty()) return labels[i];
+    [[nodiscard]]
+    std::string_view label_for(std::size_t i) const noexcept {
+        if (i < labels.size() && !labels[i].empty())
+            return labels[i];
         if (i < values.size()) {
             // Format the float value: strip trailing zeros
             static thread_local char buf[16];
@@ -163,11 +173,13 @@ struct GridPanelState {
     }
 
     /// Total computed widget width.
-    [[nodiscard]] float total_w() const noexcept {
+    [[nodiscard]]
+    float total_w() const noexcept {
         return cfg.cols * cfg.cell_w + (cfg.cols - 1) * cfg.gap;
     }
     /// Total computed widget height.
-    [[nodiscard]] float total_h() const noexcept {
+    [[nodiscard]]
+    float total_h() const noexcept {
         return cfg.rows * cfg.cell_h + (cfg.rows - 1) * cfg.gap;
     }
 };
@@ -175,12 +187,13 @@ struct GridPanelState {
 // GridPanel — lightweight non-owning view
 
 struct GridPanel : WidgetView<GridPanelState> {
-
     /// Current value (1D).
-    [[nodiscard]] float getValue() const noexcept;
+    [[nodiscard]]
+    float getValue() const noexcept;
 
     /// Current (x, y) values (2D).
-    [[nodiscard]] std::pair<float, float> getValue2D() const noexcept;
+    [[nodiscard]]
+    std::pair<float, float> getValue2D() const noexcept;
 
     /// Set selection by value — finds the closest matching cell.
     void selectByValue(float value);
@@ -189,10 +202,11 @@ struct GridPanel : WidgetView<GridPanelState> {
     void selectByValue2D(float x_value, float y_value);
 
     /// Feed a raw SDL event. Returns true when consumed.
-    bool handleEvent(const SDL_Event& ev);
+    bool handleEvent(const SDL_Event &ev);
 };
 
 /// Factory.
-[[nodiscard]] GridPanel makeGridPanel(RenderTree& tree, GridPanelConfig cfg);
+[[nodiscard]]
+GridPanel makeGridPanel(RenderTree &tree, GridPanelConfig cfg);
 
-} // namespace pce::sdlos::widgets
+}  // namespace pce::sdlos::widgets

@@ -11,15 +11,13 @@ namespace pce::sdlos {
  * @param window_id  Unique object identifier
  */
 Process::Process(std::string app_name, int window_id)
-    : name_(std::move(app_name)), window_id_(window_id)
-{
-}
+    : name_(std::move(app_name))
+    , window_id_(window_id) {}
 
 /**
  * @brief ~process
  */
-Process::~Process()
-{
+Process::~Process() {
     // Signal the task to stop, then wait for the thread to exit.
     // Guarantees the thread is never left running past the object's lifetime
     // regardless of how the caller cleans up.
@@ -27,8 +25,7 @@ Process::~Process()
     join();
 }
 
-void Process::start(std::function<void()> task)
-{
+void Process::start(std::function<void()> task) {
     if (running_.load()) {
         std::cerr << "[Process] '" << name_ << "' is already running — ignoring start()\n";
         return;
@@ -46,7 +43,7 @@ void Process::start(std::function<void()> task)
 
         try {
             task();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             std::cerr << "[Process] '" << name_ << "' threw: " << e.what() << "\n";
         } catch (...) {
             std::cerr << "[Process] '" << name_ << "' threw an unknown exception\n";
@@ -60,8 +57,7 @@ void Process::start(std::function<void()> task)
 /**
  * @brief Stop
  */
-void Process::stop()
-{
+void Process::stop() {
     // Cooperative cancellation only — we do not forcibly terminate the thread.
     // The running task must observe isRunning() to exit in a timely manner.
     running_.store(false);
@@ -70,11 +66,10 @@ void Process::stop()
 /**
  * @brief Join
  */
-void Process::join()
-{
+void Process::join() {
     if (thread_.joinable()) {
         thread_.join();
     }
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

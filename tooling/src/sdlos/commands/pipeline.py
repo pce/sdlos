@@ -77,6 +77,7 @@ def _resolve_pug_path(target: Optional[str], cwd: Path) -> Path:
     """
     from ..core.cmake import find_project_root  # local import avoids cycles
 
+
     if target and target != "-":
         p = Path(target).expanduser()
         if p.is_file():
@@ -193,7 +194,7 @@ def cmd_pipeline(
         _render_once()
         return
 
-    # ── Watch mode ────────────────────────────────────────────────────────────
+    # Watch mode
     # Requires watchfiles (already a tooling dependency).
     try:
         from watchfiles import watch as _watch

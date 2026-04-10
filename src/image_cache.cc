@@ -5,11 +5,10 @@
 #include <iostream>
 
 #ifdef SDL_IMAGE_AVAILABLE
-#  include <SDL3_image/SDL_image.h>
+    #include <SDL3_image/SDL_image.h>
 #endif
 
 namespace pce::sdlos {
-
 
 /**
  * @brief Initialises
@@ -18,8 +17,7 @@ namespace pce::sdlos {
  *
  * @return true on success, false on failure
  */
-bool ImageCache::init(SDL_GPUDevice* device) noexcept
-{
+bool ImageCache::init(SDL_GPUDevice *device) noexcept {
     if (!device) {
         std::cerr << "[ImageCache] init: null device\n";
         return false;
@@ -41,11 +39,10 @@ bool ImageCache::init(SDL_GPUDevice* device) noexcept
 /**
  * @brief Shuts down
  */
-void ImageCache::shutdown() noexcept
-{
+void ImageCache::shutdown() noexcept {
     // Drain pending uploads — GPU textures are already registered in cache_,
     // so only the CPU surfaces need freeing here.
-    for (auto& pu : pending_) {
+    for (auto &pu : pending_) {
         if (pu.surface) {
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
@@ -64,28 +61,24 @@ void ImageCache::shutdown() noexcept
     device_ = nullptr;
 }
 
-
 /**
  * @brief Sets base path
  *
  * @param path  Filesystem path
  */
-void ImageCache::setBasePath(std::string path) noexcept
-{
+void ImageCache::setBasePath(std::string path) noexcept {
     base_path_ = std::move(path);
     if (!base_path_.empty() && base_path_.back() != '/')
         base_path_ += '/';
     std::cerr << "[ImageCache] base path: " << base_path_ << "\n";
 }
 
-
 /**
  * @brief Sets scope
  *
  * @param scope  Signed 32-bit integer
  */
-void ImageCache::set_scope(std::string scope) noexcept
-{
+void ImageCache::set_scope(std::string scope) noexcept {
     current_scope_ = std::move(scope);
 }
 
@@ -94,19 +87,20 @@ void ImageCache::set_scope(std::string scope) noexcept
  *
  * @param scope  Signed 32-bit integer
  */
-void ImageCache::evict_scope(std::string_view scope) noexcept
-{
-    if (scope.empty()) return;   // never mass-evict permanent entries
+void ImageCache::evict_scope(std::string_view scope) noexcept {
+    if (scope.empty())
+        return;  // never mass-evict permanent entries
 
     // Collect keys to remove (avoid iterator invalidation).
     std::vector<std::string> to_evict;
     to_evict.reserve(entry_scopes_.size());
 
-    for (const auto& [path, s] : entry_scopes_) {
-        if (s == scope) to_evict.push_back(path);
+    for (const auto &[path, s] : entry_scopes_) {
+        if (s == scope)
+            to_evict.push_back(path);
     }
 
-    for (const auto& path : to_evict) {
+    for (const auto &path : to_evict) {
         auto it = cache_.find(path);
         if (it != cache_.end()) {
             if (it->second.texture && device_)
@@ -117,8 +111,8 @@ void ImageCache::evict_scope(std::string_view scope) noexcept
     }
 
     if (!to_evict.empty()) {
-        std::cerr << "[ImageCache] evicted scope '" << scope
-                  << "': " << to_evict.size() << " texture(s)\n";
+        std::cerr << "[ImageCache] evicted scope '" << scope << "': " << to_evict.size()
+                  << " texture(s)\n";
     }
 }
 
@@ -129,15 +123,14 @@ void ImageCache::evict_scope(std::string_view scope) noexcept
  *
  * @return Integer result; negative values indicate an error code
  */
-std::size_t ImageCache::scope_size(std::string_view scope) const noexcept
-{
+std::size_t ImageCache::scope_size(std::string_view scope) const noexcept {
     std::size_t n = 0;
-    for (const auto& [path, s] : entry_scopes_) {
-        if (s == scope) ++n;
+    for (const auto &[path, s] : entry_scopes_) {
+        if (s == scope)
+            ++n;
     }
     return n;
 }
-
 
 /**
  * @brief Ensure texture
@@ -146,9 +139,9 @@ std::size_t ImageCache::scope_size(std::string_view scope) const noexcept
  *
  * @return ImageTexture result
  */
-ImageTexture ImageCache::ensureTexture(std::string_view path)
-{
-    if (!device_ || path.empty()) return {};
+ImageTexture ImageCache::ensureTexture(std::string_view path) {
+    if (!device_ || path.empty())
+        return {};
 
     // Resolve relative paths against base_path_ (set via setBasePath()).
     // Absolute paths (starting with '/') are used as-is.
@@ -163,7 +156,7 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
         return it->second;
 
     // Load CPU-side surface
-    SDL_Surface* raw = nullptr;
+    SDL_Surface *raw = nullptr;
 
 #ifdef SDL_IMAGE_AVAILABLE
     raw = IMG_Load(key.c_str());
@@ -173,8 +166,7 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
 #endif
 
     if (!raw) {
-        std::cerr << "[ImageCache] failed to load '" << key
-                  << "': " << SDL_GetError() << "\n";
+        std::cerr << "[ImageCache] failed to load '" << key << "': " << SDL_GetError() << "\n";
         // Insert a null sentinel so we never retry a missing/corrupt file.
         cache_.emplace(key, ImageTexture{});
         return {};
@@ -185,7 +177,7 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
     // the host endianness — it matches SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
     // expected by the GPU texture.  ConvertSurface is a no-op when the format
     // already matches, so the branch is free in the common case.
-    SDL_Surface* surf = raw;
+    SDL_Surface *surf = raw;
     if (raw->format != SDL_PIXELFORMAT_RGBA32) {
         surf = SDL_ConvertSurface(raw, SDL_PIXELFORMAT_RGBA32);
         SDL_DestroySurface(raw);
@@ -200,7 +192,7 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
     // Pre-allocate GPU texture
     // The texture is created now but contains undefined pixels until
     // flushUploads() runs during the next frame's copy pass.
-    SDL_GPUTexture* tex = createTexture(surf->w, surf->h);
+    SDL_GPUTexture *tex = createTexture(surf->w, surf->h);
     if (!tex) {
         SDL_DestroySurface(surf);
         cache_.emplace(key, ImageTexture{});
@@ -209,7 +201,7 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
 
     // Register in cache immediately — repeated calls within the same frame
     // return this entry (cache hit) rather than double-loading the file.
-    const ImageTexture img{ tex, surf->w, surf->h };
+    const ImageTexture img{tex, surf->w, surf->h};
     cache_.emplace(key, img);
 
     // Tag with the current scope so evict_scope() can find it later.
@@ -218,10 +210,9 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
         entry_scopes_[key] = current_scope_;
 
     // Queue the upload for the next flushUploads() call.
-    pending_.push_back(PendingUpload{ key, surf, tex });
+    pending_.push_back(PendingUpload{key, surf, tex});
 
-    std::cerr << "[ImageCache] queued '" << key << "' ("
-              << surf->w << "×" << surf->h << ")\n";
+    std::cerr << "[ImageCache] queued '" << key << "' (" << surf->w << "×" << surf->h << ")\n";
 
     return img;
 }
@@ -231,19 +222,20 @@ ImageTexture ImageCache::ensureTexture(std::string_view path)
  *
  * @param copy_pass  Vertical coordinate in logical pixels
  */
-void ImageCache::flushUploads(SDL_GPUCopyPass* copy_pass)
-{
-    if (!device_ || !copy_pass || pending_.empty()) return;
+void ImageCache::flushUploads(SDL_GPUCopyPass *copy_pass) {
+    if (!device_ || !copy_pass || pending_.empty())
+        return;
 
-    for (auto& pu : pending_) {
-        if (!pu.surface || !pu.texture) continue;
+    for (auto &pu : pending_) {
+        if (!pu.surface || !pu.texture)
+            continue;
 
         const int w = pu.surface->w;
         const int h = pu.surface->h;
 
         // pitch may be > w*4 when SDL adds row padding; use it for
         // pixels_per_row so the upload stride matches the surface layout.
-        const int    pitch      = pu.surface->pitch;
+        const int pitch         = pu.surface->pitch;
         const Uint32 byte_count = static_cast<Uint32>(pitch * h);
 
         // Create a one-shot host-visible transfer buffer
@@ -252,20 +244,19 @@ void ImageCache::flushUploads(SDL_GPUCopyPass* copy_pass)
         tbci.size  = byte_count;
         tbci.props = 0;
 
-        SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(device_, &tbci);
+        SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(device_, &tbci);
         if (!tb) {
-            std::cerr << "[ImageCache] SDL_CreateGPUTransferBuffer failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[ImageCache] SDL_CreateGPUTransferBuffer failed: " << SDL_GetError()
+                      << "\n";
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
             continue;
         }
 
         //  Map → copy surface pixels → unmap
-        void* ptr = SDL_MapGPUTransferBuffer(device_, tb, /*cycle=*/false);
+        void *ptr = SDL_MapGPUTransferBuffer(device_, tb, /*cycle=*/false);
         if (!ptr) {
-            std::cerr << "[ImageCache] SDL_MapGPUTransferBuffer failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[ImageCache] SDL_MapGPUTransferBuffer failed: " << SDL_GetError() << "\n";
             SDL_ReleaseGPUTransferBuffer(device_, tb);
             SDL_DestroySurface(pu.surface);
             pu.surface = nullptr;
@@ -290,9 +281,9 @@ void ImageCache::flushUploads(SDL_GPUCopyPass* copy_pass)
         tr.mip_level = 0;
         tr.layer     = 0;
         tr.x = tr.y = tr.z = 0;
-        tr.w = static_cast<Uint32>(w);
-        tr.h = static_cast<Uint32>(h);
-        tr.d = 1;
+        tr.w               = static_cast<Uint32>(w);
+        tr.h               = static_cast<Uint32>(h);
+        tr.d               = 1;
 
         SDL_UploadToGPUTexture(copy_pass, &tfi, &tr, /*cycle=*/false);
 
@@ -307,21 +298,20 @@ void ImageCache::flushUploads(SDL_GPUCopyPass* copy_pass)
     pending_.clear();
 }
 
-
 /**
  * @brief Evict
  *
  * @param path  Filesystem path
  */
-void ImageCache::evict(std::string_view path)
-{
+void ImageCache::evict(std::string_view path) {
     const std::string key(path);
     auto it = cache_.find(key);
-    if (it == cache_.end()) return;
+    if (it == cache_.end())
+        return;
     if (it->second.texture && device_)
         SDL_ReleaseGPUTexture(device_, it->second.texture);
     cache_.erase(it);
-    entry_scopes_.erase(key);   // keep scope map in sync
+    entry_scopes_.erase(key);  // keep scope map in sync
 }
 
 /**
@@ -331,18 +321,16 @@ void ImageCache::evict(std::string_view path)
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-void ImageCache::clearCache() noexcept
-{
+void ImageCache::clearCache() noexcept {
     if (device_) {
-        for (auto& [path, img] : cache_) {
+        for (auto &[path, img] : cache_) {
             if (img.texture)
                 SDL_ReleaseGPUTexture(device_, img.texture);
         }
     }
     cache_.clear();
-    entry_scopes_.clear();   // keep scope map in sync
+    entry_scopes_.clear();  // keep scope map in sync
 }
-
 
 /**
  * @brief Creates and returns texture
@@ -356,9 +344,9 @@ void ImageCache::clearCache() noexcept
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_GPUTexture* ImageCache::createTexture(int w, int h) noexcept
-{
-    if (!device_ || w <= 0 || h <= 0) return nullptr;
+SDL_GPUTexture *ImageCache::createTexture(int w, int h) noexcept {
+    if (!device_ || w <= 0 || h <= 0)
+        return nullptr;
 
     SDL_GPUTextureCreateInfo tci{};
     tci.type                 = SDL_GPU_TEXTURETYPE_2D;
@@ -371,10 +359,9 @@ SDL_GPUTexture* ImageCache::createTexture(int w, int h) noexcept
     tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
     tci.props                = 0;
 
-    SDL_GPUTexture* tex = SDL_CreateGPUTexture(device_, &tci);
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture(device_, &tci);
     if (!tex) {
-        std::cerr << "[ImageCache] SDL_CreateGPUTexture failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[ImageCache] SDL_CreateGPUTexture failed: " << SDL_GetError() << "\n";
     }
     return tex;
 }
@@ -388,9 +375,9 @@ SDL_GPUTexture* ImageCache::createTexture(int w, int h) noexcept
  *          pointer parameter — ownership is ambiguous; consider std::span (non-owning
  *          view), std::unique_ptr (transfer), or const T* (borrow)
  */
-SDL_GPUSampler* ImageCache::createSampler() noexcept
-{
-    if (!device_) return nullptr;
+SDL_GPUSampler *ImageCache::createSampler() noexcept {
+    if (!device_)
+        return nullptr;
 
     // Bilinear magnification + minification; clamp to edge on all axes so
     // image borders don't bleed into neighbouring atlas regions.
@@ -412,12 +399,11 @@ SDL_GPUSampler* ImageCache::createSampler() noexcept
     sci.enable_compare    = false;
     sci.props             = 0;
 
-    SDL_GPUSampler* samp = SDL_CreateGPUSampler(device_, &sci);
+    SDL_GPUSampler *samp = SDL_CreateGPUSampler(device_, &sci);
     if (!samp) {
-        std::cerr << "[ImageCache] SDL_CreateGPUSampler failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[ImageCache] SDL_CreateGPUSampler failed: " << SDL_GetError() << "\n";
     }
     return samp;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

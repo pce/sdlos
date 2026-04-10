@@ -28,7 +28,7 @@
 // CSS split
 // ─────────
 //   scene.css   — 3D layout (transform + material properties per mesh id)
-//   automat.css — 2D UI  (HUD, modal, button styles)
+//   box.css — 2D UI  (HUD, modal, button styles)
 //
 // Both are loaded manually after attach() so the injected proxy nodes
 // are already in the RenderTree when applyTo() runs.
@@ -110,7 +110,7 @@ pce::sdlos::NodeHandle       g_root;
 // CSS kept at module scope so buildHover entries survive and tickHover()
 // can be called from the mouse-motion handler each frame.
 pce::sdlos::css::StyleSheet  g_scene_css;   // scene.css  (3D layout)
-pce::sdlos::css::StyleSheet  g_ui_css;      // automat.css (2D overlay)
+pce::sdlos::css::StyleSheet  g_ui_css;      // box.css (2D overlay)
 
 // Cached handles — looked up once at init.
 pce::sdlos::NodeHandle  g_h_stage_label;   // #stage-label HUD text
@@ -282,7 +282,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     // 4. Load automat.css — 2D overlay styles
     {
-        const fs::path ui_css_path = fs::path(base_path) / "automat.css";
+        const fs::path ui_css_path = fs::path(base_path) / "box.css";
         if (fs::exists(ui_css_path)) {
             g_ui_css = pce::sdlos::css::load(ui_css_path.string());
             if (!g_ui_css.empty()) {

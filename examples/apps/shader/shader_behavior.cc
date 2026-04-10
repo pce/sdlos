@@ -42,6 +42,7 @@
 //
 #include <memory>
 #include <string>
+#include "gltf/gltf_scene.h"
 
 // State
 //
@@ -53,7 +54,12 @@ struct ShaderState {
     // callbacks hold a safe reference even after jade_app_init returns.
 
     // --- enter the forrest ---
+    pce::sdlos::gltf::GltfScene* scene = nullptr;
+    pce::sdlos::NodeHandle       scene_h = pce::sdlos::k_null_handle;
 
+    ~ShaderState() {
+        delete scene;
+    }
     // --- back to the sea ---
 };
 
@@ -69,10 +75,35 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 {
     auto state = std::make_shared<ShaderState>();
 
+    // --- enter the forrest ---
+    state->scene = new pce::sdlos::gltf::GltfScene();
+
+    const char* base_path = SDL_GetBasePath();
+    state->scene->init(renderer.GetDevice(),
+                       renderer.GetShaderFormat(),
+                       base_path ? base_path : "",
+                       SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM);
+
+    renderer.setScene3DHook([state](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap, float vw, float vh) {
+        state->scene->render(cmd, swap, vw, vh);
+    });
+
+    renderer.setGpuPreShutdownHook([state]() {
+        state->scene->shutdown();
+    });
+
+    state->scene_h = tree.findById(root, "animal-scene");
+    if (state->scene_h.valid()) {
+        state->scene->attach(tree, state->scene_h, base_path ? base_path : "");
+    }
+
+    state->scene->camera().perspective(45.f, 16.f/9.f);
+    state->scene->camera().lookAt(0, 2, 5, 0, 0, 0);
+    // --- back to the sea ---
+
     //  Locate nodes
     const pce::sdlos::NodeHandle title_h = tree.findById(root, "my-title");
 
-    //title_h->
 
     // Bus subscriptions
     // --- enter the forrest ---

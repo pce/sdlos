@@ -1,7 +1,7 @@
 #pragma once
 
-#include "widget.h"
 #include "../render_tree.h"
+#include "widget.h"
 
 #include <SDL3/SDL.h>
 
@@ -11,32 +11,31 @@
 #include <string_view>
 #include <vector>
 
-namespace pce::sdlos { class TextRenderer; }
+namespace pce::sdlos {
+class TextRenderer;
+}  // namespace pce::sdlos
 
 namespace pce::sdlos::widgets {
-
-
 
 /// Unified config for single-line (multiline=false)
 /// and multi-line (multiline=true) input.
 struct TextFieldConfig {
-
     bool multiline = false;
 
-    std::string_view      placeholder;
-    Signal<std::string>*  value = nullptr; // non-owning; must outlive node
+    std::string_view placeholder;
+    Signal<std::string> *value = nullptr;  // non-owning; must outlive node
 
-    float  w          = 320.f;
-    float  h          = 44.f;
+    float w = 320.f;
+    float h = 44.f;
 
     // multiline sizing hints; ignored when 0
-    int    rows        = 0;      // h = rows * line_height + padding
-    int    cols        = 0;      // w = cols * char_width  + padding + scrollbar_w + 4
-    float  line_height = 22.f;
-    float  scrollbar_w = 6.f;
+    int rows          = 0;  // h = rows * line_height + padding
+    int cols          = 0;  // w = cols * char_width  + padding + scrollbar_w + 4
+    float line_height = 22.f;
+    float scrollbar_w = 6.f;
 
-    float  font_size  = 17.f;
-    Edges  padding    = Edges::horizontal(12.f);
+    float font_size = 17.f;
+    Edges padding   = Edges::horizontal(12.f);
 
     Color bg                = Color::hex(0x1c, 0x1c, 0x1e, 0xcc);
     Color bg_focused        = Color::hex(0x2c, 0x2c, 0x2e, 0xee);
@@ -47,11 +46,11 @@ struct TextFieldConfig {
     Color cursor_color      = Color::systemBlue();
 
     std::size_t max_length = 0;
-    bool        secure     = false; // single-line: render '*' instead of chars
-    bool        disabled   = false;
+    bool secure            = false;  // single-line: render '*' instead of chars
+    bool disabled          = false;
 
     std::function<void(std::string_view)> on_change;
-    std::function<void(std::string_view)> on_submit; // single-line Enter; unused in multiline
+    std::function<void(std::string_view)> on_submit;  // single-line Enter; unused in multiline
 };
 
 // single-line alias — all existing TextBoxConfig call sites compile unchanged
@@ -62,8 +61,7 @@ struct TextAreaConfig : TextFieldConfig {
     /**
      * @brief Text area config
      */
-    TextAreaConfig()
-    {
+    TextAreaConfig() {
         multiline   = true;
         rows        = 4;
         line_height = 22.f;
@@ -72,42 +70,41 @@ struct TextAreaConfig : TextFieldConfig {
     }
 };
 
-
 struct TextFieldState {
-    std::string  text;
-    std::size_t  cursor_pos = 0; // byte offset; UTF-8-safe
-    bool         focused    = false;
+    std::string text;
+    std::size_t cursor_pos = 0;  // byte offset; UTF-8-safe
+    bool focused           = false;
 
     // Selection (byte offsets)
     // sel_start = anchor end (fixed);  sel_end = active end (tracks cursor).
     // normalizedSel() always returns [min, max] regardless of anchor direction.
-    std::size_t  sel_start  = 0;
-    std::size_t  sel_end    = 0;
-    bool         sel_active = false;
+    std::size_t sel_start = 0;
+    std::size_t sel_end   = 0;
+    bool sel_active       = false;
 
     // IME preedit / composition
-    std::string  composition;            // UTF-8 preedit text from TEXT_EDITING
-    int          composition_cursor = 0; // byte offset of caret inside composition
+    std::string composition;     // UTF-8 preedit text from TEXT_EDITING
+    int composition_cursor = 0;  // byte offset of caret inside composition
 
     //  Undo
-    std::vector<std::string>          undo_stack;
-    static constexpr std::size_t      kUndoLimit = 64;
+    std::vector<std::string> undo_stack;
+    static constexpr std::size_t kUndoLimit = 64;
 
     //  Mouse click / drag tracking
-    Uint64 last_click_ms    = 0;     // SDL_GetTicks() at last MOUSE_BUTTON_DOWN
-    bool   text_drag_active = false; // true while LMB held for drag-select
+    Uint64 last_click_ms  = 0;      // SDL_GetTicks() at last MOUSE_BUTTON_DOWN
+    bool text_drag_active = false;  // true while LMB held for drag-select
 
     float scroll_offset_y = 0.f;
     float scroll_offset_x = 0.f;
 
-    bool  scrollbar_drag = false; // multiline
+    bool scrollbar_drag  = false;  // multiline
     float drag_start_y   = 0.f;
     float drag_start_off = 0.f;
 
     TextFieldConfig cfg;
 
     // set on first draw; used by handleEvent for pixel-accurate cursor placement
-    pce::sdlos::TextRenderer* text_renderer = nullptr;
+    pce::sdlos::TextRenderer *text_renderer = nullptr;
 
     // recomputed in update(); only meaningful in multiline mode
     float content_w = 0.f;
@@ -116,10 +113,7 @@ struct TextFieldState {
     float total_w   = 0.f;
 };
 
-
 struct TextField : WidgetView<TextFieldState> {
-
-
     /**
      * @brief Returns text
      *
@@ -166,7 +160,7 @@ struct TextField : WidgetView<TextFieldState> {
      *
      * @return true on success, false on failure
      */
-    bool handleEvent(const SDL_Event& ev);
+    bool handleEvent(const SDL_Event &ev);
 };
 
 using TextBox  = TextField;
@@ -180,7 +174,7 @@ using TextArea = TextField;
  *
  * @return TextField result
  */
-TextField makeTextField(RenderTree& tree, TextFieldConfig cfg);
+TextField makeTextField(RenderTree &tree, TextFieldConfig cfg);
 
 /**
  * @brief Constructs and returns text box
@@ -190,11 +184,7 @@ TextField makeTextField(RenderTree& tree, TextFieldConfig cfg);
  *
  * @return TextField result
  */
-inline TextField makeTextBox(RenderTree& tree, TextFieldConfig cfg)
-{
-    cfg.multiline = false;
-    return makeTextField(tree, std::move(cfg));
-}
+TextField makeTextBox(RenderTree &tree, TextFieldConfig cfg);
 
 /**
  * @brief Constructs and returns text area
@@ -204,10 +194,6 @@ inline TextField makeTextBox(RenderTree& tree, TextFieldConfig cfg)
  *
  * @return TextField result
  */
-inline TextField makeTextArea(RenderTree& tree, TextAreaConfig cfg)
-{
-    cfg.multiline = true;
-    return makeTextField(tree, std::move(cfg));
-}
+TextField makeTextArea(RenderTree &tree, TextAreaConfig cfg);
 
-} // namespace pce::sdlos::widgets
+}  // namespace pce::sdlos::widgets

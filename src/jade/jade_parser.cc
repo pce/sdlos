@@ -1,8 +1,8 @@
 #include "jade_parser.h"
 
+#include "../style_applier.h"
 #include "jade_lexer.h"
 #include "jade_token.h"
-#include "../style_applier.h"
 
 #include <cassert>
 #include <vector>
@@ -31,24 +31,15 @@
 
 namespace pce::sdlos::jade {
 
-/**
- * @brief Parses
- *
- * @param source  Red channel component [0, 1]
- * @param tree    Red channel component [0, 1]
- *
- * @return Handle to the node, or k_null_handle on failure
- */
-NodeHandle parse(std::string_view source, RenderTree& tree)
-{
+NodeHandle parse(std::string_view source, RenderTree &tree) {
     const auto tokens = Lexer{source}.tokenize();
 
     // Virtual root — transparent FlexColumn container for all top-level nodes.
     const NodeHandle root = tree.alloc();
     {
-        RenderNode* r    = tree.node(root);
-        r->layout_kind   = LayoutKind::FlexColumn;
-        r->dirty_render  = false;
+        RenderNode *r   = tree.node(root);
+        r->layout_kind  = LayoutKind::FlexColumn;
+        r->dirty_render = false;
         r->setStyle("tag", "_root");
     }
 
@@ -64,20 +55,21 @@ NodeHandle parse(std::string_view source, RenderTree& tree)
 
     // finalize: apply styles → attach to parent → update bookkeeping.
     const auto finalize = [&]() noexcept {
-        if (!current.valid()) return;
-        RenderNode* n = tree.node(current);
-        if (n) pce::sdlos::StyleApplier::apply(*n);
+        if (!current.valid())
+            return;
+        RenderNode *n = tree.node(current);
+        if (n)
+            pce::sdlos::StyleApplier::apply(*n);
         tree.appendChild(parent_stack.back(), current);
         last    = current;
         current = k_null_handle;
     };
 
-    for (std::size_t i = 0; i < tokens.size(); ) {
-        const Token& tok = tokens[i++];
+    for (std::size_t i = 0; i < tokens.size();) {
+        const Token &tok = tokens[i++];
 
         switch (tok.type) {
-
-        // Stream control
+            // Stream control
 
         case TokenType::End:
             finalize();
@@ -98,22 +90,25 @@ NodeHandle parse(std::string_view source, RenderTree& tree)
                 parent_stack.pop_back();
             break;
 
-        //  Node assembly
+            //  Node assembly
 
         case TokenType::Tag:
-            if (!current.valid()) current = tree.alloc();
+            if (!current.valid())
+                current = tree.alloc();
             tree.node(current)->setStyle("tag", tok.value);
             break;
 
         case TokenType::Id:
-            if (!current.valid()) current = tree.alloc();
+            if (!current.valid())
+                current = tree.alloc();
             tree.node(current)->setStyle("id", tok.value);
             break;
 
         case TokenType::Class: {
-            if (!current.valid()) current = tree.alloc();
-            RenderNode*  n   = tree.node(current);
-            const auto   cls = n->style("class");
+            if (!current.valid())
+                current = tree.alloc();
+            RenderNode *n  = tree.node(current);
+            const auto cls = n->style("class");
             if (cls.empty())
                 n->setStyle("class", tok.value);
             else
@@ -122,12 +117,14 @@ NodeHandle parse(std::string_view source, RenderTree& tree)
         }
 
         case TokenType::Text:
-            if (!current.valid()) current = tree.alloc();
+            if (!current.valid())
+                current = tree.alloc();
             tree.node(current)->setStyle("text", tok.value);
             break;
 
         case TokenType::AttrKey: {
-            if (!current.valid()) current = tree.alloc();
+            if (!current.valid())
+                current = tree.alloc();
             // Always paired: AttrKey is immediately followed by AttrValue.
             std::string val;
             if (i < tokens.size() && tokens[i].type == TokenType::AttrValue)
@@ -140,11 +137,11 @@ NodeHandle parse(std::string_view source, RenderTree& tree)
             // Consumed above by AttrKey — orphaned AttrValue is a no-op.
             break;
 
-        } // switch
-    }   // for
+        }  // switch
+    }  // for
 
 done:
     return root;
 }
 
-} // namespace pce::sdlos::jade
+}  // namespace pce::sdlos::jade

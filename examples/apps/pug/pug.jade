@@ -19,10 +19,13 @@
 //   chip-vivid        — theme chip: "vivid" CSS class
 //   chip-normal       — quality chip: normal (full pipeline)
 //   chip-low          — quality chip: low-power (disables vignette)
+//   chip-cartoon-on   — cartoon chip: enabled
+//   chip-cartoon-off  — cartoon chip: disabled
 //   val-bg-speed      — live display of bg pass "speed" param
 //   val-bg-scale      — live display of bg pass "scale" param
 //   val-grade-exp     — live display of grade pass "exposure" param
 //   val-grade-sat     — live display of grade pass "saturation" param
+//   val-cartoon-thres — live display of cartoon pass "threshold" param
 //
 // EventBus topics fired by this scene (onclick handlers)
 // ───────────────────────────────────────────────────────
@@ -30,6 +33,8 @@
 //                        payload = data-value  ("default" | "night" | "vivid")
 //   pug:quality  — quality chip tapped
 //                        payload = "normal" | "low"
+//   pug:cartoon  — cartoon chip tapped
+//                        payload = "on" | "off"
 //   pug:inc      — +  stepper tapped
 //                        payload = "pass:key"  (e.g. "bg:speed")
 //   pug:dec      — –  stepper tapped
@@ -50,16 +55,16 @@ col(id="root" flexGrow="1")
   // Transparent spacer — FrameGraph renders behind this region.
   div(flexGrow="1")
 
-  // ── HUD panel ─────────────────────────────────────────────────────────────
+  // HUD panel
   col.hud-panel(id="hud-panel")
 
-    // ── Title bar ────────────────────────────────────────────────────────────
+    // Title bar
     row.hud-title-row
       div.hud-title pug
       div.hud-pill pipeline
     div.hud-divider
 
-    // ── Theme section ─────────────────────────────────────────────────────────
+    // Theme section
     // Chips fire pug:theme with their data-value.
     // The behavior calls FrameGraph::add_class / remove_class so scoped CSS
     // rules in data/pipeline.css take effect (e.g. pipeline.night #grade { … }).
@@ -69,7 +74,7 @@ col(id="root" flexGrow="1")
       div.chip(id="chip-night"   onclick="pug:theme" data-value="night")   Night
       div.chip(id="chip-vivid"   onclick="pug:theme" data-value="vivid")   Vivid
 
-    // ── Quality section ───────────────────────────────────────────────────────
+    //  Quality section
     // "Low Power" adds the "low-power" CSS class which disables the vignette
     // pass via pipeline.css — zero GPU cost when a pass is disabled.
     div.section-label QUALITY
@@ -77,9 +82,15 @@ col(id="root" flexGrow="1")
       div.chip(id="chip-normal" onclick="pug:quality" data-value="normal") Normal
       div.chip(id="chip-low"    onclick="pug:quality" data-value="low")    Low Power
 
+    // Cartoon section
+    div.section-label CARTOON
+    row.chip-row
+      div.chip(id="chip-cartoon-on"  onclick="pug:cartoon" data-value="on")  On
+      div.chip(id="chip-cartoon-off" onclick="pug:cartoon" data-value="off") Off
+
     div.hud-divider
 
-    // ── Live params ───────────────────────────────────────────────────────────
+    // Live params
     // +/– steppers call CompiledGraph::patch() so the GPU sees the updated float
     // on the very next frame — no recompile, no string lookup on the hot path.
     div.section-label PARAMS
@@ -97,6 +108,13 @@ col(id="root" flexGrow="1")
       div.param-btn(onclick="pug:dec" data-value="bg:scale") −
       div.param-val(id="val-bg-scale") 1.50
       div.param-btn(onclick="pug:inc" data-value="bg:scale") +
+
+    // cartoon › threshold
+    row.param-row
+      div.param-lbl(flexGrow="1") cartoon › thres
+      div.param-btn(onclick="pug:dec" data-value="cartoon:threshold") −
+      div.param-val(id="val-cartoon-thres") 0.10
+      div.param-btn(onclick="pug:inc" data-value="cartoon:threshold") +
 
     // grade › exposure
     row.param-row

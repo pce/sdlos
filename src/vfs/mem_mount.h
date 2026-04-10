@@ -26,12 +26,11 @@
 namespace pce::vfs {
 
 class MemMount final : public IMount {
-public:
-
+  public:
     /**
      * @brief Mem mount
      */
-    MemMount()  = default;
+    MemMount() = default;
     /**
      * @brief ~mem mount
      */
@@ -43,8 +42,8 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    MemMount(const MemMount&)            = delete;
-    MemMount& operator=(const MemMount&) = delete;
+    MemMount(const MemMount &)            = delete;
+    MemMount &operator=(const MemMount &) = delete;
 
     // Non-movable: owns a std::shared_mutex.  Store via unique_ptr if
     // indirection is needed.
@@ -53,8 +52,8 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    MemMount(MemMount&&)            = delete;
-    MemMount& operator=(MemMount&&) = delete;
+    MemMount(MemMount &&)            = delete;
+    MemMount &operator=(MemMount &&) = delete;
 
     //  Seeding
     //
@@ -69,14 +68,16 @@ public:
     void put_text(std::string path, std::string_view text);
 
     /// Return the number of stored entries.
-    [[nodiscard]] std::size_t size() const noexcept;
+    [[nodiscard]]
+    std::size_t size() const noexcept;
 
     /// Remove all entries.
     void clear() noexcept;
 
     //  IMount
 
-    [[nodiscard]] std::expected<std::vector<std::byte>, std::string>
+    [[nodiscard]]
+    std::expected<std::vector<std::byte>, std::string>
     read(std::string_view path) noexcept override;
 
     /**
@@ -167,7 +168,16 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
+    /**
+     * @brief Writes
+     *
+     * @param path  Filesystem path
+     * @param data  Raw payload bytes
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string>
     write(std::string_view path, std::span<const std::byte> data) noexcept override;
 
     /**
@@ -247,8 +257,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    remove(std::string_view path) noexcept override;
+    /**
+     * @brief Removes
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> remove(std::string_view path) noexcept override;
 
     /// stat() synthesises directory entries from path prefixes so it never
     /// returns exists=false for a directory that has at least one descendant.
@@ -329,8 +346,15 @@ public:
      *
      * @return Stat result
      */
-    [[nodiscard]] Stat
-    stat(std::string_view path) noexcept override;
+    /**
+     * @brief Stat
+     *
+     * @param path  Filesystem path
+     *
+     * @return Stat result
+     */
+    [[nodiscard]]
+    Stat stat(std::string_view path) noexcept override;
 
     /// list() returns immediate children only.  Subdirectory names carry a
     /// trailing '/' (consistent with LocalMount).
@@ -411,8 +435,15 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::vector<std::string>
-    list(std::string_view path) noexcept override;
+    /**
+     * @brief List
+     *
+     * @param path  Filesystem path
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::vector<std::string> list(std::string_view path) noexcept override;
 
     /// mkdir() is a no-op for MemMount: directories are implicit.
     /**
@@ -492,27 +523,32 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    [[nodiscard]] std::expected<void, std::string>
-    mkdir(std::string_view /*path*/) noexcept override
-    {
+    /**
+     * @brief Mkdir
+     *
+     * @param param0  Red channel component [0, 1]
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    [[nodiscard]]
+    std::expected<void, std::string> mkdir(std::string_view /*path*/) noexcept override {
         return {};
     }
 
-private:
-
-
+  private:
     /// Normalise a virtual path: strip leading '/', collapse duplicate '/'.
     /// "//foo//bar/" → "foo/bar"
-    [[nodiscard]] static std::string normalise(std::string_view path) noexcept;
+    [[nodiscard]]
+    static std::string normalise(std::string_view path) noexcept;
 
     /// Return true if at least one stored key has `dir_prefix` as a prefix,
     /// where `dir_prefix` is a directory path (no trailing slash expected here).
     /// Used by stat() to synthesise directory existence.
-    [[nodiscard]] bool has_children(const std::string& dir_prefix) const noexcept;
+    [[nodiscard]]
+    bool has_children(const std::string &dir_prefix) const noexcept;
 
-
-    mutable std::shared_mutex                              mu_;
+    mutable std::shared_mutex mu_;
     std::unordered_map<std::string, std::vector<std::byte>> entries_;
 };
 
-} // namespace pce::vfs
+}  // namespace pce::vfs

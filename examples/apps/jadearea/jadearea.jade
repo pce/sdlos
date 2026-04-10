@@ -7,35 +7,37 @@
 //     preview-pane: pane-header (28 px) + preview-wrap (flex-grow)
 //
 // Behaviour: examples/apps/jadearea/jadearea.cxx
-//   • Injects a TextArea widget into #editor-wrap at startup.
-//   • Re-parses the source on every keystroke and renders the result
+//   - Injects a TextArea widget into #editor-wrap at startup.
+//   - Re-parses the source on every keystroke and renders the result
 //     into #preview-wrap (live preview).
-//   • "▶ Render" button  → bus.publish("jadearea:render")
-//   • "Clear"   button  → bus.publish("jadearea:clear")
+//   - "▶ Render" button  → bus.publish("jadearea:render")
+//   - "Clear"   button  → bus.publish("jadearea:clear")
 
 col(id="root" flexGrow="1")
 
-  // ── Toolbar ──────────────────────────────────────────────────────────────
+  // Toolbar
   row(height="44" backgroundColor="#161b22" gap="10" paddingLeft="14" paddingRight="10")
     div(color="#58a6ff" fontSize="14") ⬡ Jade
     div(flexGrow="1")
     div(id="preview-status" color="#3fb950" fontSize="11")
-    div(id="btn-render" onclick="jadearea:render" data-value="" backgroundColor="#238636" color="#ffffff" height="28" width="76" borderRadius="6" fontSize="13") ▶ Render
-    div(id="btn-clear"  onclick="jadearea:clear"  data-value="" backgroundColor="#21262d" color="#8b949e"  height="28" width="60" borderRadius="6" fontSize="13") Clear
+    div(id="btn-render" onclick="jadearea:save" data-value="" backgroundColor="#238636" color="#aadeff" height="28" width="76" borderRadius="6" fontSize="13") Save
+    div(id="btn-render" onclick="jadearea:load" data-value="" backgroundColor="#238636" color="#ffeedd" height="28" width="76" borderRadius="6" fontSize="13") Load
+    div(id="btn-render" onclick="jadearea:render" data-value="" backgroundColor="#238636" color="#afffbf" height="28" width="76" borderRadius="6" fontSize="13") Render
+    div(id="btn-clear"  onclick="jadearea:clear"  data-value="" backgroundColor="#21262d" color="#fb99fe"  height="28" width="60" borderRadius="6" fontSize="13") Clear
 
-  // ── Split pane ───────────────────────────────────────────────────────────
+  //  Split pane
   row(flexGrow="1" gap="0")
 
-    // Left: source editor ─────────────────────────────────────────────────
+    // Left: source editor
     col(flexGrow="1" backgroundColor="#0d1117" overflow="hidden")
       row(height="28" backgroundColor="#161b22" paddingLeft="10")
         div(color="#8b949e" fontSize="11") Source
       div(id="editor-wrap" flexGrow="1" overflow="hidden")
 
     // Divider
-    div(backgroundColor="#30363d" width="1")
+    // div(backgroundColor="#30363d" width="1")
 
-    // Right: live preview ─────────────────────────────────────────────────
+    // Right: live preview
     col(flexGrow="1" backgroundColor="#161b22" overflow="hidden")
       row(height="28" backgroundColor="#0d1117" paddingLeft="10")
         div(color="#8b949e" fontSize="11") Preview

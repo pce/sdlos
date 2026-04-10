@@ -8,7 +8,7 @@ Steps
 1. Validate the AppConfig.
 2. Create the app directory (examples/apps/<name>/).
 3. Optionally scaffold the data/ skeleton and copy a model file.
-4. Render and write jade / css / behavior_cxx from the chosen template.
+4. Render and write jade / css / behavior_cc from the chosen template.
    On --overwrite, existing user regions are spliced into the new output.
 5. Write <name>.cmake into the app directory — picked up automatically by
    the root CMakeLists.txt glob, no manual edits needed.
@@ -233,10 +233,10 @@ def _post_process_generated(app_dir: Path, cfg: AppConfig) -> None:
     (libclang not installed, clang-format not on PATH, …) it reports the
     error as a warning and continues.  Scaffold output is never blocked.
 
-    Only the ``behavior_cxx`` file is processed — the jade and CSS files
+    Only the ``behavior_cc`` file is processed — the jade and CSS files
     are not C++ and would confuse clang-format / libclang.
     """
-    cxx_file = app_dir / output_filename("behavior_cxx", cfg.name)
+    cxx_file = app_dir / output_filename("behavior_cc", cfg.name)
     if not cxx_file.exists():
         return
 

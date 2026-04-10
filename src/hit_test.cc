@@ -4,13 +4,11 @@ namespace pce::sdlos {
 
 namespace {
 
-static NodeHandle hitTestNode(const RenderTree& tree,
-                               NodeHandle h,
-                               float ox, float oy,
-                               float px, float py) noexcept
-{
-    const RenderNode* n = tree.node(h);
-    if (!n) return k_null_handle;
+static NodeHandle
+hitTestNode(const RenderTree &tree, NodeHandle h, float ox, float oy, float px, float py) noexcept {
+    const RenderNode *n = tree.node(h);
+    if (!n)
+        return k_null_handle;
 
     const bool has_area = (n->w > 0.f && n->h > 0.f);
 
@@ -37,13 +35,15 @@ static NodeHandle hitTestNode(const RenderTree& tree,
     // Recurse into children — last sibling wins.
     NodeHandle best = k_null_handle;
 
-    for (NodeHandle c = n->child; c.valid(); ) {
-        const RenderNode* cn = tree.node(c);
-        if (!cn) break;
+    for (NodeHandle c = n->child; c.valid();) {
+        const RenderNode *cn = tree.node(c);
+        if (!cn)
+            break;
 
         // Pass accumulated offsets to child: new offsets = parent_offset + this_node_position.
         const NodeHandle r = hitTestNode(tree, c, bounds.left, bounds.top, px, py);
-        if (r.valid()) best = r;   // overwrite — last child wins
+        if (r.valid())
+            best = r;  // overwrite — last child wins
 
         c = cn->sibling;
     }
@@ -52,12 +52,11 @@ static NodeHandle hitTestNode(const RenderTree& tree,
     return best.valid() ? best : (has_area ? h : k_null_handle);
 }
 
-} // anonymous namespace
-
+}  // anonymous namespace
 
 /**
-* @brief Hit test Public entry point.
-*
+ * @brief Hit test Public entry point.
+ *
  *  The root node's own bounds are intentionally NOT checked.  This makes two
  *  common patterns work identically without special-casing:
  *
@@ -75,11 +74,10 @@ static NodeHandle hitTestNode(const RenderTree& tree,
  *
  * @return Handle to the node, or k_null_handle on failure
  */
-NodeHandle hitTest(const RenderTree& tree, NodeHandle root,
-                   float px, float py) noexcept
-{
-    const RenderNode* r = tree.node(root);
-    if (!r) return k_null_handle;
+NodeHandle hitTest(const RenderTree &tree, NodeHandle root, float px, float py) noexcept {
+    const RenderNode *r = tree.node(root);
+    if (!r)
+        return k_null_handle;
 
     // Use root's own position as the accumulated offset for its children.
     // For full-viewport scene roots (x=0, y=0) this is free.
@@ -89,12 +87,14 @@ NodeHandle hitTest(const RenderTree& tree, NodeHandle root,
 
     NodeHandle result = k_null_handle;
 
-    for (NodeHandle c = r->child; c.valid(); ) {
-        const RenderNode* cn = tree.node(c);
-        if (!cn) break;
+    for (NodeHandle c = r->child; c.valid();) {
+        const RenderNode *cn = tree.node(c);
+        if (!cn)
+            break;
 
         const NodeHandle hit = hitTestNode(tree, c, ox, oy, px, py);
-        if (hit.valid()) result = hit;  // last child wins
+        if (hit.valid())
+            result = hit;  // last child wins
 
         c = cn->sibling;
     }
@@ -102,4 +102,4 @@ NodeHandle hitTest(const RenderTree& tree, NodeHandle root,
     return result;
 }
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

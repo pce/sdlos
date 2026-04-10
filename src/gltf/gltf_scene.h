@@ -58,6 +58,14 @@ struct GltfCamera {
     float pos[3];
     float vw = 1.f, vh = 1.f;
 
+    // ── Orbit camera state ───────────────────────────────────────────────────
+    // Used only when the orbit*() methods are called.  lookAt() / perspective()
+    // still work independently as an escape hatch.
+    float orbit_yaw_deg   = 30.f;             ///< horizontal angle (degrees), +CCW from +Z
+    float orbit_pitch_deg = 20.f;             ///< vertical angle (degrees), clamped ±89°
+    float orbit_dist      = 5.f;              ///< distance from target
+    float orbit_target[3] = {0.f, 0.f, 0.f};  ///< world-space pivot
+
     /**
      * @brief Gltf camera
      */
@@ -73,8 +81,7 @@ struct GltfCamera {
      * @param cy  Vertical coordinate in logical pixels
      * @param cz  Depth coordinate
      */
-    void lookAt(float ex, float ey, float ez,
-                float cx, float cy, float cz) noexcept;
+    void lookAt(float ex, float ey, float ez, float cx, float cy, float cz) noexcept;
 
     /**
      * @brief Perspective
@@ -84,8 +91,8 @@ struct GltfCamera {
      * @param near_z     Depth coordinate
      * @param far_z      Depth coordinate
      */
-    void perspective(float fov_y_deg, float aspect,
-                     float near_z = 0.1f, float far_z = 500.f) noexcept;
+    void
+    perspective(float fov_y_deg, float aspect, float near_z = 0.1f, float far_z = 500.f) noexcept;
 
     /**
      * @brief Sets viewport
@@ -94,61 +101,94 @@ struct GltfCamera {
      * @param h  Opaque resource handle
      */
     void setViewport(float w, float h) noexcept;
+
+    // ── Orbit API ────────────────────────────────────────────────────────────
+
+    /** Set the world-space point the camera orbits around.
+     *  Defaults to origin (0, 0, 0).  Triggers a view-matrix update. */
+    void setOrbitTarget(float tx, float ty, float tz) noexcept;
+
+    /** Set absolute orbit angles and distance, then recompute the view matrix.
+     *
+     *  Typical usage (from a behavior or the host auto-wire):
+     *    camera.orbit(30.f, 20.f, 5.f);   // yaw=30°, pitch=20°, dist=5 units
+     */
+    void orbit(float yaw_deg, float pitch_deg, float dist) noexcept;
+
+    /** Increment yaw and pitch by the given deltas, then recompute.
+     *  Pitch is automatically clamped to ±89° to prevent gimbal flip.
+     *
+     *  Typical usage (mouse drag in a behavior):
+     *    camera.orbitBy(dx * sensitivity, -dy * sensitivity);
+     */
+    void orbitBy(float dyaw, float dpitch) noexcept;
+
+    /** Multiply the orbit distance by @p factor, clamped to [min_dist, max_dist].
+     *
+     *  Typical usage (mouse scroll):
+     *    camera.orbitZoom(1.f - scroll_y * 0.1f);
+     */
+    void orbitZoom(float factor, float min_dist = 0.5f, float max_dist = 500.f) noexcept;
+
+    /** Recompute the view matrix from the current orbit state.
+     *  Called automatically by all orbit*() methods; exposed so behaviors can
+     *  mutate the raw fields and call this once at the end of a frame. */
+    void updateOrbit() noexcept;
 };
 
 struct GpuMesh {
-    SDL_GPUBuffer* vertex_buf  = nullptr;
-    SDL_GPUBuffer* index_buf   = nullptr;
-    Uint32         index_count = 0;
-    float          aabb_min[3]{};
-    float          aabb_max[3]{};
+    SDL_GPUBuffer *vertex_buf = nullptr;
+    SDL_GPUBuffer *index_buf  = nullptr;
+    Uint32 index_count        = 0;
+    float aabb_min[3]{};
+    float aabb_max[3]{};
 
     /**
      * @brief Valid
      *
      * @return true on success, false on failure
      */
-    [[nodiscard]] bool valid() const noexcept
-    {
+    [[nodiscard]]
+    bool valid() const noexcept {
         return vertex_buf && index_buf && index_count > 0;
     }
 };
 
 // 32 bytes, matches pbr_mesh.vert.metal vertex descriptor.
 struct GpuVertex {
-    float px, py, pz;   // offset  0
-    float nx, ny, nz;   // offset 12
-    float u, v;         // offset 24
+    float px, py, pz;  // offset  0
+    float nx, ny, nz;  // offset 12
+    float u, v;        // offset 24
 };
 static_assert(sizeof(GpuVertex) == 32);
 
 // Vertex uniform slot 0.
 struct alignas(16) VertPush {
-    float mvp[16];    // proj * view * model
+    float mvp[16];  // proj * view * model
     float model[16];
 };
 static_assert(sizeof(VertPush) == 128);
 
 // Fragment uniform slot 0.
 struct alignas(16) FragPush {
-    float base_color[4];  // CSS 'color'
-    float emissive[4];    // CSS '--emissive' rgb + intensity (a)
-    float light_dir_i[4]; // xyz = world dir, w = intensity
-    float light_color[4]; // rgb + 0
-    float cam_pos[4];     // xyz + 0
-    float roughness;      // CSS '--roughness'
-    float metallic;       // CSS '--metallic'
-    float hover_t;        // 1.0 when border-width > 0
-    float opacity;        // CSS 'opacity'
+    float base_color[4];   // CSS 'color'
+    float emissive[4];     // CSS '--emissive' rgb + intensity (a)
+    float light_dir_i[4];  // xyz = world dir, w = intensity
+    float light_color[4];  // rgb + 0
+    float cam_pos[4];      // xyz + 0
+    float roughness;       // CSS '--roughness'
+    float metallic;        // CSS '--metallic'
+    float hover_t;         // 1.0 when border-width > 0
+    float opacity;         // CSS 'opacity'
 };
 static_assert(sizeof(FragPush) == 96);
 
 class GltfScene {
-public:
+  public:
     /**
      * @brief Gltf scene
      */
-    GltfScene()  = default;
+    GltfScene() = default;
     /**
      * @brief ~gltf scene
      */
@@ -159,8 +199,8 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    GltfScene(const GltfScene&)            = delete;
-    GltfScene& operator=(const GltfScene&) = delete;
+    GltfScene(const GltfScene &)            = delete;
+    GltfScene &operator=(const GltfScene &) = delete;
 
     // init() — call once after SDLRenderer::Initialize().
     // Shaders are resolved from base_path + "data/shaders/msl/pbr_mesh.*".
@@ -174,10 +214,11 @@ public:
      *
      * @return true on success, false on failure
      */
-    bool init(SDL_GPUDevice*       device,
-              SDL_GPUShaderFormat  fmt,
-              const std::string&   base_path,
-              SDL_GPUTextureFormat swapchain_fmt) noexcept;
+    bool init(
+        SDL_GPUDevice *device,
+        SDL_GPUShaderFormat fmt,
+        const std::string &base_path,
+        SDL_GPUTextureFormat swapchain_fmt) noexcept;
 
     // Scan the RenderTree for nodes with tag="scene3d", load their src= files,
     // and inject object3d proxy children (one per mesh primitive).
@@ -191,7 +232,25 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    int attach(RenderTree& tree, NodeHandle root, const std::string& base_path);
+    int attach(RenderTree &tree, NodeHandle root, const std::string &base_path);
+
+    // Release all loaded mesh primitives and remove their proxy RenderNodes
+    // from *tree*.  The GPU pipeline, shaders, and depth texture are kept so
+    // a subsequent attach() can reuse them without re-compiling shaders.
+    //
+    // Call this before re-attach()ing a different GLTF to the same scene3d
+    // node (e.g. swapping city meshes in a weather app).
+    //
+    // Safe to call when entries_ is already empty (no-op).
+    /**
+     * @brief Clears all loaded mesh entries and removes their proxy RenderNodes.
+     *
+     * The GPU pipeline, depth texture, and compiled shaders are preserved so
+     * a subsequent attach() can reuse them without re-initialising.
+     *
+     * @param tree  RenderTree that holds the proxy nodes to remove.
+     */
+    void clearMeshes(RenderTree &tree) noexcept;
 
     // Mark all proxy RenderNodes dirty so draw callbacks re-read StyleMap.
     // Call after css.applyTo().
@@ -200,7 +259,7 @@ public:
      *
      * @param tree  Red channel component [0, 1]
      */
-    void applyCSS(RenderTree& tree) noexcept;
+    void applyCSS(RenderTree &tree) noexcept;
 
     // Convenience: load a named CSS layout file and apply it to the tree.
     // The CSS may contain --scale, --translate-x/y/z, --rotation-x/y/z and
@@ -216,8 +275,7 @@ public:
      *
      * @return true on success, false on failure
      */
-    bool applyMapCSS(RenderTree& tree, NodeHandle root,
-                     const std::string& path) noexcept;
+    bool applyMapCSS(RenderTree &tree, NodeHandle root, const std::string &path) noexcept;
 
     // Project world AABBs to screen and write x/y/w/h on each proxy node.
     // Call before css.tickHover() each frame.
@@ -228,7 +286,7 @@ public:
      * @param vw    Width in logical pixels
      * @param vh    Opaque resource handle
      */
-    void tick(RenderTree& tree, float vw, float vh) noexcept;
+    void tick(RenderTree &tree, float vw, float vh) noexcept;
 
     // Draw all meshes in a single render pass (LOADOP_LOAD on color_target).
     // Call before the jade 2D pass each frame.
@@ -240,15 +298,24 @@ public:
      * @param vw            Width in logical pixels
      * @param vh            Opaque resource handle
      */
-    void render(SDL_GPUCommandBuffer* cmd,
-                SDL_GPUTexture*       color_target,
-                float vw, float vh) noexcept;
+    void
+    render(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *color_target, float vw, float vh) noexcept;
 
     /**
      * @brief Shuts down
      */
     void shutdown() noexcept;
 
+    // Use a reference-counted handle for the device so child scenes
+    // can safely reach the GPU device even if the renderer was destroyed.
+    // In SDL3, SDL_GPUDevice is usually managed by the application.
+    /**
+     * @brief Sets device
+     *
+     * @param device  SDL3 GPU device handle
+     */
+    void setDevice(SDL_GPUDevice *device) noexcept { device_ = device; }
+
     /**
      * @brief Mesh count
      *
@@ -330,7 +397,6 @@ public:
      * @return Reference to the result
      */
 
-
     /**
      * @brief Camera
      *
@@ -351,33 +417,33 @@ public:
      *
      * @return Reference to the result
      */
-    GltfCamera&       camera()     noexcept { return camera_; }
+    GltfCamera &camera() noexcept { return camera_; }
     /**
      * @brief Camera
      *
      * @return Reference to the result
      */
-    const GltfCamera& camera() const noexcept { return camera_; }
+    const GltfCamera &camera() const noexcept { return camera_; }
     /**
      * @brief Reads y
      *
      * @return true on success, false on failure
      */
 
-    bool              ready()  const noexcept { return pipeline_ != nullptr; }
+    bool ready() const noexcept { return pipeline_ != nullptr; }
     /**
      * @brief Mesh count
      *
      * @return Integer result; negative values indicate an error code
      */
-    std::size_t       meshCount() const noexcept { return entries_.size(); }
+    std::size_t meshCount() const noexcept { return entries_.size(); }
 
-private:
+  private:
     struct MeshEntry {
-        GpuMesh    gpu;
-        float      world_mat[16];
-        NodeHandle proxy_handle;     ///< object3d proxy RenderNode (style reads)
-        NodeHandle scene3d_handle;   ///< parent scene3d RenderNode (display:none)
+        GpuMesh gpu;
+        float world_mat[16];
+        NodeHandle proxy_handle;    ///< object3d proxy RenderNode (style reads)
+        NodeHandle scene3d_handle;  ///< parent scene3d RenderNode (display:none)
     };
 
     /**
@@ -390,11 +456,13 @@ private:
      * @param vw    Width in logical pixels
      * @param vh    Opaque resource handle
      */
-    void drawEntry(SDL_GPURenderPass*    pass,
-                   SDL_GPUCommandBuffer* cmd,
-                   const MeshEntry&      e,
-                   RenderTree&           tree,
-                   float vw, float vh) noexcept;
+    void drawEntry(
+        SDL_GPURenderPass *pass,
+        SDL_GPUCommandBuffer *cmd,
+        const MeshEntry &e,
+        RenderTree &tree,
+        float vw,
+        float vh) noexcept;
 
     // Build the model matrix for an entry.
     // Reads --scale[-x/y/z], --translate-x/y/z, --rotation-x/y/z from the
@@ -414,7 +482,7 @@ private:
      *
      * @return math3d::Mat4 result
      */
-    static math3d::Mat4 buildModelMatrix(const MeshEntry& e, RenderTree& tree) noexcept;
+    static math3d::Mat4 buildModelMatrix(const MeshEntry &e, RenderTree &tree) noexcept;
 
     /**
      * @brief Creates and returns pipeline
@@ -471,28 +539,27 @@ private:
      *
      * @return true on success, false on failure
      */
-    bool loadFile(const std::filesystem::path& path,
-                  RenderTree& tree, NodeHandle parent_handle);
+    bool loadFile(const std::filesystem::path &path, RenderTree &tree, NodeHandle parent_handle);
 
-    SDL_GPUDevice*           device_   = nullptr;
-    SDL_GPUShaderFormat      fmt_      = SDL_GPU_SHADERFORMAT_INVALID;
-    std::string              base_;
-    SDL_GPUShader*           vert_     = nullptr;
-    SDL_GPUShader*           frag_     = nullptr;
-    SDL_GPUGraphicsPipeline* pipeline_ = nullptr;
-    SDL_GPUTexture*          depth_    = nullptr;
-    Uint32                   depth_w_  = 0;
-    Uint32                   depth_h_  = 0;
+    SDL_GPUDevice *device_   = nullptr;
+    SDL_GPUShaderFormat fmt_ = SDL_GPU_SHADERFORMAT_INVALID;
+    std::string base_;
+    SDL_GPUShader *vert_               = nullptr;
+    SDL_GPUShader *frag_               = nullptr;
+    SDL_GPUGraphicsPipeline *pipeline_ = nullptr;
+    SDL_GPUTexture *depth_             = nullptr;
+    Uint32 depth_w_                    = 0;
+    Uint32 depth_h_                    = 0;
 
-    std::vector<MeshEntry>   entries_;
-    GltfCamera               camera_;
-    RenderTree*              tree_ref_ = nullptr;
+    std::vector<MeshEntry> entries_;
+    GltfCamera camera_;
+    RenderTree *tree_ref_ = nullptr;
 
     struct Light {
         float dir[3]    = {-0.4f, -0.9f, -0.2f};
-        float color[3]  = { 1.0f,  0.97f, 0.9f};
+        float color[3]  = {1.0f, 0.97f, 0.9f};
         float intensity = 2.f;
     } light_;
 };
 
-} // namespace pce::sdlos::gltf
+}  // namespace pce::sdlos::gltf

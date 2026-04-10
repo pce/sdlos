@@ -34,12 +34,11 @@
 //   Bucket C  runtime       fog density, DoF focal, …       0 extra variants
 //
 
+#include "../css_loader.h"
+#include "../event_bus.h"
 #include "compiled_graph.h"
 #include "pug_parser.h"
 #include "resource_pool.h"
-
-#include "../css_loader.h"
-#include "../event_bus.h"
 
 #include <SDL3/SDL_gpu.h>
 
@@ -52,9 +51,8 @@
 
 namespace pce::sdlos::fg {
 
-
 class ShaderLibrary {
-public:
+  public:
     /**
      * @brief Shader library
      */
@@ -65,21 +63,20 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    ShaderLibrary(const ShaderLibrary&)            = delete;
-    ShaderLibrary& operator=(const ShaderLibrary&) = delete;
+    ShaderLibrary(const ShaderLibrary &)            = delete;
+    ShaderLibrary &operator=(const ShaderLibrary &) = delete;
     /**
      * @brief Shader library
      *
      * @param param0  Red channel component [0, 1]
      */
-    ShaderLibrary(ShaderLibrary&&)                 = default;
-    ShaderLibrary& operator=(ShaderLibrary&&)      = default;
+    ShaderLibrary(ShaderLibrary &&)            = default;
+    ShaderLibrary &operator=(ShaderLibrary &&) = default;
 
     /**
      * @brief ~shader library
      */
     ~ShaderLibrary() { release_all(); }
-
 
     /**
      * @brief Initialises
@@ -88,13 +85,13 @@ public:
      * @param shader_dir     Directory path
      * @param shader_format  Format descriptor
      */
-    void init(SDL_GPUDevice*   device,
-              std::string_view shader_dir,
-              SDL_GPUShaderFormat shader_format) noexcept
-    {
-        device_         = device;
-        shader_dir_     = shader_dir;
-        shader_format_  = shader_format;
+    void init(
+        SDL_GPUDevice *device,
+        std::string_view shader_dir,
+        SDL_GPUShaderFormat shader_format) noexcept {
+        device_        = device;
+        shader_dir_    = shader_dir;
+        shader_format_ = shader_format;
     }
 
     // get_or_create — return a cached pipeline or compile a new one.
@@ -253,12 +250,24 @@ public:
      *          pointer parameter — ownership is ambiguous; consider std::span (non-
      *          owning view), std::unique_ptr (transfer), or const T* (borrow)
      */
+    /**
+     * @brief Returns or create
+     *
+     * @param shader_key     Lookup key
+     * @param target_format  Format descriptor
+     * @param num_samplers   Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     *
+     * @warning Factory function 'get_or_create' returns a non-const raw pointer — Raw
+     *          pointer parameter — ownership is ambiguous; consider std::span (non-
+     *          owning view), std::unique_ptr (transfer), or const T* (borrow)
+     */
     [[nodiscard]]
-    SDL_GPUGraphicsPipeline* get_or_create(
-        std::string_view     shader_key,
+    SDL_GPUGraphicsPipeline *get_or_create(
+        std::string_view shader_key,
         SDL_GPUTextureFormat target_format,
-        uint8_t              num_samplers) noexcept;
-
+        uint8_t num_samplers) noexcept;
 
     // create_sampler — shared linear-clamp sampler used for all pass inputs.
     // Created once; caller does NOT own the returned pointer.
@@ -317,15 +326,20 @@ public:
      *
      * @return Pointer to the result, or nullptr on failure
      */
+    /**
+     * @brief Linear sampler
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     [[nodiscard]]
-    SDL_GPUSampler* linear_sampler() noexcept;
+    SDL_GPUSampler *linear_sampler() noexcept;
 
     /**
      * @brief Releases all
      */
     void release_all() noexcept;
 
-private:
+  private:
     // load_shader — read a compiled shader binary from disk.
     // Tries <shader_dir>/<name>.{metal,spv,dxil} depending on shader_format_.
     // Returns nullptr on failure.
@@ -432,19 +446,28 @@ private:
      *
      * @return Pointer to the result, or nullptr on failure
      */
+    /**
+     * @brief Loads shader
+     *
+     * @param name               Human-readable name or identifier string
+     * @param stage              String tag used for lookup or categorisation
+     * @param num_frag_samplers  Numeric count
+     *
+     * @return Pointer to the result, or nullptr on failure
+     */
     [[nodiscard]]
-    SDL_GPUShader* load_shader(std::string_view   name,
-                               SDL_GPUShaderStage stage,
-                               uint8_t            num_frag_samplers) noexcept;
+    SDL_GPUShader *load_shader(
+        std::string_view name,
+        SDL_GPUShaderStage stage,
+        uint8_t num_frag_samplers) noexcept;
 
-    SDL_GPUDevice*      device_         = nullptr;
-    SDL_GPUShaderFormat shader_format_  = SDL_GPU_SHADERFORMAT_INVALID;
-    std::string         shader_dir_;
+    SDL_GPUDevice *device_             = nullptr;
+    SDL_GPUShaderFormat shader_format_ = SDL_GPU_SHADERFORMAT_INVALID;
+    std::string shader_dir_;
 
-    std::unordered_map<std::string, SDL_GPUGraphicsPipeline*> cache_;
-    SDL_GPUSampler*     sampler_ = nullptr;
+    std::unordered_map<std::string, SDL_GPUGraphicsPipeline *> cache_;
+    SDL_GPUSampler *sampler_ = nullptr;
 };
-
 
 /// FrameGraph
 //
@@ -452,7 +475,7 @@ private:
 // pipeline.pug and mutated by CSS / EventBus.  Compiles down to a
 // CompiledGraph for zero-overhead execution.
 class FrameGraph {
-public:
+  public:
     //
     // Construction
     //
@@ -466,16 +489,16 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    FrameGraph(const FrameGraph&)            = delete;
-    FrameGraph& operator=(const FrameGraph&) = delete;
+    FrameGraph(const FrameGraph &)            = delete;
+    FrameGraph &operator=(const FrameGraph &) = delete;
 
     /**
      * @brief Frame graph
      *
      * @param param0  Red channel component [0, 1]
      */
-    FrameGraph(FrameGraph&&)                 = default;
-    FrameGraph& operator=(FrameGraph&&)      = default;
+    FrameGraph(FrameGraph &&)            = default;
+    FrameGraph &operator=(FrameGraph &&) = default;
 
     // from_pug — parse pipeline.pug source and create a FrameGraph.
     //
@@ -500,12 +523,13 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    from_pug(std::string_view     source,
-             SDL_GPUDevice*       device,
-             std::string_view     shader_dir,
-             SDL_GPUShaderFormat  shader_format,
-             uint32_t             swapchain_w,
-             uint32_t             swapchain_h) noexcept;
+    from_pug(
+        std::string_view source,
+        SDL_GPUDevice *device,
+        std::string_view shader_dir,
+        SDL_GPUShaderFormat shader_format,
+        uint32_t swapchain_w,
+        uint32_t swapchain_h) noexcept;
 
     //
     static std::expected<FrameGraph, std::string>
@@ -521,12 +545,13 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    from_file(std::string_view     path,
-              SDL_GPUDevice*       device,
-              std::string_view     shader_dir,
-              SDL_GPUShaderFormat  shader_format,
-              uint32_t             swapchain_w,
-              uint32_t             swapchain_h) noexcept;
+    from_file(
+        std::string_view path,
+        SDL_GPUDevice *device,
+        std::string_view shader_dir,
+        SDL_GPUShaderFormat shader_format,
+        uint32_t swapchain_w,
+        uint32_t swapchain_h) noexcept;
 
     //
     // compile — resolve all descriptors into a zero-overhead CompiledGraph.
@@ -586,14 +611,12 @@ public:
      *
      * @param sheet  Opaque resource handle
      */
-    void apply_css(const css::StyleSheet& sheet) noexcept;
+    void apply_css(const css::StyleSheet &sheet) noexcept;
 
     /// Direct style setter — bypasses CSS, mutates the PassDesc immediately.
     /// Key "enabled" sets PassDesc::enabled (string "false" → false).
     /// All other keys update PassDesc::params.
-    void apply_style(std::string_view pass_id,
-                     std::string_view key,
-                     std::string_view val) noexcept;
+    void apply_style(std::string_view pass_id, std::string_view key, std::string_view val) noexcept;
 
     //
     // EventBus wiring
@@ -615,9 +638,7 @@ public:
      * @param cg     Green channel component [0, 1]
      * @param sheet  Opaque resource handle
      */
-    void wire_bus(EventBus&       bus,
-                  CompiledGraph&  cg,
-                  css::StyleSheet& sheet) noexcept;
+    void wire_bus(EventBus &bus, CompiledGraph &cg, css::StyleSheet &sheet) noexcept;
 
     //
     // Class toggle — add or remove a class token on the pipeline root node.
@@ -630,9 +651,7 @@ public:
      * @param cg     Green channel component [0, 1]
      * @param sheet  Opaque resource handle
      */
-    void add_class(std::string_view    cls,
-                   CompiledGraph&      cg,
-                   css::StyleSheet&    sheet) noexcept;
+    void add_class(std::string_view cls, CompiledGraph &cg, css::StyleSheet &sheet) noexcept;
 
     /**
      * @brief Removes class
@@ -641,9 +660,7 @@ public:
      * @param cg     Green channel component [0, 1]
      * @param sheet  Opaque resource handle
      */
-    void remove_class(std::string_view cls,
-                      CompiledGraph&   cg,
-                      css::StyleSheet& sheet) noexcept;
+    void remove_class(std::string_view cls, CompiledGraph &cg, css::StyleSheet &sheet) noexcept;
 
     //
     // Accessors
@@ -653,32 +670,32 @@ public:
      *
      * @return Integer result; negative values indicate an error code
      */
-    const std::vector<VariantDesc>&  variants()  const noexcept { return parsed_.variants;  }
+    const std::vector<VariantDesc> &variants() const noexcept { return parsed_.variants; }
     /**
      * @brief Resources
      *
      * @return Integer result; negative values indicate an error code
      */
-    const std::vector<ResourceDesc>& resources() const noexcept { return parsed_.resources; }
+    const std::vector<ResourceDesc> &resources() const noexcept { return parsed_.resources; }
     /**
      * @brief Passes
      *
      * @return Integer result; negative values indicate an error code
      */
-    const std::vector<PassDesc>&     passes()    const noexcept { return parsed_.passes;    }
+    const std::vector<PassDesc> &passes() const noexcept { return parsed_.passes; }
 
     /**
      * @brief Valid
      *
      * @return true on success, false on failure
      */
-    bool valid()  const noexcept { return !parsed_.passes.empty() && device_ != nullptr; }
+    bool valid() const noexcept { return !parsed_.passes.empty() && device_ != nullptr; }
     /**
      * @brief Empty
      *
      * @return true on success, false on failure
      */
-    bool empty()  const noexcept { return  parsed_.passes.empty(); }
+    bool empty() const noexcept { return parsed_.passes.empty(); }
 
     /**
      * @brief Swaps chain w
@@ -693,7 +710,7 @@ public:
      */
     uint32_t swapchain_h() const noexcept { return pool_.swapchain_h(); }
 
-private:
+  private:
     //
     // compile_params — flatten a PassDesc::params StyleMap into CompiledParams.
     //
@@ -709,7 +726,7 @@ private:
      *
      * @return CompiledParams result
      */
-    static CompiledParams compile_params(const StyleMap& params) noexcept;
+    static CompiledParams compile_params(const StyleMap &params) noexcept;
 
     //
     // resolve_output — return the SDL_GPUTexture* for a pass's writes= field.
@@ -726,12 +743,12 @@ private:
      *
      * @return Pointer to the result, or nullptr on failure
      */
-    SDL_GPUTexture* resolve_output(std::string_view writes_id) noexcept;
+    SDL_GPUTexture *resolve_output(std::string_view writes_id) noexcept;
 
-    SDL_GPUDevice*  device_ = nullptr;
-    ParseResult     parsed_;                ///< immutable after from_pug()
-    ResourcePool    pool_;                  ///< owns transient textures
-    ShaderLibrary   shaders_;              ///< owns compiled pipelines
+    SDL_GPUDevice *device_ = nullptr;
+    ParseResult parsed_;     ///< immutable after from_pug()
+    ResourcePool pool_;      ///< owns transient textures
+    ShaderLibrary shaders_;  ///< owns compiled pipelines
 
     /// Pipeline-root CSS class tokens (e.g. "night", "low-power").
     /// apply_css() re-runs scoped rules when this set changes.
@@ -742,4 +759,4 @@ private:
     std::vector<PassDesc> pass_overrides_;
 };
 
-} // namespace pce::sdlos::fg
+}  // namespace pce::sdlos::fg

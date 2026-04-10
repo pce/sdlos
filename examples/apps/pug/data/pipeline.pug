@@ -38,10 +38,12 @@
 // ── Resources ─────────────────────────────────────────────────────────────────
 // bg_color:         HDR intermediate render target (rgba16f, swapchain-sized).
 // vignette_buffer:  Post-vignette buffer           (rgba16f, swapchain-sized).
+// cartoon_buffer:   Post-cartoon buffer            (rgba16f, swapchain-sized).
 // The final grade pass writes directly to the swapchain.
 
 resource#bg_color(format="rgba16f" size="swapchain")
 resource#vignette_buffer(format="rgba16f" size="swapchain")
+resource#cartoon_buffer(format="rgba16f" size="swapchain")
 
 // ── Passes ────────────────────────────────────────────────────────────────────
 
@@ -57,14 +59,26 @@ pass#bg(shader="bg"
         speed="0.4"
         time="0.0")
 
+// Pass 1.5 — edge-detected cartoon finish
+//   Reads bg_color; writes cartoon_buffer.
+//   Bucket-C params (alphabetical → cbuffer slots 0, 1):
+//     threshold  [0]  edge detection sensitivity (0.1 = sharp, 0.5 = soft)
+//     time       [1]  wall-clock seconds
+pass#cartoon(shader="cartoon"
+             reads="bg_color"
+             writes="cartoon_buffer"
+             enabled="true"
+             threshold="0.1"
+             time="0.0")
+
 // Pass 2 — radial vignette + edge pulse
-//   Reads bg_color; writes vignette_buffer.
+//   Reads cartoon_buffer; writes vignette_buffer.
 //   Bucket-C params (alphabetical → cbuffer slots 0, 1):
 //     intensity  [0]  vignette strength  (0 = off, 1 = strong)
 //     time       [1]  wall-clock seconds (auto-injected)
 //   Disable via CSS:  pipeline.low-power #vignette { enabled: false; }
 pass#vignette(shader="vignette"
-              reads="bg_color"
+              reads="cartoon_buffer"
               writes="vignette_buffer"
               enabled="true"
               intensity="0.6"

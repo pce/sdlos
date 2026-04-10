@@ -543,7 +543,7 @@ without wiping the build directory.
 | `sdlos run <name> --clean`        | `cmake --build --clean-first` then launch
 | `sdlos run <name> --reconfigure`  | Re-configure (picks up new `.cmake` glob entries)
 | `sdlos run <name> --no-build`     | Skip build, just find and launch the existing binary
-| `sdlos create <name>`             | Scaffold jade + css + behavior_cxx + auto-cmake into `examples/apps/<name>/`
+| `sdlos create <name>`             | Scaffold jade + css + behavior_cc + auto-cmake into `examples/apps/<name>/`
 | `sdlos templates`                 | List available scaffold templates
 | `sdlos pipeline <name>`           | Visualise a `pipeline.pug` render graph
 |===

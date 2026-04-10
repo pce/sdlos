@@ -44,15 +44,15 @@ class TestRendererMeta:
     def test_output_filename_css(self) -> None:
         assert output_filename("css", "my_app") == "my_app.css"
 
-    def test_output_filename_behavior_cxx(self) -> None:
-        assert output_filename("behavior_cxx", "my_app") == "my_app_behavior.cxx"
+    def test_output_filename_behavior_cc(self) -> None:
+        assert output_filename("behavior_cc", "my_app") == "my_app_behavior.cxx"
 
     def test_output_filename_unknown_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown kind"):
             output_filename("html", "my_app")
 
     def test_kinds_tuple_complete(self) -> None:
-        assert set(KINDS) == {"jade", "css", "behavior_cxx"}
+        assert set(KINDS) == {"jade", "css", "behavior_cc"}
 
 
 # ── Minimal template ──────────────────────────────────────────────────────────
@@ -76,25 +76,25 @@ class TestMinimalTemplate:
         assert "#root" in renders["css"]
 
     def test_behavior_contains_pascal_name(self, renders) -> None:
-        assert "HelloWorldState" in renders["behavior_cxx"]
+        assert "HelloWorldState" in renders["behavior_cc"]
 
     def test_behavior_has_jade_app_init(self, renders) -> None:
-        assert "void jade_app_init(" in renders["behavior_cxx"]
+        assert "void jade_app_init(" in renders["behavior_cc"]
 
     def test_behavior_make_shared(self, renders) -> None:
         # Critical: std::make_shared<HelloWorldState>() must not have
         # an extra '<' before the type — delimiter bug check.
-        assert "std::make_shared<HelloWorldState>()" in renders["behavior_cxx"]
-        assert "std::make_shared<<HelloWorldState>" not in renders["behavior_cxx"]
+        assert "std::make_shared<HelloWorldState>()" in renders["behavior_cc"]
+        assert "std::make_shared<<HelloWorldState>" not in renders["behavior_cc"]
 
     def test_behavior_user_region_markers(self, renders) -> None:
-        assert "--- enter the forrest ---" in renders["behavior_cxx"]
-        assert "--- back to the sea ---"   in renders["behavior_cxx"]
+        assert "--- enter the forrest ---" in renders["behavior_cc"]
+        assert "--- back to the sea ---"   in renders["behavior_cc"]
 
     def test_behavior_no_raw_delimiter(self, renders) -> None:
         # {$ and $} must not appear in rendered output
-        assert "{$" not in renders["behavior_cxx"]
-        assert "$}" not in renders["behavior_cxx"]
+        assert "{$" not in renders["behavior_cc"]
+        assert "$}" not in renders["behavior_cc"]
 
     def test_no_jinja_delimiter_leakage(self, renders) -> None:
         for kind, text in renders.items():
@@ -127,22 +127,22 @@ class TestShaderTemplate:
         assert ".preset" in renders["css"]
 
     def test_behavior_pascal_struct(self, renders) -> None:
-        assert "struct MyShaderState" in renders["behavior_cxx"]
+        assert "struct MyShaderState" in renders["behavior_cc"]
 
     def test_behavior_preset_array(self, renders) -> None:
-        assert "kMyShaderPresets" in renders["behavior_cxx"]
+        assert "kMyShaderPresets" in renders["behavior_cc"]
 
     def test_behavior_make_shared_clean(self, renders) -> None:
-        assert "std::make_shared<MyShaderState>()" in renders["behavior_cxx"]
+        assert "std::make_shared<MyShaderState>()" in renders["behavior_cc"]
 
     def test_behavior_bus_subscribe(self, renders) -> None:
-        assert 'bus.subscribe("my_shader:preset"' in renders["behavior_cxx"]
-        assert 'bus.subscribe("my_shader:inc"'    in renders["behavior_cxx"]
-        assert 'bus.subscribe("my_shader:dec"'    in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_shader:preset"' in renders["behavior_cc"]
+        assert 'bus.subscribe("my_shader:inc"'    in renders["behavior_cc"]
+        assert 'bus.subscribe("my_shader:dec"'    in renders["behavior_cc"]
 
     def test_behavior_user_region_markers(self, renders) -> None:
-        assert "--- enter the forrest ---" in renders["behavior_cxx"]
-        assert "--- back to the sea ---"   in renders["behavior_cxx"]
+        assert "--- enter the forrest ---" in renders["behavior_cc"]
+        assert "--- back to the sea ---"   in renders["behavior_cc"]
 
     def test_no_delimiter_leakage(self, renders) -> None:
         for kind, text in renders.items():
@@ -151,12 +151,12 @@ class TestShaderTemplate:
 
     def test_cpp_braces_intact(self, renders) -> None:
         # C++ aggregate initialisers must not be corrupted
-        cxx = renders["behavior_cxx"]
+        cxx = renders["behavior_cc"]
         assert re.search(r'\{\s*"preset_a"', cxx), "Preset initialiser brace missing"
         assert re.search(r'\}\s*;', cxx),           "Closing brace+semicolon missing"
 
 
-# ── Camera template ───────────────────────────────────────────────────────────
+# Camera template
 
 class TestCameraTemplate:
     @pytest.fixture(scope="class")
@@ -177,27 +177,27 @@ class TestCameraTemplate:
         assert ".preset" in renders["css"]
 
     def test_behavior_pascal_struct(self, renders) -> None:
-        assert "struct MyCamState" in renders["behavior_cxx"]
+        assert "struct MyCamState" in renders["behavior_cc"]
 
     def test_behavior_filter_array(self, renders) -> None:
-        assert "kMyCamFilters" in renders["behavior_cxx"]
+        assert "kMyCamFilters" in renders["behavior_cc"]
 
     def test_behavior_make_shared_clean(self, renders) -> None:
-        assert "std::make_shared<MyCamState>()" in renders["behavior_cxx"]
+        assert "std::make_shared<MyCamState>()" in renders["behavior_cc"]
 
     def test_behavior_bus_subscribe_filter(self, renders) -> None:
-        assert 'bus.subscribe("my_cam:filter"' in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_cam:filter"' in renders["behavior_cc"]
 
     def test_behavior_sdl_event_hook(self, renders) -> None:
-        assert "SDL_EVENT_MOUSE_BUTTON_DOWN" in renders["behavior_cxx"]
-        assert "pixelScaleX()"              in renders["behavior_cxx"]
+        assert "SDL_EVENT_MOUSE_BUTTON_DOWN" in renders["behavior_cc"]
+        assert "pixelScaleX()"              in renders["behavior_cc"]
 
     def test_behavior_dragnum_include(self, renders) -> None:
-        assert '#include "widgets/number_dragger.hh"' in renders["behavior_cxx"]
+        assert '#include "widgets/number_dragger.hh"' in renders["behavior_cc"]
 
     def test_behavior_user_region_markers(self, renders) -> None:
-        assert "--- enter the forrest ---" in renders["behavior_cxx"]
-        assert "--- back to the sea ---"   in renders["behavior_cxx"]
+        assert "--- enter the forrest ---" in renders["behavior_cc"]
+        assert "--- back to the sea ---"   in renders["behavior_cc"]
 
     def test_no_delimiter_leakage(self, renders) -> None:
         for kind, text in renders.items():
@@ -288,65 +288,65 @@ class TestPugTemplate:
     # ── Behavior ──────────────────────────────────────────────────────────────
 
     def test_behavior_contains_name(self, renders) -> None:
-        assert "my_demo" in renders["behavior_cxx"]
+        assert "my_demo" in renders["behavior_cc"]
 
     def test_behavior_pascal_struct(self, renders) -> None:
-        assert "struct MyDemoState" in renders["behavior_cxx"]
+        assert "struct MyDemoState" in renders["behavior_cc"]
 
     def test_behavior_make_shared(self, renders) -> None:
-        assert "std::make_shared<MyDemoState>()" in renders["behavior_cxx"]
+        assert "std::make_shared<MyDemoState>()" in renders["behavior_cc"]
 
     def test_behavior_no_double_angle(self, renders) -> None:
         # Regression: delimiter conflict must not produce <<TypeName>
-        assert "std::make_shared<<MyDemoState>" not in renders["behavior_cxx"]
+        assert "std::make_shared<<MyDemoState>" not in renders["behavior_cc"]
 
     def test_behavior_jade_app_init(self, renders) -> None:
-        assert "void jade_app_init(" in renders["behavior_cxx"]
+        assert "void jade_app_init(" in renders["behavior_cc"]
 
     def test_behavior_live_param_struct(self, renders) -> None:
-        assert "struct LiveParam" in renders["behavior_cxx"]
+        assert "struct LiveParam" in renders["behavior_cc"]
 
     def test_behavior_theme_subscription(self, renders) -> None:
-        assert 'bus.subscribe("my_demo:theme"' in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_demo:theme"' in renders["behavior_cc"]
 
     def test_behavior_quality_subscription(self, renders) -> None:
-        assert 'bus.subscribe("my_demo:quality"' in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_demo:quality"' in renders["behavior_cc"]
 
     def test_behavior_inc_subscription(self, renders) -> None:
-        assert 'bus.subscribe("my_demo:inc"' in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_demo:inc"' in renders["behavior_cc"]
 
     def test_behavior_dec_subscription(self, renders) -> None:
-        assert 'bus.subscribe("my_demo:dec"' in renders["behavior_cxx"]
+        assert 'bus.subscribe("my_demo:dec"' in renders["behavior_cc"]
 
     def test_behavior_get_frame_graph(self, renders) -> None:
-        assert "GetFrameGraph()" in renders["behavior_cxx"]
+        assert "GetFrameGraph()" in renders["behavior_cc"]
 
     def test_behavior_get_compiled_graph(self, renders) -> None:
-        assert "GetCompiledGraph()" in renders["behavior_cxx"]
+        assert "GetCompiledGraph()" in renders["behavior_cc"]
 
     def test_behavior_add_class(self, renders) -> None:
-        assert "add_class(" in renders["behavior_cxx"]
+        assert "add_class(" in renders["behavior_cc"]
 
     def test_behavior_remove_class(self, renders) -> None:
-        assert "remove_class(" in renders["behavior_cxx"]
+        assert "remove_class(" in renders["behavior_cc"]
 
     def test_behavior_patch(self, renders) -> None:
-        assert "->patch(" in renders["behavior_cxx"]
+        assert "->patch(" in renders["behavior_cc"]
 
     def test_behavior_pipeline_css_load(self, renders) -> None:
         # Behavior must load data/pipeline.css at init time.
-        assert "pipeline.css" in renders["behavior_cxx"]
-        assert "css::load(" in renders["behavior_cxx"]
+        assert "pipeline.css" in renders["behavior_cc"]
+        assert "css::load(" in renders["behavior_cc"]
 
     def test_behavior_sdl_get_base_path(self, renders) -> None:
-        assert "SDL_GetBasePath()" in renders["behavior_cxx"]
+        assert "SDL_GetBasePath()" in renders["behavior_cc"]
 
     def test_behavior_user_region_markers(self, renders) -> None:
-        assert "--- enter the forrest ---" in renders["behavior_cxx"]
-        assert "--- back to the sea ---"   in renders["behavior_cxx"]
+        assert "--- enter the forrest ---" in renders["behavior_cc"]
+        assert "--- back to the sea ---"   in renders["behavior_cc"]
 
     def test_behavior_param_table_entries(self, renders) -> None:
-        cxx = renders["behavior_cxx"]
+        cxx = renders["behavior_cc"]
         # Default param table must include bg speed and grade saturation.
         assert '"bg"' in cxx
         assert '"speed"' in cxx
@@ -354,21 +354,21 @@ class TestPugTemplate:
         assert '"saturation"' in cxx
 
     def test_behavior_resolve_param_helper(self, renders) -> None:
-        assert "resolveParam(" in renders["behavior_cxx"]
+        assert "resolveParam(" in renders["behavior_cc"]
 
     def test_behavior_refresh_theme_chips(self, renders) -> None:
-        assert "refreshThemeChips(" in renders["behavior_cxx"]
+        assert "refreshThemeChips(" in renders["behavior_cc"]
 
     def test_behavior_refresh_quality_chips(self, renders) -> None:
-        assert "refreshQualityChips(" in renders["behavior_cxx"]
+        assert "refreshQualityChips(" in renders["behavior_cc"]
 
     def test_behavior_low_power_class(self, renders) -> None:
         # Low-power quality must toggle the "low-power" CSS class.
-        assert '"low-power"' in renders["behavior_cxx"]
+        assert '"low-power"' in renders["behavior_cc"]
 
     def test_behavior_null_guard_compiled_graph(self, renders) -> None:
         # Safety guard: callbacks must not dereference a null CompiledGraph.
-        cxx = renders["behavior_cxx"]
+        cxx = renders["behavior_cc"]
         assert "!fg || !cg" in cxx or ("!fg" in cxx and "!cg" in cxx)
 
     # ── No delimiter leakage ──────────────────────────────────────────────────
@@ -380,7 +380,7 @@ class TestPugTemplate:
 
     def test_cpp_braces_intact(self, renders) -> None:
         # C++ brace syntax must pass through the Jinja2 engine untouched.
-        cxx = renders["behavior_cxx"]
+        cxx = renders["behavior_cc"]
         assert "{ " in cxx or "{" in cxx   # struct / lambda / init list braces
         assert "}" in cxx
 
@@ -396,7 +396,7 @@ class TestNameSubstitution:
     ])
     def test_pascal_name_in_behavior(self, name: str, expected_pascal: str) -> None:
         cfg = _cfg(name, template="minimal")
-        cxx = render_template("minimal", "behavior_cxx", cfg)
+        cxx = render_template("minimal", "behavior_cc", cfg)
         assert f"struct {expected_pascal}State" in cxx
         assert f"std::make_shared<{expected_pascal}State>()" in cxx
 

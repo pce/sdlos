@@ -33,7 +33,7 @@
 /* Window root */
 
 #root {
-    background-color: #0d0d12;
+    background-color: #000000FF;
 }
 
 /* Hero title */
@@ -50,4 +50,9 @@
     height: 24;
     font-size: 14;
     color: #64748b;
+}
+
+/* gltf */
+#animal-scene {
+    flexGrow: 1;
 }

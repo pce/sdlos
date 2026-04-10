@@ -24,6 +24,7 @@
 #include "debug/layout_debug.h"
 #include "css_loader.h"
 #include "vfs/vfs.h"
+#include "gltf/gltf_scene.h"
 
 #include <SDL3/SDL.h>
 
@@ -51,11 +52,23 @@ struct ConsoleState {
     static constexpr float kFontSz   = 11.f;
     static constexpr float kPad      = 5.f;
     static constexpr float kTitleH   = kLineH + kPad;
-    static constexpr float kTotalH   = kTitleH + kMaxLines * kLineH + kPad;
+    static constexpr float kSelectorH = 22.f;
+    static constexpr float kTotalH    = kTitleH + kMaxLines * kLineH + kPad + kSelectorH;
 
     std::deque<std::string> lines;
     bool visible      = false;
     bool layout_debug = false;
+
+    // Inspector / node selector
+    // TODO without console in release
+    // Press '/' when console is open to enter selector mode.
+    // Type #id  .class  or bare word to search live.
+    // Press Enter to commit, n/N (or Shift+n) to step through matches,
+    // Esc to clear.
+    std::string selector_text;                              // live query buffer
+    std::vector<pce::sdlos::NodeHandle> selector_matches;  // DFS result list
+    int  selector_idx  = -1;   // currently highlighted match (-1 = none)
+    bool selector_mode = false; // true while '/' is capturing text
 };
 
 static ConsoleState g_console;
@@ -149,16 +162,24 @@ static void resolveAssetPaths(pce::sdlos::RenderTree& tree,
     pce::sdlos::RenderNode* n = tree.node(root);
     if (!n) return;
 
-    const auto src = n->style("src");
-    if (!src.empty()) {
-        // Skip VFS URIs (scheme://path) — they are already fully qualified and
-        // must be routed through the mount system, not joined with base_dir.
-        // A bare relative path (no "://") is resolved against the jade file's
-        // directory so that  img(src="data/img/hero.png")  works as before.
-        const bool is_vfs_uri = (src.find("://") != std::string_view::npos);
-        const fs::path p(src);
-        if (!is_vfs_uri && p.is_relative())
-            n->setStyle("src", (base_dir / p).lexically_normal().string());
+    // scene3d nodes carry src= pointing to a .glb file.
+    // Their path is resolved by GltfScene::attach() against the binary base-path
+    // (SDL_GetBasePath()), not against the jade source directory.
+    // Skip them here so the src stays as a relative data-dir path.
+    const bool isScene3D = (n->style("tag") == "scene3d");
+
+    if (!isScene3D) {
+        const auto src = n->style("src");
+        if (!src.empty()) {
+            // Skip VFS URIs (scheme://path) — they are already fully qualified and
+            // must be routed through the mount system, not joined with base_dir.
+            // A bare relative path (no "://") is resolved against the jade file's
+            // directory so that  img(src="data/img/hero.png")  works as before.
+            const bool is_vfs_uri = (src.find("://") != std::string_view::npos);
+            const fs::path p(src);
+            if (!is_vfs_uri && p.is_relative())
+                n->setStyle("src", (base_dir / p).lexically_normal().string());
+        }
     }
 
     for (pce::sdlos::NodeHandle c = n->child; c.valid(); ) {
@@ -211,6 +232,7 @@ struct SceneState {
     pce::sdlos::NodeHandle root{pce::sdlos::k_null_handle};
     pce::sdlos::NodeHandle layout_dbg_h{pce::sdlos::k_null_handle};
     pce::sdlos::NodeHandle console_h{pce::sdlos::k_null_handle};
+    pce::sdlos::NodeHandle highlight_h{pce::sdlos::k_null_handle};
 
     pce::sdlos::css::StyleSheet css_sheet;
 
@@ -219,7 +241,75 @@ struct SceneState {
     // lifetime — cleared at the top of every loadScene() before the old tree
     // is destroyed, so captured references can never dangle.
     std::function<bool(const SDL_Event&)> raw_event_handler;
+
+    // Host-managed GltfScene — created automatically when the jade scene
+    // contains one or more scene3d nodes with src= attributes and the
+    // behavior's jade_app_init() did NOT install its own scene3d hook.
+    // Cleared at the start of every loadScene() before the tree is replaced.
+    std::shared_ptr<pce::sdlos::gltf::GltfScene> host_scene3d;
 };
+
+// Walk the RenderTree from `root` (DFS) and collect all nodes whose
+// id / class / tag matches `query`.
+//
+//   #foo  → nodes whose id  == "foo"
+//   .foo  → nodes whose class contains "foo"
+//   foo   → nodes whose id == "foo" OR class contains "foo" OR tag == "foo"
+//
+// Results are stored in `out` (cleared first).
+static void runSelector(
+    const std::string& query,
+    pce::sdlos::RenderTree& tree,
+    pce::sdlos::NodeHandle root,
+    std::vector<pce::sdlos::NodeHandle>& out)
+{
+    using NH = pce::sdlos::NodeHandle;
+
+    out.clear();
+    if (query.empty()) return;
+
+    const bool by_id    = query.size() > 1 && query[0] == '#';
+    const bool by_class = query.size() > 1 && query[0] == '.';
+    const std::string key = (by_id || by_class) ? query.substr(1) : query;
+
+    std::vector<NH> stk;
+    stk.reserve(64);
+    stk.push_back(root);
+
+    while (!stk.empty()) {
+        const NH h = stk.back();
+        stk.pop_back();
+        const pce::sdlos::RenderNode* n = tree.node(h);
+        if (!n) continue;
+
+        const std::string id  = std::string(n->style("id"));
+        const std::string cls = std::string(n->style("class"));
+        const std::string tag = std::string(n->style("tag"));
+
+        bool match = false;
+        if (by_id)
+            match = (id == key);
+        else if (by_class)
+            match = !cls.empty() && cls.find(key) != std::string::npos;
+        else
+            match = (id == key)
+                 || (!cls.empty() && cls.find(key) != std::string::npos)
+                 || (tag == key && !tag.empty());
+
+        if (match) out.push_back(h);
+
+        // LCRS children — push in reverse so left-most child is visited first
+        std::vector<NH> children;
+        for (NH c = n->child; c != pce::sdlos::k_null_handle; ) {
+            const pce::sdlos::RenderNode* cn = tree.node(c);
+            if (!cn) break;
+            children.push_back(c);
+            c = cn->sibling;
+        }
+        for (auto it = children.rbegin(); it != children.rend(); ++it)
+            stk.push_back(*it);
+    }
+}
 
 // Attach the two host-owned overlay nodes (layout debug + console) on top
 // of the scene.  Must be called after jade_app_init() so app nodes are below.
@@ -248,6 +338,71 @@ static void addOverlays(SceneState& scene)
         scene.tree->appendChild(scene.root, scene.layout_dbg_h);
     }
 
+    // Highlight overlay — yellow outline + info badge over the selected node.
+    scene.highlight_h = scene.tree->alloc();
+    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.highlight_h)) {
+        nd->draw = [sp](pce::sdlos::RenderContext& ctx) {
+            if (g_console.selector_idx < 0) return;
+            if (g_console.selector_idx >=
+                    static_cast<int>(g_console.selector_matches.size())) return;
+
+            const pce::sdlos::NodeHandle mh =
+                g_console.selector_matches[g_console.selector_idx];
+            const pce::sdlos::RenderNode* mn = sp->tree->node(mh);
+            if (!mn) return;
+
+            const float x = mn->x, y = mn->y, w = mn->w, h = mn->h;
+            if (w <= 0.f || h <= 0.f) return;
+
+            constexpr float bw = 2.f;
+            // Yellow outline (four edge rects)
+            ctx.drawRect(x,          y,          w,  bw, 1.f, 0.90f, 0.f, 1.f);
+            ctx.drawRect(x,          y + h - bw, w,  bw, 1.f, 0.90f, 0.f, 1.f);
+            ctx.drawRect(x,          y,          bw, h,  1.f, 0.90f, 0.f, 1.f);
+            ctx.drawRect(x + w - bw, y,          bw, h,  1.f, 0.90f, 0.f, 1.f);
+            // Faint yellow fill
+            ctx.drawRect(x, y, w, h, 1.f, 0.90f, 0.f, 0.07f);
+
+            // Build info string: #id .class <tag> W×H @x,y
+            std::string info;
+            const auto id_sv  = mn->style("id");
+            const auto cls_sv = mn->style("class");
+            const auto tag_sv = mn->style("tag");
+            if (!id_sv.empty())  { info += "#"; info += id_sv;  info += "  "; }
+            if (!cls_sv.empty()) { info += "."; info += cls_sv; info += "  "; }
+            if (!tag_sv.empty() && tag_sv != "div") {
+                info += "<"; info += tag_sv; info += ">  ";
+            }
+            info += std::to_string(static_cast<int>(w))
+                  + "\xC3\x97"                               // ×
+                  + std::to_string(static_cast<int>(h));
+            info += "  @";
+            info += std::to_string(static_cast<int>(x));
+            info += ",";
+            info += std::to_string(static_cast<int>(y));
+
+            // Badge: above the node if room, otherwise below
+            constexpr float kBadgeH  = 14.f;
+            constexpr float kBadgeFz = 10.f;
+            const float bx = x + 3.f;
+            const float by = (y >= kBadgeH + 3.f)
+                           ? y - kBadgeH - 1.f
+                           : y + h + 3.f;
+            const float badge_w = static_cast<float>(info.size()) * 6.2f + 8.f;
+            ctx.drawRect(bx - 3.f, by - 1.f, badge_w, kBadgeH + 2.f,
+                         0.04f, 0.04f, 0.04f, 0.88f);
+            ctx.drawText(info.c_str(), bx, by, kBadgeFz,
+                         1.f, 0.90f, 0.f, 1.f);
+        };
+        nd->update = [sp]() {
+            // Keep redrawing when a match is selected
+            if (g_console.selector_idx < 0) return;
+            if (pce::sdlos::RenderNode* self = sp->tree->node(sp->highlight_h))
+                self->dirty_render = true;
+        };
+        scene.tree->appendChild(scene.root, scene.highlight_h);
+    }
+
     // Console overlay
     scene.console_h = scene.tree->alloc();
     if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h)) {
@@ -265,7 +420,7 @@ static void addOverlays(SceneState& scene)
                          0.20f, 0.85f, 0.20f, 0.70f);
             ctx.drawRect(0.f, y0, vw, ConsoleState::kTitleH,
                          0.00f, 0.30f, 0.00f, 0.80f);
-            ctx.drawText("sdlos console   [` ] show/hide   [F1] layout overlay",
+            ctx.drawText("sdlos console   [`] toggle   [F1] layout   [/] select   [n/N] step",
                          ConsoleState::kPad, y0 + 2.f,
                          ConsoleState::kFontSz,
                          0.40f, 1.00f, 0.40f, 1.00f);
@@ -278,6 +433,51 @@ static void addOverlays(SceneState& scene)
                              ConsoleState::kFontSz,
                              0.72f, 0.95f, 0.72f, 1.00f);
                 ly += ConsoleState::kLineH;
+            }
+            // ── Selector row ─────────────────────────────────────────────────
+            {
+                const float sel_y =
+                    y0 + ConsoleState::kTotalH - ConsoleState::kSelectorH;
+                // Row background
+                ctx.drawRect(0.f, sel_y, vw, ConsoleState::kSelectorH,
+                             0.00f, 0.20f, 0.00f, 0.75f);
+                ctx.drawRect(0.f, sel_y, vw, 1.f,
+                             0.20f, 0.85f, 0.20f, 0.40f);  // thin separator
+
+                const float ty = sel_y + (ConsoleState::kSelectorH - ConsoleState::kFontSz) * 0.5f;
+                const float pl = ConsoleState::kPad;
+
+                // Prompt glyph
+                ctx.drawText(g_console.selector_mode ? "\xe2\x96\xba " : "/ ",
+                             pl, ty, ConsoleState::kFontSz,
+                             0.40f, 1.00f, 0.40f, 1.00f);
+
+                // Query text (+ blinking-cursor underscore in selector mode)
+                const std::string disp = g_console.selector_text
+                    + (g_console.selector_mode ? "_" : "");
+                if (!disp.empty())
+                    ctx.drawText(disp.c_str(), pl + 14.f, ty,
+                                 ConsoleState::kFontSz,
+                                 0.90f, 0.90f, 0.90f, 1.00f);
+
+                // Right-side: match count / hint
+                if (!g_console.selector_matches.empty()) {
+                    const std::string cnt =
+                        std::to_string(g_console.selector_idx + 1)
+                        + "/" + std::to_string(g_console.selector_matches.size())
+                        + "  n/N=step";
+                    ctx.drawText(cnt.c_str(), vw - 120.f, ty,
+                                 ConsoleState::kFontSz,
+                                 0.50f, 1.00f, 0.50f, 1.00f);
+                } else if (!g_console.selector_text.empty()) {
+                    ctx.drawText("no match",
+                                 vw - 65.f, ty, ConsoleState::kFontSz,
+                                 1.00f, 0.40f, 0.40f, 1.00f);
+                } else {
+                    ctx.drawText("/ search   #id  .class  tag",
+                                 vw - 175.f, ty, ConsoleState::kFontSz,
+                                 0.28f, 0.52f, 0.28f, 1.00f);
+                }
             }
         };
         nd->update = [sp]() {
@@ -304,8 +504,14 @@ static void addOverlays(SceneState& scene)
 //     overlay lambdas capturing SceneState* continue to work).
 //  5. Parse jade → attach to renderer → resolve asset paths → load app fonts.
 //  6. Bind draw/node callbacks → call jade_app_init (behaviour gets renderer).
-//  7. Handle _font / _font_size jade attributes (behaviour has the last word).
-//  8. Add host overlays on top of the app scene.
+//  7. Auto-wire scene3d: if jade_app_init() did NOT install a scene3d hook but
+//     the tree contains scene3d nodes with src= attributes, the host creates a
+//     GltfScene, inits it, attaches it, and installs both the render hook and
+//     the per-frame tick.  Behaviors that need a custom camera or advanced
+//     scene control simply call renderer.setScene3DHook() inside jade_app_init
+//     as before — that takes priority and skips the auto-wire.
+//  8. Handle _font / _font_size jade attributes (behaviour has the last word).
+//  9. Add host overlays on top of the app scene.
 //
 static bool loadScene(const std::string&       jade_path,
                        SceneState&              scene,
@@ -342,6 +548,11 @@ static bool loadScene(const std::string&       jade_path,
     renderer.setScene3DHook(nullptr);
     renderer.setGpuPreShutdownHook(nullptr);
 
+    // 2d. Release the host-managed GltfScene from the previous scene.
+    //     Must happen AFTER the hooks are cleared (they captured a shared_ptr
+    //     to it) so the destructor runs while the GPU is idle between frames.
+    scene.host_scene3d.reset();
+
     // 3. Re-subscribe the host navigation handler on the fresh bus.
     //    The new behaviour can now call:
     //      bus.publish("sdlos:navigate", "path/to/next.jade");
@@ -355,6 +566,12 @@ static bool loadScene(const std::string&       jade_path,
     scene.root         = pce::sdlos::k_null_handle;
     scene.layout_dbg_h = pce::sdlos::k_null_handle;
     scene.console_h    = pce::sdlos::k_null_handle;
+    scene.highlight_h = pce::sdlos::k_null_handle;
+    // Clear stale selector matches — handles from the old tree are invalid.
+    g_console.selector_matches.clear();
+    g_console.selector_idx  = -1;
+    g_console.selector_mode = false;
+    g_console.selector_text.clear();
 
     // 5a. Parse jade source.
     const std::string source = readFile(jade_path.c_str());
@@ -400,6 +617,82 @@ static bool loadScene(const std::string&       jade_path,
     jade_app_vfs_init(vfs);
     jade_app_init(*scene.tree, scene.root, events, renderer, scene.raw_event_handler);
 
+    // 7. Auto-wire scene3d nodes (built-in GltfScene resolution).
+    //
+    // If jade_app_init() already installed a scene3d hook the behavior is in
+    // full control — skip auto-wiring entirely.
+    //
+    // Otherwise: scan the tree for any node with tag="scene3d".  If at least
+    // one is found, create a host-managed GltfScene, init the GPU pipeline,
+    // attach all scene3d nodes (loads their src= GLB files), and wire the
+    // per-frame render + tick hooks.  A sane default camera is set; behaviors
+    // that need a different viewpoint can call renderer.setScene3DHook() to
+    // replace it later (or use a bus event to drive the camera reactively).
+    if (!renderer.hasScene3DHook()) {
+        // Quick scan — look for any scene3d node in the tree.
+        bool has_scene3d = false;
+        {
+            std::vector<pce::sdlos::NodeHandle> stk;
+            stk.push_back(scene.root);
+            while (!stk.empty() && !has_scene3d) {
+                const pce::sdlos::NodeHandle h = stk.back();
+                stk.pop_back();
+                const pce::sdlos::RenderNode* n = scene.tree->node(h);
+                if (!n) continue;
+                if (n->style("tag") == "scene3d") { has_scene3d = true; break; }
+                for (pce::sdlos::NodeHandle c = n->child; c.valid(); ) {
+                    const pce::sdlos::RenderNode* cn = scene.tree->node(c);
+                    if (!cn) break;
+                    stk.push_back(c);
+                    c = cn->sibling;
+                }
+            }
+        }
+
+        if (has_scene3d) {
+            auto sc3d = std::make_shared<pce::sdlos::gltf::GltfScene>();
+            const std::string& bp = renderer.GetDataBasePath();
+            const SDL_GPUTextureFormat sc_fmt = renderer.GetSwapchainFormat();
+            const bool ok = sc3d->init(renderer.GetDevice(),
+                                       renderer.GetShaderFormat(),
+                                       bp,
+                                       sc_fmt);
+            if (ok) {
+                sc3d->attach(*scene.tree, scene.root, bp);
+
+                // Default camera — orbit at yaw=30°, pitch=20°, dist=5 units,
+                // target at (0,0,0).  Behaviors can override by calling
+                // renderer.setScene3DHook() or camera.orbit/setOrbitTarget().
+                sc3d->camera().perspective(45.f, 16.f / 9.f);
+                sc3d->camera().orbit(30.f, 20.f, 5.f);
+
+                scene.host_scene3d = sc3d;
+
+                // Capture the tree pointer — safe because the hook is always
+                // cleared (step 2c) before the tree is replaced in loadScene().
+                pce::sdlos::RenderTree* tree_ptr = scene.tree.get();
+
+                renderer.setScene3DHook(
+                    [sc3d, tree_ptr]
+                    (SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap,
+                     float vw, float vh)
+                    {
+                        sc3d->tick(*tree_ptr, vw, vh);
+                        sc3d->render(cmd, swap, vw, vh);
+                    });
+
+                renderer.setGpuPreShutdownHook([sc3d]() {
+                    sc3d->shutdown();
+                });
+
+                sdlos_log("[jade_host] scene3d: auto-wired host GltfScene");
+            } else {
+                sdlos_log("[jade_host] scene3d: GltfScene init failed — "
+                          "check data/shaders/msl/pbr_mesh.{vert,frag}.metal");
+            }
+        }
+    }
+
     if (!scene.css_sheet.empty()) {
         scene.css_sheet.buildHover(*scene.tree, scene.root, renderer.pixelScaleX());
         if (!scene.css_sheet.hover.empty())
@@ -411,7 +704,7 @@ static bool loadScene(const std::string&       jade_path,
                       + std::to_string(scene.css_sheet.active_entries.size()) + " entries");
     }
 
-    // 7. _font / _font_size jade attributes — behaviour has the last word.
+    // 8. _font / _font_size jade attributes — behaviour has the last word.
     //    Declare a font in jade like a CSS hint:
     //      app(_font="data/fonts/Inter-Regular.ttf" _font_size="16")
     //    Or set it inside jade_app_init():
@@ -428,7 +721,7 @@ static bool loadScene(const std::string&       jade_path,
         }
     }
 
-    // 8. Host overlays always render on top of the app scene.
+    // 9. Host overlays always render on top of the app scene.
     addOverlays(scene);
 
     sdlos_log(std::string("[jade_host] loaded '")
@@ -499,6 +792,7 @@ int main(int argc, char* argv[])
     // CMake copies each app's data/ folder there as a post-build step, so
     // relative src= paths in jade and data/shaders/ paths resolve correctly.
     // Stored in base_path for use in runtime navigation path resolution.
+
     std::string base_path;
     {
         const char* sdl_base = SDL_GetBasePath();
@@ -509,19 +803,20 @@ int main(int argc, char* argv[])
         }
     }
 
+
     // Host VFS
     // Mount the binary-dir as the "asset" scheme and pref-path as "user".
     // the ``asset`` scheme.  Behaviours and the host may consult
-    
+
     pce::vfs::Vfs host_vfs;
     if (!base_path.empty()) {
         host_vfs.mount_local("asset", std::filesystem::path(base_path));
         // Also provide a "user://" scheme for persistent app data using SDL_GetPrefPath
-        char* pref_path = SDL_GetPrefPath("pce", SDLOS_APP_NAME);
-        if (pref_path) {
-            host_vfs.mount_local("user", std::filesystem::path(pref_path));
-            SDL_free(pref_path);
-        }
+        // char* pref_path = SDL_GetPrefPath("pce", SDLOS_APP_NAME);
+        // if (pref_path) {
+        //    host_vfs.mount_local("user", std::filesystem::path(pref_path));
+        //    SDL_free(pref_path);
+        // }
         host_vfs.set_default_scheme("asset");
         sdlos_log(std::string("[jade_host] vfs: asset:// -> ") + base_path);
     }
@@ -578,6 +873,19 @@ int main(int argc, char* argv[])
 
             if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE)
                 scene.css_sheet.tickHover(*scene.tree, -1.f, -1.f, renderer.pixelScaleX());
+
+            // Live selector text input — only consumed when selector mode active.
+            if (g_console.selector_mode && event.type == SDL_EVENT_TEXT_INPUT) {
+                g_console.selector_text += event.text.text;
+                runSelector(g_console.selector_text, *scene.tree, scene.root,
+                            g_console.selector_matches);
+                g_console.selector_idx =
+                    g_console.selector_matches.empty() ? -1 : 0;
+                if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                    nd->dirty_render = true;
+                if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.highlight_h))
+                    nd->dirty_render = true;
+            }
 
             // Behavior raw-event hook — runs before host keyboard handlers.
             // Returns true only when the behavior consumed the event (e.g. a
@@ -640,6 +948,78 @@ int main(int argc, char* argv[])
                     if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.layout_dbg_h))
                         nd->dirty_render = true;
                     if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                        nd->dirty_render = true;
+                }
+
+                // / — enter selector mode (when console open, not already in mode)
+                else if (sc == SDL_SCANCODE_SLASH && g_console.visible
+                         && !g_console.selector_mode) {
+                    g_console.selector_mode = true;
+                    SDL_StartTextInput(window);
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                        nd->dirty_render = true;
+                }
+
+                // Backspace — erase last character from selector query
+                else if (sc == SDL_SCANCODE_BACKSPACE
+                         && g_console.visible && g_console.selector_mode) {
+                    if (!g_console.selector_text.empty())
+                        g_console.selector_text.pop_back();
+                    runSelector(g_console.selector_text, *scene.tree, scene.root,
+                                g_console.selector_matches);
+                    g_console.selector_idx =
+                        g_console.selector_matches.empty() ? -1 : 0;
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                        nd->dirty_render = true;
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.highlight_h))
+                        nd->dirty_render = true;
+                }
+
+                // Enter — commit selector query (exit typing mode, keep results)
+                else if (sc == SDL_SCANCODE_RETURN && g_console.visible) {
+                    if (g_console.selector_mode) {
+                        g_console.selector_mode = false;
+                        SDL_StopTextInput(window);
+                        if (g_console.selector_idx < 0
+                                && !g_console.selector_matches.empty())
+                            g_console.selector_idx = 0;
+                        if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                            nd->dirty_render = true;
+                    }
+                }
+
+                // Escape — exit selector mode (clear), or close console
+                else if (sc == SDL_SCANCODE_ESCAPE) {
+                    if (g_console.selector_mode) {
+                        g_console.selector_mode = false;
+                        SDL_StopTextInput(window);
+                    }
+                    if (!g_console.selector_text.empty() || g_console.selector_idx >= 0) {
+                        g_console.selector_text.clear();
+                        g_console.selector_matches.clear();
+                        g_console.selector_idx = -1;
+                        if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.highlight_h))
+                            nd->dirty_render = true;
+                    } else {
+                        g_console.visible = false;
+                    }
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                        nd->dirty_render = true;
+                }
+
+                // n — next match   N (Shift+n) — previous match
+                else if (sc == SDL_SCANCODE_N && g_console.visible
+                         && !g_console.selector_mode
+                         && !g_console.selector_matches.empty()) {
+                    const int sz = static_cast<int>(g_console.selector_matches.size());
+                    const bool prev = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+                    if (prev)
+                        g_console.selector_idx = (g_console.selector_idx - 1 + sz) % sz;
+                    else
+                        g_console.selector_idx = (g_console.selector_idx + 1) % sz;
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.console_h))
+                        nd->dirty_render = true;
+                    if (pce::sdlos::RenderNode* nd = scene.tree->node(scene.highlight_h))
                         nd->dirty_render = true;
                 }
             }

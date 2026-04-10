@@ -8,7 +8,7 @@
 // parsed, styled, and layout-bound.
 //
 // FrameGraph integration
-// ----------------------
+//
 // The render pipeline lives in data/pipeline.pug (three passes):
 //
 //   pass#bg        — animated FBM noise background     → bg_color (rgba16f)
@@ -20,38 +20,38 @@
 // scoped theme rules (e.g. pipeline.night #grade { … }) take effect.
 //
 // Theme switching
-// ---------------
+//
 // Theme chips fire pug:theme (payload = "default"|"night"|"vivid").
 // The callback calls FrameGraph::add_class / remove_class, which re-runs all
 // scoped CSS rules for the new class — no recompile needed for Bucket-C changes.
 //
 // Quality switching
-// -----------------
+//
 // Quality chips fire pug:quality (payload = "normal"|"low").
 // "low"    → adds "low-power" CSS class  → disables vignette pass (zero cost).
 // "normal" → removes "low-power" class   → re-enables vignette.
 //
 // Live parameter controls
-// -----------------------
+//
 // +/– steppers fire pug:inc / pug:dec (payload = "pass:key").
 // The callback calls CompiledGraph::patch(pass, key, val) — one float write,
 // no string map lookup in the hot path.  The GPU sees the change next frame.
 //
 // Lifecycle note on GetCompiledGraph()
-// ------------------------------------
+//
 // CompiledGraph is built on the first Render() call (swapchain format is
 // needed).  By the time any bus callback fires (user interaction), the first
 // frame will already have rendered.  All callbacks guard against null anyway.
 //
 // EventBus topics consumed
-// ────────────────────────
+//
 //   pug:theme    payload = "default" | "night" | "vivid"
 //   pug:quality  payload = "normal"  | "low"
 //   pug:inc      payload = "pass:key"  (e.g. "bg:speed")
 //   pug:dec      payload = "pass:key"
 //
 // Customisation guide
-// -------------------
+//
 //   1. Add rows to the params vector inside the user region — make sure the
 //      pass_id and key match an attr declared in data/pipeline.pug, and add
 //      a matching val node id in pug.jade.
@@ -62,17 +62,16 @@
 //   4. Run  sdlos pipeline pug  to validate pipeline wiring in the terminal.
 //
 // Regeneration
-// ------------
+//
 //   sdlos create pug --overwrite
 //   Code between "enter the forrest" / "back to the sea" markers is preserved.
 //
 // Performance notes
-// -----------------
-//   • CompiledGraph::patch() is O(pass_count) — called only on UI interaction.
-//   • FrameGraph::add_class() / remove_class() walk CSS rules once per call —
+//
+//   - CompiledGraph::patch() is O(pass_count) — called only on UI interaction.
+//   - FrameGraph::add_class() / remove_class() walk CSS rules once per call —
 //     never called per frame.
-//   • GetCompiledGraph() returns a cached pointer; no allocation or lock.
-// =============================================================================
+//   - GetCompiledGraph() returns a cached pointer; no allocation or lock.
 
 #include <algorithm>
 #include <cstdio>
@@ -82,7 +81,7 @@
 
 namespace {
 
-// ── Live param descriptor ─────────────────────────────────────────────────────
+// Live param descriptor
 //
 // Each entry maps a UI stepper pair to one Bucket-C float in a pipeline pass.
 //
@@ -106,7 +105,7 @@ struct LiveParam {
     pce::sdlos::NodeHandle display_h = pce::sdlos::k_null_handle;
 };
 
-// ── App state ─────────────────────────────────────────────────────────────────
+// App state
 
 struct PugState {
     // Active CSS class on the pipeline root.
@@ -130,21 +129,26 @@ struct PugState {
     pce::sdlos::NodeHandle chip_normal_h  = pce::sdlos::k_null_handle;
     pce::sdlos::NodeHandle chip_low_h     = pce::sdlos::k_null_handle;
 
+    // Cartoon chip node handles.
+    pce::sdlos::NodeHandle chip_cartoon_on_h  = pce::sdlos::k_null_handle;
+    pce::sdlos::NodeHandle chip_cartoon_off_h = pce::sdlos::k_null_handle;
+
     // Live parameter table.
     // Declaration order is arbitrary for the behaviour; the pass_id + key pair
     // must match an attr declared in data/pipeline.pug (same spelling, same case).
     // The Metal shader cbuffer slot is determined by alphabetical key order in pug.
     std::vector<LiveParam> params = {
         // --- enter the forrest ---
-        { "bg",    "speed",      "val-bg-speed",  0.40f, 0.05f, 0.0f, 3.0f },
-        { "bg",    "scale",      "val-bg-scale",  1.50f, 0.10f, 0.1f, 5.0f },
-        { "grade", "exposure",   "val-grade-exp", 1.00f, 0.05f, 0.1f, 4.0f },
-        { "grade", "saturation", "val-grade-sat", 1.05f, 0.05f, 0.0f, 3.0f },
+        { "bg",      "speed",      "val-bg-speed",      0.40f, 0.05f, 0.0f, 3.0f },
+        { "bg",      "scale",      "val-bg-scale",      1.50f, 0.10f, 0.1f, 5.0f },
+        { "cartoon", "threshold",  "val-cartoon-thres", 0.10f, 0.05f, 0.0f, 1.0f },
+        { "grade",   "exposure",   "val-grade-exp",     1.00f, 0.05f, 0.1f, 4.0f },
+        { "grade",   "saturation", "val-grade-sat",     1.05f, 0.05f, 0.0f, 3.0f },
         // --- back to the sea ---
     };
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 static std::string fmtParam(float v) noexcept
 {
@@ -195,6 +199,17 @@ static void refreshQualityChips(pce::sdlos::RenderTree& tree,
               s.active_quality == "low"    ? "#6366f133" : "#ffffff0a");
 }
 
+// Highlight the currently active cartoon chip.
+static void refreshCartoonChips(pce::sdlos::RenderTree& tree,
+                                 PugState&   s,
+                                 bool        enabled)
+{
+    setNodeBg(tree, s.chip_cartoon_on_h,
+              enabled ? "#6366f133" : "#ffffff0a");
+    setNodeBg(tree, s.chip_cartoon_off_h,
+              !enabled ? "#6366f133" : "#ffffff0a");
+}
+
 // Push the current param value to the display label and to the compiled graph.
 static void applyParam(pce::sdlos::RenderTree&         tree,
                        LiveParam&                       p,
@@ -208,7 +223,7 @@ static void applyParam(pce::sdlos::RenderTree&         tree,
 // Resolve a "pass:key" payload to an index in state.params.
 // Returns params.size() when not found.
 static std::size_t resolveParam(const PugState& s,
-                                const std::string&           payload) noexcept
+                                const std::string& payload) noexcept
 {
     const auto sep = payload.find(':');
     if (sep == std::string::npos) return s.params.size();
@@ -232,12 +247,14 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 {
     auto state = std::make_shared<PugState>();
 
-    // ── Locate nodes ──────────────────────────────────────────────────────────
+    // Locate nodes
     state->chip_default_h = tree.findById(root, "chip-default");
     state->chip_night_h   = tree.findById(root, "chip-night");
     state->chip_vivid_h   = tree.findById(root, "chip-vivid");
     state->chip_normal_h  = tree.findById(root, "chip-normal");
     state->chip_low_h     = tree.findById(root, "chip-low");
+    state->chip_cartoon_on_h  = tree.findById(root, "chip-cartoon-on");
+    state->chip_cartoon_off_h = tree.findById(root, "chip-cartoon-off");
 
     // Resolve display handles for each param by node id.
     // This loop means you can add params to the vector (user region above)
@@ -249,7 +266,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
               + std::string(state->chip_default_h.valid() ? "chips=ok" : "chips=MISSING")
               + "  params=" + std::to_string(state->params.size()));
 
-    // ── Load and apply pipeline.css ───────────────────────────────────────────
+    // Load and apply pipeline.css
     // SDLRenderer::SetDataBasePath() auto-loads pipeline.pug but NOT pipeline.css
     // into the FrameGraph — load it here so base and scoped CSS rules take effect
     // (e.g. pipeline.night #grade { exposure: 0.75; }).
@@ -273,7 +290,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         }
     }
 
-    // ── Theme subscription ────────────────────────────────────────────────────
+    // Theme subscription
     // payload = "default" | "night" | "vivid"  (or any custom class you add)
     //
     // Sequence:
@@ -306,7 +323,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                       + (new_class.empty() ? "default" : new_class));
         });
 
-    // ── Quality subscription ──────────────────────────────────────────────────
+    // Quality subscription
     // payload = "normal" | "low"
     //
     // "low"    → adds "low-power" CSS class (pipeline.css disables vignette).
@@ -329,7 +346,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             sdlos_log("[pug] quality → " + quality);
         });
 
-    // ── Param increment ───────────────────────────────────────────────────────
+    // Param increment
     // payload = "pass:key"  (e.g. "bg:speed", "grade:exposure")
     bus.subscribe("pug:inc",
         [&tree, &renderer, state](const std::string& payload) {
@@ -340,7 +357,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             applyParam(tree, p, renderer.GetCompiledGraph());
         });
 
-    // ── Param decrement ───────────────────────────────────────────────────────
+    // Param decrement
     bus.subscribe("pug:dec",
         [&tree, &renderer, state](const std::string& payload) {
             const std::size_t idx = resolveParam(*state, payload);
@@ -350,22 +367,17 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
             applyParam(tree, p, renderer.GetCompiledGraph());
         });
 
-    // ── User extension point ──────────────────────────────────────────────────
-    // --- enter the forrest ---
+    // Live parameter control: cartoon toggle
+    bus.subscribe("pug:cartoon",
+        [&tree, &renderer, state](const std::string& mode) {
+            auto* cg = renderer.GetCompiledGraph();
+            if (!cg) return;
 
-    // Add custom bus subscriptions here.  Examples:
-    //
-    // Publish a raw pipeline param change (bypasses the stepper table):
-    //   bus.subscribe("pug:reset", [&renderer](const std::string&) {
-    //       if (auto* cg = renderer.GetCompiledGraph())
-    //           cg->patch("bg", "speed", 0.4f);
-    //   });
-    //
-    // Toggle a pass on/off directly:
-    //   bus.subscribe("pug:toggle-grade", [&renderer](const std::string& v) {
-    //       if (auto* cg = renderer.GetCompiledGraph())
-    //           cg->set_enabled("grade", v != "off");
-    //   });
+            const bool enabled = (mode == "on");
+            cg->set_enabled("cartoon", enabled);
+            refreshCartoonChips(tree, *state, enabled);
+            sdlos_log("[pug] cartoon pass → " + mode);
+        });
 
     // --- back to the sea ---
 
@@ -374,6 +386,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // to match the initial state (no CSS class set on the pipeline root).
     refreshThemeChips(tree, *state);
     refreshQualityChips(tree, *state);
+    refreshCartoonChips(tree, *state, false);
 
     // Sync param display labels with the initial values from the table above.
     for (auto& p : state->params)

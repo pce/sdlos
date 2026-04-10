@@ -28,13 +28,13 @@
    Separator         #ffffff18           10 % white divider
    ============================================================================= */
 
-/* ── Window root — transparent so the FrameGraph shows through ────────────── */
+/* Window root — transparent so the FrameGraph shows through */
 
 #root {
     background-color: #00000000;
 }
 
-/* ── HUD panel ────────────────────────────────────────────────────────────── */
+/* HUD panel */
 /* Anchored to the bottom of the window with a margin on all sides.           */
 
 .hud-panel {

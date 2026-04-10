@@ -35,34 +35,56 @@
 //   Extend lerp() for custom colour/vector types as needed.
 
 #include "easing.h"
-#include <SDL3/SDL.h>     // SDL_GetTicks()
+
+#include <SDL3/SDL.h>  // SDL_GetTicks()
+
 #include <type_traits>
 
 namespace pce::sdlos {
 
+/**
+ * @brief Lerp
+ *
+ * @return T result
+ */
+/**
+ * @brief Lerp
+ *
+ * @return T result
+ */
+template <typename T, typename U>
+inline T lerp(T a, T b, U t) noexcept {
+    return a + (b - a) * t;
+}
 
-
+// Specialized lerp for floats to use fma
 /**
  * @brief Lerp
  *
- * @return T result
- */
-/**
- * @brief Lerp
+ * @param a  Alpha channel component [0, 1]
+ * @param b  Blue channel component [0, 1]
+ * @param t  Interpolation parameter in [0, 1]
  *
- * @return T result
+ * @return Computed floating-point value
  */
-/**
- * @brief Lerp
- *
- * @return T result
- */
-template<typename T>
-inline T lerp(T a, T b, T t) noexcept
-{
+template <>
+inline float lerp(float a, float b, float t) noexcept {
     return std::fma(t, b - a, a);
 }
 
+/**
+ * @brief Lerp
+ *
+ * @param a  Alpha channel component [0, 1]
+ * @param b  Blue channel component [0, 1]
+ * @param t  Interpolation parameter in [0, 1]
+ *
+ * @return double result
+ */
+template <>
+inline double lerp(double a, double b, double t) noexcept {
+    return std::fma(static_cast<double>(t), b - a, a);
+}
 
 // RGBA color type (float components [0, 1])
 //
@@ -77,17 +99,17 @@ struct RGBAf {
     float a = 1.f;  ///< Alpha channel [0, 1]
 
     /// Component-wise equality
-    bool operator==(const RGBAf& other) const noexcept {
+    bool operator==(const RGBAf &other) const noexcept {
         return r == other.r && g == other.g && b == other.b && a == other.a;
     }
 
     /// Component-wise addition
-    RGBAf operator+(const RGBAf& other) const noexcept {
+    RGBAf operator+(const RGBAf &other) const noexcept {
         return {r + other.r, g + other.g, b + other.b, a + other.a};
     }
 
     /// Component-wise subtraction
-    RGBAf operator-(const RGBAf& other) const noexcept {
+    RGBAf operator-(const RGBAf &other) const noexcept {
         return {r - other.r, g - other.g, b - other.b, a - other.a};
     }
 
@@ -103,6 +125,7 @@ struct RGBAf {
 //   RGBAf from{1.f, 0.f, 0.f, 1.f};
 //   RGBAf to{0.f, 1.f, 0.f, 1.f};
 //   RGBAf mid = lerp(from, to, 0.5f);  // {0.5f, 0.5f, 0.f, 1.f}
+
 /**
  * @brief Lerp
  *
@@ -121,13 +144,10 @@ struct RGBAf {
  *
  * @return RGBAf result
  */
-template<>
-inline RGBAf lerp(RGBAf a, RGBAf b, float t) noexcept
-{
-    return a + (b - a) * t;
+template <>
+inline RGBAf lerp(RGBAf a, RGBAf b, float t) noexcept {
+    return a + (b - a) * static_cast<float>(t);
 }
-
-
 
 /**
  * @brief Inv lerp
@@ -138,24 +158,20 @@ inline RGBAf lerp(RGBAf a, RGBAf b, float t) noexcept
  *
  * @return Computed floating-point value
  */
-inline float inv_lerp(float a, float b, float v) noexcept
-{
+inline float inv_lerp(float a, float b, float v) noexcept {
     return (v - a) / (b - a);
 }
 
-
-template<typename T>
+template <typename T>
 struct Animated {
-
-    T       from        = T{};
-    T       to          = T{};
-    double  start_ms    = 0.0;
-    float   duration_ms = 200.f;
+    T from            = T{};
+    T to              = T{};
+    double start_ms   = 0.0;
+    float duration_ms = 200.f;
 
     /// Easing function pointer — points to one of the functions in easing.h.
     /// Default: easeInOut (quadratic, symmetric).
     float (*ease_fn)(float) = easing::easeInOut;
-
 
     /**
      * @brief Animated<t>  — Default: settled at T{} with no pending animation.
@@ -169,9 +185,10 @@ struct Animated {
      * @param initial  Iterator position
      */
     explicit Animated(T initial)
-        : from(initial), to(initial), start_ms(0.0), duration_ms(0.f)
-    {}
-
+        : from(initial)
+        , to(initial)
+        , start_ms(0.0)
+        , duration_ms(0.f) {}
 
     /**
      * @brief Current
@@ -183,15 +200,13 @@ struct Animated {
      *
      * @return T result
      */
-    T current(double now_ms) const
-    {
+    T current(double now_ms) const {
         if (duration_ms <= 0.f || now_ms >= start_ms + static_cast<double>(duration_ms))
             return to;
         if (now_ms <= start_ms)
             return from;
 
-        const float t = static_cast<float>(
-            (now_ms - start_ms) / static_cast<double>(duration_ms));
+        const float t = static_cast<float>((now_ms - start_ms) / static_cast<double>(duration_ms));
 
         // Saturate t to [0, 1] in case of floating-point edge cases.
         const float ts = t < 0.f ? 0.f : (t > 1.f ? 1.f : t);
@@ -206,11 +221,7 @@ struct Animated {
      *
      * @return T result
      */
-    T current() const
-    {
-        return current(static_cast<double>(SDL_GetTicks()));
-    }
-
+    T current() const { return current(static_cast<double>(SDL_GetTicks())); }
 
     /**
      * @brief Finished
@@ -219,8 +230,7 @@ struct Animated {
      *
      * @return true on success, false on failure
      */
-    bool finished(double now_ms) const noexcept
-    {
+    bool finished(double now_ms) const noexcept {
         return now_ms >= start_ms + static_cast<double>(duration_ms);
     }
 
@@ -229,10 +239,7 @@ struct Animated {
      *
      * @return true on success, false on failure
      */
-    bool finished() const noexcept
-    {
-        return finished(static_cast<double>(SDL_GetTicks()));
-    }
+    bool finished() const noexcept { return finished(static_cast<double>(SDL_GetTicks())); }
 
     /**
      * @brief Transition
@@ -247,27 +254,25 @@ struct Animated {
      *          ownership is ambiguous; consider std::span (non-owning view),
      *          std::unique_ptr (transfer), or const T* (borrow)
      */
-    void transition(T target,
-                    float dur_ms   = 200.f,
-                    float (*ease)(float) = easing::easeInOut,
-                    double now_ms  = static_cast<double>(SDL_GetTicks()))
-    {
-        from        = current(now_ms);   // snapshot where we are right now
-        to          = static_cast<T&&>(target);
+    void transition(
+        T target,
+        float dur_ms         = 200.f,
+        float (*ease)(float) = easing::easeInOut,
+        double now_ms        = static_cast<double>(SDL_GetTicks())) {
+        from        = current(now_ms);  // snapshot where we are right now
+        to          = static_cast<T &&>(target);
         start_ms    = now_ms;
         duration_ms = dur_ms;
         ease_fn     = ease;
     }
-
 
     /**
      * @brief Sets Convenience: jump immediately to `value` with no animation.
      *
      * @param value  Operand value
      */
-    void set(T value) noexcept
-    {
-        from = to = value;
+    void set(T value) noexcept {
+        from = to   = value;
         duration_ms = 0.f;
     }
 };
@@ -281,4 +286,4 @@ using AnimatedFloat  = Animated<float>;
 using AnimatedDouble = Animated<double>;
 using AnimatedColor  = Animated<RGBAf>;  ///< Animated RGBA color (e.g. background, text color)
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

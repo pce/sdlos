@@ -1,7 +1,7 @@
 #pragma once
 
-#include "desktop.h"
 #include "app.h"
+#include "desktop.h"
 #include "event_bus.h"
 #include "notification_system.h"
 #include "vfs/vfs.h"
@@ -17,7 +17,7 @@
 namespace pce::sdlos {
 
 class IO {
-public:
+  public:
     /**
      * @brief IO
      */
@@ -32,9 +32,8 @@ public:
      *
      * @param param0  Red channel component [0, 1]
      */
-    IO(const IO&)            = delete;
-    IO& operator=(const IO&) = delete;
-
+    IO(const IO &)            = delete;
+    IO &operator=(const IO &) = delete;
 
     /// Initialise SDL, create the desktop window, and wire up services.
     /// Returns false on unrecoverable failure (SDL init, no GPU device, …).
@@ -46,19 +45,17 @@ public:
     /// Tear down all resources in safe reverse order, then call SDL_Quit().
     void shutdown();
 
-
     /// Register an AppBundle so it can be launched by name.
     /// Returns false on invalid bundle or duplicate name.
     bool install(AppBundle bundle);
 
     /// Launch a registered application by name.
     /// Returns the window_id on success, -1 on any failure.
-    int launch(const std::string& app_name);
+    int launch(const std::string &app_name);
 
     /// Stop the Process associated with `window_id` and close its Window.
     /// Silently ignores unknown IDs.
     void terminate(int window_id);
-
 
     /// Register a callable invoked once per frame (after update, before render).
     void addService(std::function<void()> service);
@@ -69,34 +66,34 @@ public:
      *
      * @return Reference to the result
      */
-     Desktop&            desktop()       { return desktop_;       }
+    Desktop &desktop() { return desktop_; }
     /**
      * @brief Events
      *
      * @return Reference to the result
      */
-     EventBus&           events()        { return events_;        }
-     /**
+    EventBus &events() { return events_; }
+    /**
      * @brief Notifications
      *
      * @return Reference to the result
      */
-     NotificationCenter& notifications() { return notifications_; }
+    NotificationCenter &notifications() { return notifications_; }
 
     /**
      * @brief Vfs
      *
      * @return Reference to the result
      */
-    pce::vfs::Vfs&       vfs() noexcept       { return vfs_; }
+    pce::vfs::Vfs &vfs() noexcept { return vfs_; }
     /**
      * @brief Vfs
      *
      * @return Reference to the result
      */
-    const pce::vfs::Vfs& vfs() const noexcept { return vfs_; }
+    const pce::vfs::Vfs &vfs() const noexcept { return vfs_; }
 
-private:
+  private:
     //  Main-loop stages
 
     /**
@@ -122,8 +119,8 @@ private:
     // Components
     // Value members: construction/destruction order is determined by
     // declaration order (destroyed in reverse).
-    Desktop            desktop_;
-    EventBus           events_;
+    Desktop desktop_;
+    EventBus events_;
     NotificationCenter notifications_;
 
     // VFS — scheme-routed URI dispatcher.
@@ -141,4 +138,4 @@ private:
     std::atomic<bool> running_{false};
 };
 
-} // namespace pce::sdlos
+}  // namespace pce::sdlos

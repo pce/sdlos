@@ -1,10 +1,7 @@
 #include "gltf_scene.h"
-#include "math3d.h"
-#include "../css_loader.h"
 
-#include <fastgltf/core.hpp>
-#include <fastgltf/types.hpp>
-#include <fastgltf/tools.hpp>
+#include "../css_loader.h"
+#include "math3d.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -16,6 +13,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
+#include <fastgltf/types.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -27,12 +27,10 @@ namespace pce::sdlos::gltf {
 
 using namespace math3d;
 
-
 /**
  * @brief Gltf camera
  */
-GltfCamera::GltfCamera() noexcept
-{
+GltfCamera::GltfCamera() noexcept {
     const Mat4 id = Mat4::identity();
     std::memcpy(view, id.data.data(), sizeof(view));
     std::memcpy(proj, id.data.data(), sizeof(proj));
@@ -51,12 +49,10 @@ GltfCamera::GltfCamera() noexcept
  * @param cy  Vertical coordinate in logical pixels
  * @param cz  Depth coordinate
  */
-void GltfCamera::lookAt(float ex, float ey, float ez,
-                         float cx, float cy, float cz) noexcept
-{
-    pos[0] = ex;
-    pos[1] = ey;
-    pos[2] = ez;
+void GltfCamera::lookAt(float ex, float ey, float ez, float cx, float cy, float cz) noexcept {
+    pos[0]       = ex;
+    pos[1]       = ey;
+    pos[2]       = ez;
     const Mat4 m = math3d::lookAt({ex, ey, ez}, {cx, cy, cz});
     std::memcpy(view, m.data.data(), sizeof(view));
 }
@@ -69,12 +65,9 @@ void GltfCamera::lookAt(float ex, float ey, float ez,
  * @param near_z     Depth coordinate
  * @param far_z      Depth coordinate
  */
-void GltfCamera::perspective(float fov_y_deg, float aspect,
-                              float near_z, float far_z) noexcept
-{
+void GltfCamera::perspective(float fov_y_deg, float aspect, float near_z, float far_z) noexcept {
     constexpr float kDeg2Rad = 3.14159265358979323846f / 180.f;
-    const Mat4 m = math3d::perspective(fov_y_deg * kDeg2Rad, aspect,
-                                        near_z, far_z);
+    const Mat4 m             = math3d::perspective(fov_y_deg * kDeg2Rad, aspect, near_z, far_z);
     std::memcpy(proj, m.data.data(), sizeof(proj));
 }
 
@@ -84,32 +77,86 @@ void GltfCamera::perspective(float fov_y_deg, float aspect,
  * @param w  Width in logical pixels
  * @param h  Opaque resource handle
  */
-void GltfCamera::setViewport(float w, float h) noexcept
-{
+void GltfCamera::setViewport(float w, float h) noexcept {
     vw = w;
     vh = h;
 }
 
+// ── Orbit camera ─────────────────────────────────────────────────────────────
+
+void GltfCamera::setOrbitTarget(float tx, float ty, float tz) noexcept {
+    orbit_target[0] = tx;
+    orbit_target[1] = ty;
+    orbit_target[2] = tz;
+    updateOrbit();
+}
+
+void GltfCamera::orbit(float yaw_deg, float pitch_deg, float dist) noexcept {
+    orbit_yaw_deg   = yaw_deg;
+    orbit_pitch_deg = pitch_deg;
+    orbit_dist      = dist;
+    updateOrbit();
+}
+
+void GltfCamera::orbitBy(float dyaw, float dpitch) noexcept {
+    orbit_yaw_deg   += dyaw;
+    orbit_pitch_deg += dpitch;
+    if (orbit_pitch_deg > 89.f)
+        orbit_pitch_deg = 89.f;
+    if (orbit_pitch_deg < -89.f)
+        orbit_pitch_deg = -89.f;
+    updateOrbit();
+}
+
+void GltfCamera::orbitZoom(float factor, float min_dist, float max_dist) noexcept {
+    orbit_dist *= factor;
+    if (orbit_dist < min_dist)
+        orbit_dist = min_dist;
+    if (orbit_dist > max_dist)
+        orbit_dist = max_dist;
+    updateOrbit();
+}
+
+void GltfCamera::updateOrbit() noexcept {
+    constexpr float kD2R = 3.14159265f / 180.f;
+    const float pitch_r  = orbit_pitch_deg * kD2R;
+    const float yaw_r    = orbit_yaw_deg * kD2R;
+    // Spherical → Cartesian, offset from orbit_target
+    const float ex = orbit_dist * std::cos(pitch_r) * std::sin(yaw_r);
+    const float ey = orbit_dist * std::sin(pitch_r);
+    const float ez = orbit_dist * std::cos(pitch_r) * std::cos(yaw_r);
+    lookAt(
+        orbit_target[0] + ex,
+        orbit_target[1] + ey,
+        orbit_target[2] + ez,
+        orbit_target[0],
+        orbit_target[1],
+        orbit_target[2]);
+}
 
 /*static*/
-void GltfScene::parseHexColor(std::string_view hex, float (&out)[4]) noexcept
-{
+void GltfScene::parseHexColor(std::string_view hex, float (&out)[4]) noexcept {
     out[0] = out[1] = out[2] = out[3] = 1.f;
-    if (hex.empty()) return;
+    if (hex.empty())
+        return;
 
-    if (hex.front() == '#') hex.remove_prefix(1);
-    if (hex.size() < 6) return;
+    if (hex.front() == '#')
+        hex.remove_prefix(1);
+    if (hex.size() < 6)
+        return;
 
     auto nibble = [](char c) noexcept -> unsigned {
-        if (c >= '0' && c <= '9') return static_cast<unsigned>(c - '0');
-        if (c >= 'a' && c <= 'f') return static_cast<unsigned>(c - 'a') + 10u;
-        if (c >= 'A' && c <= 'F') return static_cast<unsigned>(c - 'A') + 10u;
+        if (c >= '0' && c <= '9')
+            return static_cast<unsigned>(c - '0');
+        if (c >= 'a' && c <= 'f')
+            return static_cast<unsigned>(c - 'a') + 10u;
+        if (c >= 'A' && c <= 'F')
+            return static_cast<unsigned>(c - 'A') + 10u;
         return 0u;
     };
 
     auto byte = [&](std::size_t i) noexcept -> float {
-        return static_cast<float>((nibble(hex[i]) << 4u) | nibble(hex[i + 1]))
-               / 255.f;
+        return static_cast<float>((nibble(hex[i]) << 4u) | nibble(hex[i + 1])) / 255.f;
     };
 
     out[0] = byte(0);
@@ -119,17 +166,16 @@ void GltfScene::parseHexColor(std::string_view hex, float (&out)[4]) noexcept
 }
 
 /*static*/
-float GltfScene::parseFloat(std::string_view s, float fallback) noexcept
-{
-    if (s.empty()) return fallback;
-    float value = fallback;
+float GltfScene::parseFloat(std::string_view s, float fallback) noexcept {
+    if (s.empty())
+        return fallback;
+    float value          = fallback;
     const auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
     return (ec == std::errc{}) ? value : fallback;
 }
 
 /*static*/
-std::string GltfScene::normalizeId(std::string_view s) noexcept
-{
+std::string GltfScene::normalizeId(std::string_view s) noexcept {
     std::string out;
     out.reserve(s.size());
     for (const unsigned char c : s) {
@@ -142,7 +188,6 @@ std::string GltfScene::normalizeId(std::string_view s) noexcept
     return out;
 }
 
-
 /**
  * @brief Initialises
  *
@@ -153,11 +198,11 @@ std::string GltfScene::normalizeId(std::string_view s) noexcept
  *
  * @return true on success, false on failure
  */
-bool GltfScene::init(SDL_GPUDevice*       device,
-                     SDL_GPUShaderFormat  fmt,
-                     const std::string&   base_path,
-                     SDL_GPUTextureFormat swapchain_fmt) noexcept
-{
+bool GltfScene::init(
+    SDL_GPUDevice *device,
+    SDL_GPUShaderFormat fmt,
+    const std::string &base_path,
+    SDL_GPUTextureFormat swapchain_fmt) noexcept {
     device_ = device;
     fmt_    = fmt;
     base_   = base_path;
@@ -177,7 +222,6 @@ bool GltfScene::init(SDL_GPUDevice*       device,
     return true;
 }
 
-
 /**
  * @brief Attaches
  *
@@ -187,10 +231,7 @@ bool GltfScene::init(SDL_GPUDevice*       device,
  *
  * @return Integer result; negative values indicate an error code
  */
-int GltfScene::attach(RenderTree&        tree,
-                      NodeHandle         tree_root,
-                      const std::string& base_path)
-{
+int GltfScene::attach(RenderTree &tree, NodeHandle tree_root, const std::string &base_path) {
     tree_ref_ = &tree;
 
     // DFS: collect every node whose tag == "scene3d"
@@ -208,8 +249,9 @@ int GltfScene::attach(RenderTree&        tree,
             const NodeHandle h = stack.back();
             stack.pop_back();
 
-            const RenderNode* n = tree.node(h);
-            if (!n) continue;
+            const RenderNode *n = tree.node(h);
+            if (!n)
+                continue;
 
             if (n->style("tag") == "scene3d")
                 scene3d_nodes.push_back(h);
@@ -217,8 +259,9 @@ int GltfScene::attach(RenderTree&        tree,
             // Walk the LCRS sibling chain from the first child.
             NodeHandle c = n->child;
             while (c != k_null_handle) {
-                const RenderNode* cn = tree.node(c);
-                if (!cn) break;
+                const RenderNode *cn = tree.node(c);
+                if (!cn)
+                    break;
                 stack.push_back(c);
                 c = cn->sibling;
             }
@@ -230,8 +273,9 @@ int GltfScene::attach(RenderTree&        tree,
     const std::size_t before = entries_.size();
 
     for (const NodeHandle sh : scene3d_nodes) {
-        const RenderNode* sn = tree.node(sh);
-        if (!sn) continue;
+        const RenderNode *sn = tree.node(sh);
+        if (!sn)
+            continue;
 
         const auto src_sv = sn->style("src");
         if (src_sv.empty()) {
@@ -243,8 +287,7 @@ int GltfScene::attach(RenderTree&        tree,
             std::filesystem::path(base_path) / std::string(src_sv);
 
         if (!std::filesystem::exists(gltf_path)) {
-            std::cerr << "[GltfScene] glTF file not found: "
-                      << gltf_path << "\n";
+            std::cerr << "[GltfScene] glTF file not found: " << gltf_path << "\n";
             continue;
         }
 
@@ -252,32 +295,29 @@ int GltfScene::attach(RenderTree&        tree,
     }
 
     const int loaded = static_cast<int>(entries_.size() - before);
-    std::cerr << "[GltfScene] attach: " << loaded
-              << " primitive(s) from " << scene3d_nodes.size()
+    std::cerr << "[GltfScene] attach: " << loaded << " primitive(s) from " << scene3d_nodes.size()
               << " scene3d node(s)\n";
     return loaded;
 }
-
 
 /**
  * @brief Applies css
  *
  * @param tree  Red channel component [0, 1]
  */
-void GltfScene::applyCSS(RenderTree& tree) noexcept
-{
+void GltfScene::applyCSS(RenderTree &tree) noexcept {
     // StyleMap values are read live from each proxy node every frame inside
     // drawEntry(), so there is no separate uniform cache to flush.
     //
     // This call is the hook the app invokes after css.applyTo() has run so
     // that any CSS rules which landed on 3D proxy nodes are picked up on the
     // very next render.  We just mark every proxy dirty to guarantee that.
-    for (const auto& e : entries_) {
-        RenderNode* n = tree.node(e.proxy_handle);
-        if (n) n->dirty_render = true;
+    for (const auto &e : entries_) {
+        RenderNode *n = tree.node(e.proxy_handle);
+        if (n)
+            n->dirty_render = true;
     }
 }
-
 
 // Build the model matrix for an entry from style-driven transform properties.
 // When any of --scale[-x/y/z], --translate-x/y/z, --rotation-x/y/z are set
@@ -297,31 +337,28 @@ void GltfScene::applyCSS(RenderTree& tree) noexcept
  *
  * @return Mat4 result
  */
-/*static*/ Mat4 GltfScene::buildModelMatrix(const MeshEntry& e,
-                                             RenderTree&      tree) noexcept
-{
-    const RenderNode* n = tree.node(e.proxy_handle);
+/*static*/ Mat4 GltfScene::buildModelMatrix(const MeshEntry &e, RenderTree &tree) noexcept {
+    const RenderNode *n = tree.node(e.proxy_handle);
     if (!n) {
         Mat4 m{};
         std::memcpy(m.data.data(), e.world_mat, sizeof(e.world_mat));
         return m;
     }
 
-    const float su = parseFloat(n->style("--scale"),        0.f);
-    const float sx = parseFloat(n->style("--scale-x"),      0.f);
-    const float sy = parseFloat(n->style("--scale-y"),      0.f);
-    const float sz = parseFloat(n->style("--scale-z"),      0.f);
-    const float tx = parseFloat(n->style("--translate-x"),  0.f);
-    const float ty = parseFloat(n->style("--translate-y"),  0.f);
-    const float tz = parseFloat(n->style("--translate-z"),  0.f);
-    const float rx = parseFloat(n->style("--rotation-x"),   0.f);
-    const float ry = parseFloat(n->style("--rotation-y"),   0.f);
-    const float rz = parseFloat(n->style("--rotation-z"),   0.f);
+    const float su = parseFloat(n->style("--scale"), 0.f);
+    const float sx = parseFloat(n->style("--scale-x"), 0.f);
+    const float sy = parseFloat(n->style("--scale-y"), 0.f);
+    const float sz = parseFloat(n->style("--scale-z"), 0.f);
+    const float tx = parseFloat(n->style("--translate-x"), 0.f);
+    const float ty = parseFloat(n->style("--translate-y"), 0.f);
+    const float tz = parseFloat(n->style("--translate-z"), 0.f);
+    const float rx = parseFloat(n->style("--rotation-x"), 0.f);
+    const float ry = parseFloat(n->style("--rotation-y"), 0.f);
+    const float rz = parseFloat(n->style("--rotation-z"), 0.f);
 
     const bool has_style =
-        (su != 0.f || sx != 0.f || sy != 0.f || sz != 0.f ||
-         tx != 0.f || ty != 0.f || tz != 0.f ||
-         rx != 0.f || ry != 0.f || rz != 0.f);
+        (su != 0.f || sx != 0.f || sy != 0.f || sz != 0.f || tx != 0.f || ty != 0.f || tz != 0.f
+         || rx != 0.f || ry != 0.f || rz != 0.f);
 
     if (!has_style) {
         Mat4 m{};
@@ -330,21 +367,17 @@ void GltfScene::applyCSS(RenderTree& tree) noexcept
     }
 
     constexpr float kD2R = 3.14159265f / 180.f;
-    const float fsx = (sx != 0.f) ? sx : (su != 0.f ? su : 1.f);
-    const float fsy = (sy != 0.f) ? sy : (su != 0.f ? su : 1.f);
-    const float fsz = (sz != 0.f) ? sz : (su != 0.f ? su : 1.f);
+    const float fsx      = (sx != 0.f) ? sx : (su != 0.f ? su : 1.f);
+    const float fsy      = (sy != 0.f) ? sy : (su != 0.f ? su : 1.f);
+    const float fsz      = (sz != 0.f) ? sz : (su != 0.f ? su : 1.f);
 
     // CSS TRS is an outer transform on top of world_mat, not a replacement.
     // --scale: 1 = natural glTF size; --translate-x: 3 = 3 units from glTF origin.
     Mat4 world_m{};
     std::memcpy(world_m.data.data(), e.world_mat, sizeof(e.world_mat));
 
-    return translate({tx, ty, tz})
-         * rotateZ(rz * kD2R)
-         * rotateY(ry * kD2R)
-         * rotateX(rx * kD2R)
-         * scale({fsx, fsy, fsz})
-         * world_m;
+    return translate({tx, ty, tz}) * rotateZ(rz * kD2R) * rotateY(ry * kD2R) * rotateX(rx * kD2R)
+         * scale({fsx, fsy, fsz}) * world_m;
 }
 
 /**
@@ -356,10 +389,7 @@ void GltfScene::applyCSS(RenderTree& tree) noexcept
  *
  * @return true on success, false on failure
  */
-bool GltfScene::applyMapCSS(RenderTree&        tree,
-                             NodeHandle         root,
-                             const std::string& path) noexcept
-{
+bool GltfScene::applyMapCSS(RenderTree &tree, NodeHandle root, const std::string &path) noexcept {
     auto css = pce::sdlos::css::load(path);
     if (css.empty()) {
         std::cerr << "[GltfScene] applyMapCSS: no rules loaded from " << path << "\n";
@@ -378,8 +408,7 @@ bool GltfScene::applyMapCSS(RenderTree&        tree,
  * @param vw    Width in logical pixels
  * @param vh    Opaque resource handle
  */
-void GltfScene::tick(RenderTree& tree, float vw, float vh) noexcept
-{
+void GltfScene::tick(RenderTree &tree, float vw, float vh) noexcept {
     camera_.setViewport(vw, vh);
 
     // Rebuild view / proj matrices from the camera's flat float[16] arrays.
@@ -387,23 +416,25 @@ void GltfScene::tick(RenderTree& tree, float vw, float vh) noexcept
     std::memcpy(view_mat.data.data(), camera_.view, sizeof(camera_.view));
     std::memcpy(proj_mat.data.data(), camera_.proj, sizeof(camera_.proj));
 
-    for (auto& e : entries_) {
+    for (auto &e : entries_) {
         // Skip entries whose parent scene3d container is hidden.
         if (e.scene3d_handle.valid()) {
-            const RenderNode* sn = tree.node(e.scene3d_handle);
-            if (sn && sn->style("display") == "none") continue;
+            const RenderNode *sn = tree.node(e.scene3d_handle);
+            if (sn && sn->style("display") == "none")
+                continue;
         }
 
-        RenderNode* n = tree.node(e.proxy_handle);
-        if (!n) continue;
+        RenderNode *n = tree.node(e.proxy_handle);
+        if (!n)
+            continue;
 
         // MVP = proj × view × model (style transform or glTF world_mat)
         const Mat4 model_mat = buildModelMatrix(e, tree);
-        const Mat4 mvp = proj_mat * view_mat * model_mat;
+        const Mat4 mvp       = proj_mat * view_mat * model_mat;
 
         // Project all 8 corners of the model-space AABB to screen space.
-        const float* mn = e.gpu.aabb_min;
-        const float* mx = e.gpu.aabb_max;
+        const float *mn = e.gpu.aabb_min;
+        const float *mx = e.gpu.aabb_max;
 
         const float corners[8][3] = {
             {mn[0], mn[1], mn[2]},
@@ -421,50 +452,49 @@ void GltfScene::tick(RenderTree& tree, float vw, float vh) noexcept
 
         float sx_min = kFMax, sy_min = kFMax;
         float sx_max = kFMin, sy_max = kFMin;
-        bool  any_visible = false;
+        bool any_visible = false;
 
-        for (const auto& c : corners) {
+        for (const auto &c : corners) {
             const Vec4 clip = mvp * Vec4{c[0], c[1], c[2], 1.f};
 
             // w ≤ 0 means the corner is at or behind the near plane.
-            if (clip.w <= 0.f) continue;
+            if (clip.w <= 0.f)
+                continue;
 
             const float inv_w = 1.f / clip.w;
-            const float ndc_x =  clip.x * inv_w;
-            const float ndc_y =  clip.y * inv_w;
+            const float ndc_x = clip.x * inv_w;
+            const float ndc_y = clip.y * inv_w;
 
             // NDC → screen pixels.
             // Metal NDC: +Y up.  Screen: +Y down → flip.
-            const float sx = ( ndc_x + 1.f) * 0.5f * vw;
+            const float sx = (ndc_x + 1.f) * 0.5f * vw;
             const float sy = (-ndc_y + 1.f) * 0.5f * vh;
 
-            sx_min = std::min(sx_min, sx);
-            sy_min = std::min(sy_min, sy);
-            sx_max = std::max(sx_max, sx);
-            sy_max = std::max(sy_max, sy);
+            sx_min      = std::min(sx_min, sx);
+            sy_min      = std::min(sy_min, sy);
+            sx_max      = std::max(sx_max, sx);
+            sy_max      = std::max(sy_max, sy);
             any_visible = true;
         }
 
         // If all corners were behind the camera, leave the bounds unchanged.
-        if (!any_visible) continue;
+        if (!any_visible)
+            continue;
 
         const float new_x = sx_min;
         const float new_y = sy_min;
         const float new_w = sx_max - sx_min;
         const float new_h = sy_max - sy_min;
 
-        if (n->x != new_x || n->y != new_y ||
-            n->w != new_w || n->h != new_h)
-        {
-            n->x = new_x;
-            n->y = new_y;
-            n->w = new_w;
-            n->h = new_h;
+        if (n->x != new_x || n->y != new_y || n->w != new_w || n->h != new_h) {
+            n->x            = new_x;
+            n->y            = new_y;
+            n->w            = new_w;
+            n->h            = new_h;
             n->dirty_render = true;
         }
     }
 }
-
 
 /**
  * @brief Renders
@@ -474,16 +504,19 @@ void GltfScene::tick(RenderTree& tree, float vw, float vh) noexcept
  * @param vw            Width in logical pixels
  * @param vh            Opaque resource handle
  */
-void GltfScene::render(SDL_GPUCommandBuffer* cmd,
-                       SDL_GPUTexture*       color_target,
-                       float vw, float vh) noexcept
-{
-    if (!pipeline_ || entries_.empty() || !color_target || !cmd) return;
+void GltfScene::render(
+    SDL_GPUCommandBuffer *cmd,
+    SDL_GPUTexture *color_target,
+    float vw,
+    float vh) noexcept {
+    if (!pipeline_ || entries_.empty() || !color_target || !cmd)
+        return;
 
     const Uint32 w = std::max(1u, static_cast<Uint32>(vw));
     const Uint32 h = std::max(1u, static_cast<Uint32>(vh));
 
-    if (!createOrResizeDepth(w, h)) return;
+    if (!createOrResizeDepth(w, h))
+        return;
 
     // ── Color target: LOAD (preserve wallpaper already drawn), then STORE ─
 
@@ -505,10 +538,9 @@ void GltfScene::render(SDL_GPUCommandBuffer* cmd,
     dt.clear_stencil    = 0;
     dt.cycle            = false;
 
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &ct, 1, &dt);
+    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &ct, 1, &dt);
     if (!pass) {
-        std::cerr << "[GltfScene] SDL_BeginGPURenderPass failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[GltfScene] SDL_BeginGPURenderPass failed: " << SDL_GetError() << "\n";
         return;
     }
 
@@ -524,15 +556,15 @@ void GltfScene::render(SDL_GPUCommandBuffer* cmd,
     SDL_SetGPUViewport(pass, &viewport);
 
     if (tree_ref_) {
-        for (const auto& e : entries_) {
-            if (!e.gpu.valid()) continue;
+        for (const auto &e : entries_) {
+            if (!e.gpu.valid())
+                continue;
             drawEntry(pass, cmd, e, *tree_ref_, vw, vh);
         }
     }
 
     SDL_EndGPURenderPass(pass);
 }
-
 
 /**
  * @brief Draws entry
@@ -544,19 +576,22 @@ void GltfScene::render(SDL_GPUCommandBuffer* cmd,
  * @param param4  Red channel component [0, 1]
  * @param param5  Red channel component [0, 1]
  */
-void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
-                           SDL_GPUCommandBuffer* cmd,
-                           const MeshEntry&      e,
-                           RenderTree&           tree,
-                           float /*vw*/, float /*vh*/) noexcept
-{
-    const RenderNode* n = tree.node(e.proxy_handle);
-    if (!n) return;
+void GltfScene::drawEntry(
+    SDL_GPURenderPass *pass,
+    SDL_GPUCommandBuffer *cmd,
+    const MeshEntry &e,
+    RenderTree &tree,
+    float /*vw*/,
+    float /*vh*/) noexcept {
+    const RenderNode *n = tree.node(e.proxy_handle);
+    if (!n)
+        return;
 
     // Skip if the parent scene3d container is hidden (display: none).
     if (e.scene3d_handle.valid()) {
-        const RenderNode* sn = tree.node(e.scene3d_handle);
-        if (sn && sn->style("display") == "none") return;
+        const RenderNode *sn = tree.node(e.scene3d_handle);
+        if (sn && sn->style("display") == "none")
+            return;
     }
 
     //  Read live CSS values from the proxy node's StyleMap
@@ -572,21 +607,24 @@ void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
             parseHexColor(cv, base_color);
         else {
             const auto gv = n->style("--gltf-base-color");
-            if (!gv.empty()) parseHexColor(gv, base_color);
+            if (!gv.empty())
+                parseHexColor(gv, base_color);
         }
     }
 
     // '--roughness' (CSS override) or '--gltf-roughness' (glTF seed) or default 0.5
     const float roughness = [&]() -> float {
         const auto s = n->style("--roughness");
-        if (!s.empty()) return parseFloat(s, 0.5f);
+        if (!s.empty())
+            return parseFloat(s, 0.5f);
         return parseFloat(n->style("--gltf-roughness"), 0.5f);
     }();
 
     // '--metallic' (CSS override) or '--gltf-metallic' (glTF seed) or default 0.0
     const float metallic = [&]() -> float {
         const auto s = n->style("--metallic");
-        if (!s.empty()) return parseFloat(s, 0.f);
+        if (!s.empty())
+            return parseFloat(s, 0.f);
         return parseFloat(n->style("--gltf-metallic"), 0.f);
     }();
 
@@ -605,8 +643,7 @@ void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
     }
 
     // 'border-width' > 0 signals hover (set by css :hover rule)
-    const float hover_t =
-        (parseFloat(n->style("border-width"), 0.f) > 0.f) ? 1.f : 0.f;
+    const float hover_t = (parseFloat(n->style("border-width"), 0.f) > 0.f) ? 1.f : 0.f;
 
     // 'opacity' (default 1.0)
     const float opacity = parseFloat(n->style("opacity"), 1.f);
@@ -619,16 +656,16 @@ void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
     // Style transform (--scale, --translate-x/y/z, --rotation-x/y/z) or
     // glTF world_mat fallback — built once here, shared by VertPush and MVP.
     const Mat4 model_mat = buildModelMatrix(e, tree);
-    const Mat4 mvp = proj_mat * view_mat * model_mat;
+    const Mat4 mvp       = proj_mat * view_mat * model_mat;
 
     VertPush vp{};
-    std::memcpy(vp.mvp,   mvp.data.data(),       sizeof(vp.mvp));
-    std::memcpy(vp.model, model_mat.data.data(),  sizeof(vp.model));
+    std::memcpy(vp.mvp, mvp.data.data(), sizeof(vp.mvp));
+    std::memcpy(vp.model, model_mat.data.data(), sizeof(vp.model));
 
     // Build FragPush
     FragPush fp{};
     std::memcpy(fp.base_color, base_color, sizeof(fp.base_color));
-    std::memcpy(fp.emissive,   emissive,   sizeof(fp.emissive));
+    std::memcpy(fp.emissive, emissive, sizeof(fp.emissive));
 
     fp.light_dir_i[0] = light_.dir[0];
     fp.light_dir_i[1] = light_.dir[1];
@@ -661,17 +698,17 @@ void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
     ibb.offset = 0;
     SDL_BindGPUIndexBuffer(pass, &ibb, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
-    SDL_PushGPUVertexUniformData(cmd,  0, &vp, static_cast<Uint32>(sizeof(vp)));
+    SDL_PushGPUVertexUniformData(cmd, 0, &vp, static_cast<Uint32>(sizeof(vp)));
     SDL_PushGPUFragmentUniformData(cmd, 0, &fp, static_cast<Uint32>(sizeof(fp)));
 
-    SDL_DrawGPUIndexedPrimitives(pass,
-                                  e.gpu.index_count,  // num_indices
-                                  1,                   // num_instances
-                                  0,                   // first_index
-                                  0,                   // vertex_offset
-                                  0);                  // first_instance
+    SDL_DrawGPUIndexedPrimitives(
+        pass,
+        e.gpu.index_count,  // num_indices
+        1,                  // num_instances
+        0,                  // first_index
+        0,                  // vertex_offset
+        0);                 // first_instance
 }
-
 
 /**
  * @brief Creates and returns pipeline
@@ -680,8 +717,7 @@ void GltfScene::drawEntry(SDL_GPURenderPass*    pass,
  *
  * @return true on success, false on failure
  */
-bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
-{
+bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept {
     //  Choose shader file paths from the backend format
     std::string vert_path, frag_path;
     SDL_GPUShaderFormat shader_fmt = SDL_GPU_SHADERFORMAT_INVALID;
@@ -701,15 +737,16 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
     }
 
     // Load shader source / bytecode from disk
-    auto loadBytes = [](const std::string& path) -> std::vector<Uint8> {
+    auto loadBytes = [](const std::string &path) -> std::vector<Uint8> {
         std::ifstream f(path, std::ios::binary | std::ios::ate);
-        if (!f) return {};
+        if (!f)
+            return {};
         const auto sz = f.tellg();
-        if (sz <= 0) return {};
+        if (sz <= 0)
+            return {};
         f.seekg(0);
         std::vector<Uint8> buf(static_cast<std::size_t>(sz));
-        if (!f.read(reinterpret_cast<char*>(buf.data()),
-                    static_cast<std::streamsize>(sz)))
+        if (!f.read(reinterpret_cast<char *>(buf.data()), static_cast<std::streamsize>(sz)))
             return {};
         return buf;
     };
@@ -739,8 +776,7 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
 
     vert_ = SDL_CreateGPUShader(device_, &vci);
     if (!vert_) {
-        std::cerr << "[GltfScene] vertex shader compile failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[GltfScene] vertex shader compile failed: " << SDL_GetError() << "\n";
         return false;
     }
 
@@ -757,8 +793,7 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
 
     frag_ = SDL_CreateGPUShader(device_, &fci);
     if (!frag_) {
-        std::cerr << "[GltfScene] fragment shader compile failed: "
-                  << SDL_GetError() << "\n";
+        std::cerr << "[GltfScene] fragment shader compile failed: " << SDL_GetError() << "\n";
         SDL_ReleaseGPUShader(device_, vert_);
         vert_ = nullptr;
         return false;
@@ -801,7 +836,7 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
 
     // Color target: swapchain format, straight-alpha blend
     SDL_GPUColorTargetDescription color_desc{};
-    color_desc.format = swapchain_fmt;
+    color_desc.format                            = swapchain_fmt;
     color_desc.blend_state.enable_blend          = true;
     color_desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     color_desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -843,19 +878,18 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
 
     pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &pci);
     if (!pipeline_) {
-        std::cerr << "[GltfScene] SDL_CreateGPUGraphicsPipeline failed: "
-                  << SDL_GetError() << "\n";
-        SDL_ReleaseGPUShader(device_, vert_); vert_ = nullptr;
-        SDL_ReleaseGPUShader(device_, frag_); frag_ = nullptr;
+        std::cerr << "[GltfScene] SDL_CreateGPUGraphicsPipeline failed: " << SDL_GetError() << "\n";
+        SDL_ReleaseGPUShader(device_, vert_);
+        vert_ = nullptr;
+        SDL_ReleaseGPUShader(device_, frag_);
+        frag_ = nullptr;
         return false;
     }
 
     std::cerr << "[GltfScene] PBR pipeline created ("
-              << ((shader_fmt == SDL_GPU_SHADERFORMAT_MSL) ? "MSL" : "SPIRV")
-              << ")\n";
+              << ((shader_fmt == SDL_GPU_SHADERFORMAT_MSL) ? "MSL" : "SPIRV") << ")\n";
     return true;
 }
-
 
 /**
  * @brief Creates and returns or resize depth
@@ -865,9 +899,9 @@ bool GltfScene::createPipeline(SDL_GPUTextureFormat swapchain_fmt) noexcept
  *
  * @return true on success, false on failure
  */
-bool GltfScene::createOrResizeDepth(Uint32 w, Uint32 h) noexcept
-{
-    if (depth_ && depth_w_ == w && depth_h_ == h) return true;
+bool GltfScene::createOrResizeDepth(Uint32 w, Uint32 h) noexcept {
+    if (depth_ && depth_w_ == w && depth_h_ == h)
+        return true;
 
     // SDL3 defers the actual GPU-side release until all in-flight commands
     // referencing the old texture have completed — safe to call immediately.
@@ -891,8 +925,8 @@ bool GltfScene::createOrResizeDepth(Uint32 w, Uint32 h) noexcept
 
     depth_ = SDL_CreateGPUTexture(device_, &tci);
     if (!depth_) {
-        std::cerr << "[GltfScene] depth texture alloc failed ("
-                  << w << "x" << h << "): " << SDL_GetError() << "\n";
+        std::cerr << "[GltfScene] depth texture alloc failed (" << w << "x" << h
+                  << "): " << SDL_GetError() << "\n";
         return false;
     }
 
@@ -900,7 +934,6 @@ bool GltfScene::createOrResizeDepth(Uint32 w, Uint32 h) noexcept
     depth_h_ = h;
     return true;
 }
-
 
 /**
  * @brief Loads file
@@ -911,24 +944,24 @@ bool GltfScene::createOrResizeDepth(Uint32 w, Uint32 h) noexcept
  *
  * @return true on success, false on failure
  */
-bool GltfScene::loadFile(const std::filesystem::path& path,
-                         RenderTree&                  tree,
-                         NodeHandle                   parent_handle)
-{
+bool GltfScene::loadFile(
+    const std::filesystem::path &path,
+    RenderTree &tree,
+    NodeHandle parent_handle) {
     namespace fg = fastgltf;
 
     // Verify that fastgltf's column-major fmat4x4 is blittable to float[16].
     // If this fires, replace the memcpy below with explicit column access:
     //   for(int c=0;c<4;++c) { world_mat[c*4+r] = world_mat_fg[c][r]; }
-    static_assert(sizeof(fg::math::fmat4x4) == 16 * sizeof(float),
-                  "fastgltf::math::fmat4x4 must be a standard-layout 64-byte type");
+    static_assert(
+        sizeof(fg::math::fmat4x4) == 16 * sizeof(float),
+        "fastgltf::math::fmat4x4 must be a standard-layout 64-byte type");
 
     // ── Map the glTF file into memory ─────────────────────────────────────
 
     auto mapped = fg::MappedGltfFile::FromPath(path);
     if (!mapped) {
-        std::cerr << "[GltfScene] MappedGltfFile::FromPath failed: "
-                  << path << "\n";
+        std::cerr << "[GltfScene] MappedGltfFile::FromPath failed: " << path << "\n";
         return false;
     }
 
@@ -936,23 +969,20 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
 
     fg::Parser parser;
 
-    constexpr auto opts = fg::Options::LoadExternalBuffers
-                        | fg::Options::GenerateMeshIndices;
+    constexpr auto opts = fg::Options::LoadExternalBuffers | fg::Options::GenerateMeshIndices;
 
     auto result = parser.loadGltf(mapped.get(), path.parent_path(), opts);
     if (result.error() != fg::Error::None) {
-        std::cerr << "[GltfScene] loadGltf error "
-                  << static_cast<int>(result.error())
+        std::cerr << "[GltfScene] loadGltf error " << static_cast<int>(result.error())
                   << " for: " << path << "\n";
         return false;
     }
 
-    fg::Asset& asset = result.get();
+    fg::Asset &asset = result.get();
 
     // ── Select default scene ──────────────────────────────────────────────
 
-    const std::size_t scene_idx =
-        asset.defaultScene.has_value() ? asset.defaultScene.value() : 0u;
+    const std::size_t scene_idx = asset.defaultScene.has_value() ? asset.defaultScene.value() : 0u;
 
     if (scene_idx >= asset.scenes.size()) {
         std::cerr << "[GltfScene] no scenes in: " << path << "\n";
@@ -967,7 +997,7 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
     // node carry id="ball" regardless of the internal glTF node name.
     // Subsequent primitives in a multi-mesh file get "ball-1", "ball-2", …
     const std::string mesh_id_override = [&]() -> std::string {
-        const RenderNode* sn = tree.node(parent_handle);
+        const RenderNode *sn = tree.node(parent_handle);
         return sn ? std::string(sn->style("mesh-id")) : "";
     }();
     int proxy_count_for_scene = 0;
@@ -978,43 +1008,41 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
     // providing the fully-accumulated world-space transform for each one.
 
     fg::iterateSceneNodes(
-        asset, scene_idx,
-        fg::math::fmat4x4(1.f),   // identity: no extra parent transform
-        [&](fg::Node& node, fg::math::fmat4x4 world_mat_fg)
-        {
+        asset,
+        scene_idx,
+        fg::math::fmat4x4(1.f),  // identity: no extra parent transform
+        [&](fg::Node &node, fg::math::fmat4x4 world_mat_fg) {
             // Only process nodes that own at least one mesh.
-            if (!node.meshIndex.has_value()) return;
+            if (!node.meshIndex.has_value())
+                return;
 
             const std::size_t mesh_idx = node.meshIndex.value();
-            const fg::Mesh&   mesh     = asset.meshes[mesh_idx];
+            const fg::Mesh &mesh       = asset.meshes[mesh_idx];
 
             // Copy the world-space transform to a flat column-major array.
             float world_mat[16];
             std::memcpy(world_mat, &world_mat_fg, sizeof(world_mat));
 
             // Stable proxy id: prefer node name, fall back to mesh name.
-            const std::string node_id = normalizeId(
-                node.name.empty() ? mesh.name : node.name);
+            const std::string node_id = normalizeId(node.name.empty() ? mesh.name : node.name);
 
             // ── Process each primitive in this mesh ───────────────────────
 
-            for (std::size_t prim_idx = 0;
-                 prim_idx < mesh.primitives.size();
-                 ++prim_idx)
-            {
-                const fg::Primitive& prim = mesh.primitives[prim_idx];
+            for (std::size_t prim_idx = 0; prim_idx < mesh.primitives.size(); ++prim_idx) {
+                const fg::Primitive &prim = mesh.primitives[prim_idx];
 
                 // POSITION is mandatory.
                 auto pos_it = prim.findAttribute("POSITION");
-                if (pos_it == prim.attributes.end()) continue;
+                if (pos_it == prim.attributes.end())
+                    continue;
 
                 // Indices are mandatory (GenerateMeshIndices guarantees them).
-                if (!prim.indicesAccessor.has_value()) continue;
+                if (!prim.indicesAccessor.has_value())
+                    continue;
 
                 // ── Build interleaved vertex array ────────────────────────
 
-                const fg::Accessor& pos_acc =
-                    asset.accessors[pos_it->accessorIndex];
+                const fg::Accessor &pos_acc  = asset.accessors[pos_it->accessorIndex];
                 const std::size_t vert_count = pos_acc.count;
 
                 std::vector<GpuVertex> verts(vert_count);
@@ -1022,11 +1050,12 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 // Accumulate model-space AABB while copying positions.
                 constexpr float kFMax = std::numeric_limits<float>::max();
                 constexpr float kFMin = std::numeric_limits<float>::lowest();
-                float aabb_min[3] = {kFMax, kFMax, kFMax};
-                float aabb_max[3] = {kFMin, kFMin, kFMin};
+                float aabb_min[3]     = {kFMax, kFMax, kFMax};
+                float aabb_max[3]     = {kFMin, kFMin, kFMin};
 
                 fg::iterateAccessorWithIndex<fg::math::fvec3>(
-                    asset, pos_acc,
+                    asset,
+                    pos_acc,
                     [&](fg::math::fvec3 v, std::size_t i) {
                         verts[i].px = v.x();
                         verts[i].py = v.y();
@@ -1042,10 +1071,10 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 // Normals (optional — vertex struct is zero-initialised).
                 auto norm_it = prim.findAttribute("NORMAL");
                 if (norm_it != prim.attributes.end()) {
-                    const fg::Accessor& norm_acc =
-                        asset.accessors[norm_it->accessorIndex];
+                    const fg::Accessor &norm_acc = asset.accessors[norm_it->accessorIndex];
                     fg::iterateAccessorWithIndex<fg::math::fvec3>(
-                        asset, norm_acc,
+                        asset,
+                        norm_acc,
                         [&](fg::math::fvec3 v, std::size_t i) {
                             verts[i].nx = v.x();
                             verts[i].ny = v.y();
@@ -1056,10 +1085,10 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 // Texture coordinates (optional).
                 auto uv_it = prim.findAttribute("TEXCOORD_0");
                 if (uv_it != prim.attributes.end()) {
-                    const fg::Accessor& uv_acc =
-                        asset.accessors[uv_it->accessorIndex];
+                    const fg::Accessor &uv_acc = asset.accessors[uv_it->accessorIndex];
                     fg::iterateAccessorWithIndex<fg::math::fvec2>(
-                        asset, uv_acc,
+                        asset,
+                        uv_acc,
                         [&](fg::math::fvec2 v, std::size_t i) {
                             verts[i].u = v.x();
                             verts[i].v = v.y();
@@ -1068,31 +1097,28 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
 
                 // ── Copy indices ──────────────────────────────────────────
 
-                const fg::Accessor& idx_acc =
-                    asset.accessors[prim.indicesAccessor.value()];
-                const std::size_t   idx_count = idx_acc.count;
+                const fg::Accessor &idx_acc = asset.accessors[prim.indicesAccessor.value()];
+                const std::size_t idx_count = idx_acc.count;
 
                 std::vector<std::uint32_t> indices(idx_count);
-                fg::copyFromAccessor<std::uint32_t>(asset, idx_acc,
-                                                    indices.data());
+                fg::copyFromAccessor<std::uint32_t>(asset, idx_acc, indices.data());
 
                 // ── Read material defaults ────────────────────────────────
 
                 std::string mat_class;
-                float       mat_color[4] = {1.f, 1.f, 1.f, 1.f};
-                float       mat_rough    = 0.5f;
-                float       mat_metal    = 0.0f;
+                float mat_color[4] = {1.f, 1.f, 1.f, 1.f};
+                float mat_rough    = 0.5f;
+                float mat_metal    = 0.0f;
 
                 if (prim.materialIndex.has_value()) {
-                    const auto& mat =
-                        asset.materials[prim.materialIndex.value()];
-                    mat_class    = normalizeId(mat.name);
-                    mat_color[0] = mat.pbrData.baseColorFactor.x();
-                    mat_color[1] = mat.pbrData.baseColorFactor.y();
-                    mat_color[2] = mat.pbrData.baseColorFactor.z();
-                    mat_color[3] = mat.pbrData.baseColorFactor.w();
-                    mat_rough    = mat.pbrData.roughnessFactor;
-                    mat_metal    = mat.pbrData.metallicFactor;
+                    const auto &mat = asset.materials[prim.materialIndex.value()];
+                    mat_class       = normalizeId(mat.name);
+                    mat_color[0]    = mat.pbrData.baseColorFactor.x();
+                    mat_color[1]    = mat.pbrData.baseColorFactor.y();
+                    mat_color[2]    = mat.pbrData.baseColorFactor.z();
+                    mat_color[3]    = mat.pbrData.baseColorFactor.w();
+                    mat_rough       = mat.pbrData.roughnessFactor;
+                    mat_metal       = mat.pbrData.metallicFactor;
                 }
 
                 // ── GPU upload ────────────────────────────────────────────
@@ -1100,10 +1126,8 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 // One transfer buffer per primitive (acceptable at load time).
                 // Layout in the transfer buffer: [vertices | indices].
 
-                const Uint32 vbytes =
-                    static_cast<Uint32>(verts.size()   * sizeof(GpuVertex));
-                const Uint32 ibytes =
-                    static_cast<Uint32>(indices.size() * sizeof(std::uint32_t));
+                const Uint32 vbytes = static_cast<Uint32>(verts.size() * sizeof(GpuVertex));
+                const Uint32 ibytes = static_cast<Uint32>(indices.size() * sizeof(std::uint32_t));
 
                 // 1. Create transfer (staging) buffer.
                 SDL_GPUTransferBufferCreateInfo tci{};
@@ -1111,33 +1135,31 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 tci.size  = vbytes + ibytes;
                 tci.props = 0;
 
-                SDL_GPUTransferBuffer* tb =
-                    SDL_CreateGPUTransferBuffer(device_, &tci);
+                SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(device_, &tci);
                 if (!tb) {
                     std::cerr << "[GltfScene] transfer buffer alloc failed\n";
                     continue;
                 }
 
                 // 2. Map → fill → unmap.
-                void* ptr = SDL_MapGPUTransferBuffer(device_, tb, false);
+                void *ptr = SDL_MapGPUTransferBuffer(device_, tb, false);
                 std::memcpy(ptr, verts.data(), vbytes);
-                std::memcpy(static_cast<char*>(ptr) + vbytes,
-                            indices.data(), ibytes);
+                std::memcpy(static_cast<char *>(ptr) + vbytes, indices.data(), ibytes);
                 SDL_UnmapGPUTransferBuffer(device_, tb);
 
                 // 3. Allocate persistent GPU buffers.
                 GpuMesh gpu{};
 
                 SDL_GPUBufferCreateInfo vbc{};
-                vbc.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-                vbc.size  = vbytes;
-                vbc.props = 0;
+                vbc.usage      = SDL_GPU_BUFFERUSAGE_VERTEX;
+                vbc.size       = vbytes;
+                vbc.props      = 0;
                 gpu.vertex_buf = SDL_CreateGPUBuffer(device_, &vbc);
 
                 SDL_GPUBufferCreateInfo ibc{};
-                ibc.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-                ibc.size  = ibytes;
-                ibc.props = 0;
+                ibc.usage     = SDL_GPU_BUFFERUSAGE_INDEX;
+                ibc.size      = ibytes;
+                ibc.props     = 0;
                 gpu.index_buf = SDL_CreateGPUBuffer(device_, &ibc);
 
                 if (!gpu.vertex_buf || !gpu.index_buf) {
@@ -1151,9 +1173,8 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 }
 
                 // 4. Record and submit a copy pass.
-                SDL_GPUCommandBuffer* upload_cmd =
-                    SDL_AcquireGPUCommandBuffer(device_);
-                SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(upload_cmd);
+                SDL_GPUCommandBuffer *upload_cmd = SDL_AcquireGPUCommandBuffer(device_);
+                SDL_GPUCopyPass *cp              = SDL_BeginGPUCopyPass(upload_cmd);
 
                 SDL_GPUTransferBufferLocation src{};
                 src.transfer_buffer = tb;
@@ -1161,17 +1182,17 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 SDL_GPUBufferRegion dst{};
 
                 // Vertex upload
-                src.offset  = 0;
-                dst.buffer  = gpu.vertex_buf;
-                dst.offset  = 0;
-                dst.size    = vbytes;
+                src.offset = 0;
+                dst.buffer = gpu.vertex_buf;
+                dst.offset = 0;
+                dst.size   = vbytes;
                 SDL_UploadToGPUBuffer(cp, &src, &dst, false);
 
                 // Index upload (immediately after vertex data in the TB)
-                src.offset  = vbytes;
-                dst.buffer  = gpu.index_buf;
-                dst.offset  = 0;
-                dst.size    = ibytes;
+                src.offset = vbytes;
+                dst.buffer = gpu.index_buf;
+                dst.offset = 0;
+                dst.size   = ibytes;
                 SDL_UploadToGPUBuffer(cp, &src, &dst, false);
 
                 SDL_EndGPUCopyPass(cp);
@@ -1196,7 +1217,7 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 //   works without any 3D-specific logic.
 
                 const NodeHandle proxy_h = tree.alloc();
-                RenderNode*      proxy   = tree.node(proxy_h);
+                RenderNode *proxy        = tree.node(proxy_h);
 
                 proxy->layout_kind  = LayoutKind::None;
                 proxy->draw         = nullptr;
@@ -1210,9 +1231,8 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                     std::string eff_id;
                     if (!mesh_id_override.empty()) {
                         eff_id = (proxy_count_for_scene == 0)
-                            ? mesh_id_override
-                            : mesh_id_override + "-"
-                              + std::to_string(proxy_count_for_scene);
+                                   ? mesh_id_override
+                                   : mesh_id_override + "-" + std::to_string(proxy_count_for_scene);
                     } else {
                         eff_id = node_id;
                     }
@@ -1231,12 +1251,16 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 {
                     char buf[32];
                     const auto byt = [](float f) -> unsigned {
-                        return static_cast<unsigned>(
-                            std::clamp(f, 0.f, 1.f) * 255.f + 0.5f);
+                        return static_cast<unsigned>(std::clamp(f, 0.f, 1.f) * 255.f + 0.5f);
                     };
-                    std::snprintf(buf, sizeof(buf), "#%02x%02x%02x%02x",
-                                  byt(mat_color[0]), byt(mat_color[1]),
-                                  byt(mat_color[2]), byt(mat_color[3]));
+                    std::snprintf(
+                        buf,
+                        sizeof(buf),
+                        "#%02x%02x%02x%02x",
+                        byt(mat_color[0]),
+                        byt(mat_color[1]),
+                        byt(mat_color[2]),
+                        byt(mat_color[3]));
                     proxy->setStyle("--gltf-base-color", std::string(buf));
 
                     std::snprintf(buf, sizeof(buf), "%.6f", mat_rough);
@@ -1260,12 +1284,11 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
                 ++proxy_count_for_scene;
                 loaded_any = true;
             }
-        }
-    ); // end fg::iterateSceneNodes
+        });  // end fg::iterateSceneNodes
 
     if (loaded_any) {
-        std::cerr << "[GltfScene] loaded '" << path.filename().string()
-                  << "' (" << entries_.size() << " total primitive(s))\n";
+        std::cerr << "[GltfScene] loaded '" << path.filename().string() << "' (" << entries_.size()
+                  << " total primitive(s))\n";
     } else {
         std::cerr << "[GltfScene] no mesh primitives found in: " << path << "\n";
     }
@@ -1273,18 +1296,41 @@ bool GltfScene::loadFile(const std::filesystem::path& path,
     return loaded_any;
 }
 
+void GltfScene::clearMeshes(RenderTree &tree) noexcept {
+    for (auto &e : entries_) {
+        // Detach and free the proxy object3d node injected by loadFile().
+        if (e.proxy_handle != k_null_handle) {
+            tree.detach(e.proxy_handle);
+            tree.free(e.proxy_handle);
+        }
+        // Release GPU vertex/index buffers.  SDL3 defers the GPU-side free
+        // until all in-flight commands are done, so no sync is needed.
+        if (device_) {
+            if (e.gpu.vertex_buf) {
+                SDL_ReleaseGPUBuffer(device_, e.gpu.vertex_buf);
+                e.gpu.vertex_buf = nullptr;
+            }
+            if (e.gpu.index_buf) {
+                SDL_ReleaseGPUBuffer(device_, e.gpu.index_buf);
+                e.gpu.index_buf = nullptr;
+            }
+        }
+    }
+    entries_.clear();
+    std::cerr << "[GltfScene] clearMeshes: all entries released\n";
+}
 
 /**
  * @brief Shuts down
  */
-void GltfScene::shutdown() noexcept
-{
-    if (!device_) return;
+void GltfScene::shutdown() noexcept {
+    if (!device_)
+        return;
 
     // Release mesh GPU buffers.
     // SDL3 defers the actual GPU-side free until all commands referencing the
     // buffer have completed — no explicit SDL_WaitForGPUIdle needed.
-    for (auto& e : entries_) {
+    for (auto &e : entries_) {
         if (e.gpu.vertex_buf) {
             SDL_ReleaseGPUBuffer(device_, e.gpu.vertex_buf);
             e.gpu.vertex_buf = nullptr;
@@ -1323,4 +1369,4 @@ void GltfScene::shutdown() noexcept
     device_   = nullptr;
 }
 
-} // namespace pce::sdlos::gltf
+}  // namespace pce::sdlos::gltf
