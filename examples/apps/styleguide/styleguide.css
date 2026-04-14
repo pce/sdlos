@@ -124,10 +124,78 @@
     align-items: center;
 }
 
-.bg-blue-600   { background-color: #2563eb; }
-.bg-yellow-500 { background-color: #eab308; }
-.bg-green-600  { background-color: #16a34a; }
-.bg-purple-600 { background-color: #9333ea; }
+.bg-blue-600 {
+    background-color: #2563eb;
+}
+.bg-yellow-500 {
+    background-color: #eab308;
+}
+.bg-green-600 {
+    background-color: #16a34a;
+}
+.bg-purple-600 {
+    background-color: #9333ea;
+}
 
-.bg-white-10 { background-color: #ffffff1a; }
+.bg-white-10 {
+    background-color: #ffffff1a;
+}
 
+/* ── Animal Farm utility classes ─────────────────────────────────────────── */
+
+/* Layout */
+.flex-grow {
+    flex-grow: 1;
+}
+
+/* Padding */
+.p-16 {
+    padding: 16;
+}
+.p-24 {
+    padding: 24;
+}
+.p-32 {
+    padding: 32;
+}
+
+/* Gap */
+.gap-12 {
+    gap: 12;
+}
+.gap-24 {
+    gap: 24;
+}
+
+/* Border radius */
+.rounded-24 {
+    border-radius: 24;
+}
+
+/* Typography */
+.text-12 {
+    font-size: 12;
+}
+.text-28 {
+    font-size: 28;
+}
+.text-36 {
+    font-size: 36;
+}
+.text-48 {
+    font-size: 48;
+}
+.font-bold {
+    font-weight: bold;
+}
+
+/* Color */
+.color-white {
+    color: #ffffff;
+}
+.color-gray-400 {
+    color: #94a3b8;
+}
+.color-gray-500 {
+    color: #64748b;
+}

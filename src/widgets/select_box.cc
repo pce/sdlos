@@ -114,12 +114,18 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
         const float w = c.w;
         const float h = c.h;
 
+        // Absolute screen origin — set by RenderTree::render() before this
+        // callback fires.  All draw calls are expressed as (ox + local_x, oy + local_y)
+        // so the widget paints at its true screen position regardless of nesting depth.
+        const float ox = ctx.offset_x;
+        const float oy = ctx.offset_y;
+
         // Control (always visible)
         const Color &bg = s.is_open ? c.bg_open : c.bg;
-        ctx.drawRect(0.f, 0.f, w, h, bg.r, bg.g, bg.b, bg.a);
+        ctx.drawRect(ox, oy, w, h, bg.r, bg.g, bg.b, bg.a);
 
         const Color &bord = s.is_open ? c.border_open : c.border;
-        drawBorder(ctx, 1.f, 1.f, w - 2.f, h - 2.f, bord);
+        drawBorder(ctx, ox + 1.f, oy + 1.f, w - 2.f, h - 2.f, bord);
 
         // Selected label
         const std::string_view lbl = s.selectedLabel();
@@ -127,8 +133,8 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
             const float ty = (h - c.font_size) * 0.5f;
             ctx.drawText(
                 lbl,
-                c.padding.left,
-                ty,
+                ox + c.padding.left,
+                oy + ty,
                 c.font_size,
                 c.text_color.r,
                 c.text_color.g,
@@ -139,29 +145,29 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
         // Arrow glyph — right-aligned, vertically centred.
         {
             const float arrow_size = c.font_size * 0.5f;
-            const float ax         = w - c.padding.right - arrow_size;
-            const float ay         = (h - arrow_size) * 0.5f;
-            drawArrow(ctx, ax, ay, arrow_size, s.is_open, c.arrow_color);
+            const float arrow_x    = ox + w - c.padding.right - arrow_size;
+            const float arrow_y    = oy + (h - arrow_size) * 0.5f;
+            drawArrow(ctx, arrow_x, arrow_y, arrow_size, s.is_open, c.arrow_color);
         }
 
         // Dropdown panel (only when open)
         if (!s.is_open || s.options.empty())
             return;
 
-        const float panel_y = h;  // immediately below control
+        const float panel_y = h;  // immediately below control (local offset)
         const float panel_h = s.dropdownH();
 
         // Panel background + border
         ctx.drawRect(
-            0.f,
-            panel_y,
+            ox,
+            oy + panel_y,
             w,
             panel_h,
             c.dropdown_bg.r,
             c.dropdown_bg.g,
             c.dropdown_bg.b,
             c.dropdown_bg.a);
-        drawBorder(ctx, 1.f, panel_y, w - 2.f, panel_h, c.border_open);
+        drawBorder(ctx, ox + 1.f, oy + panel_y, w - 2.f, panel_h, c.border_open);
 
         // Option rows
         for (std::size_t i = 0; i < s.options.size(); ++i) {
@@ -170,8 +176,8 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
             // Row background: selected > hovered > transparent
             if (i == s.selected_idx) {
                 ctx.drawRect(
-                    2.f,
-                    row_y + 1.f,
+                    ox + 2.f,
+                    oy + row_y + 1.f,
                     w - 4.f,
                     c.item_h - 2.f,
                     c.item_selected_bg.r,
@@ -180,8 +186,8 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
                     c.item_selected_bg.a);
             } else if (i == s.hovered_idx) {
                 ctx.drawRect(
-                    2.f,
-                    row_y + 1.f,
+                    ox + 2.f,
+                    oy + row_y + 1.f,
                     w - 4.f,
                     c.item_h - 2.f,
                     c.item_hover_bg.r,
@@ -195,8 +201,8 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
             const float text_y = row_y + (c.item_h - c.font_size) * 0.5f;
             ctx.drawText(
                 s.options[i].displayLabel(),
-                c.padding.left,
-                text_y,
+                ox + c.padding.left,
+                oy + text_y,
                 c.font_size,
                 tc.r,
                 tc.g,
@@ -207,8 +213,8 @@ SelectBox makeSelectBox(RenderTree &tree, SelectBoxConfig cfg) {
             if (i + 1 < s.options.size()) {
                 const float sep_y = row_y + c.item_h - 1.f;
                 ctx.drawRect(
-                    c.padding.left,
-                    sep_y,
+                    ox + c.padding.left,
+                    oy + sep_y,
                     w - c.padding.left - c.padding.right,
                     1.f,
                     0.5f,
@@ -343,9 +349,10 @@ bool SelectBox::handleEvent(const SDL_Event &ev) {
         if (ev.button.button != SDL_BUTTON_LEFT)
             return false;
 
-        // Coordinates local to this node.
-        const float lx = ev.button.x - n->x;
-        const float ly = ev.button.y - n->y;
+        // n->x / n->y are parent-relative; walk the chain to get screen-space origin.
+        const auto [abs_x, abs_y] = absolutePos(tree, handle);
+        const float lx            = ev.button.x - abs_x;
+        const float ly            = ev.button.y - abs_y;
 
         // Click on the control itself (closed or open header).
         const bool on_control = (lx >= 0.f && lx <= s->cfg.w && ly >= 0.f && ly <= s->cfg.h);
@@ -381,9 +388,10 @@ bool SelectBox::handleEvent(const SDL_Event &ev) {
         if (!s->is_open)
             return false;
 
-        const float lx        = ev.motion.x - n->x;
-        const float ly        = ev.motion.y - n->y;
-        const std::size_t idx = hitTestDropdown(*s, lx, ly);
+        const auto [abs_x, abs_y] = absolutePos(tree, handle);
+        const float lx            = ev.motion.x - abs_x;
+        const float ly            = ev.motion.y - abs_y;
+        const std::size_t idx     = hitTestDropdown(*s, lx, ly);
 
         if (idx != s->hovered_idx) {
             s->hovered_idx = idx;

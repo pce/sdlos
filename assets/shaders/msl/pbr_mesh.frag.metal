@@ -51,8 +51,14 @@ fragment float4 main0(
                      * push.light_color.rgb
                      * light_intensity;
 
-    // 3. Ambient (constant low-level fill)
-    float3 ambient   = push.base_color.rgb * 0.07;
+    // 3. Ambient — two-term sky/ground hemisphere model so building façades
+    //    facing away from the sun are not pure black.
+    //    sky_t=1 for faces pointing straight up, 0 for straight down.
+    float  sky_t    = N.y * 0.5 + 0.5;
+    float3 sky_col  = float3(0.53, 0.68, 0.85);   // cool blue sky
+    float3 gnd_col  = float3(0.28, 0.24, 0.20);   // warm ground bounce
+    float3 hemi     = mix(gnd_col, sky_col, sky_t) * 0.18;
+    float3 ambient  = push.base_color.rgb * hemi;
 
     // 4. Emissive
     float3 emissive  = push.emissive.rgb * push.emissive.a;

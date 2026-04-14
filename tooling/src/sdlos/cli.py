@@ -58,8 +58,8 @@ from .core.naming import validate_name
 from .templates.renderer import list_available
 from .commands.run import run_app
 from .commands.pipeline import cmd_pipeline
-from .commands.analyze import cmd_analyze
 from .commands.mesh import cmd_mesh
+from .commands.build import cmd_build
 
 
 def _is_tty() -> bool:
@@ -86,7 +86,7 @@ def main(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
         print_banner(
             "sdlos tooling",
-            subtitle=f"v{__version__}  ·  create · run · pipeline · mesh · analyze · templates",
+            subtitle=f"v{__version__}  ·  create · run · build · pipeline · mesh · templates",
         )
         click.echo(ctx.get_help())
 
@@ -116,11 +116,11 @@ def cmd_templates() -> None:
     console.print()
 
 
-# ── sdlos pipeline ────────────────────────────────────────────────────────────
+# ── sdlos pipeline / mesh / build ────────────────────────────────────────────
 
 main.add_command(cmd_pipeline)
-main.add_command(cmd_analyze)
 main.add_command(cmd_mesh)
+main.add_command(cmd_build)
 
 # ── sdlos run ─────────────────────────────────────────────────────────────────
 
@@ -272,7 +272,6 @@ def cmd_run(
         "Default: examples/apps/<name> inside the project root."
     ),
 )
-
 # ── Safety ───────────────────────────────────────────────────────────────────
 @click.option(
     "--overwrite",
@@ -474,9 +473,3 @@ def cmd_create(
             if should_reconfigure:
                 from .commands.run import _configure
                 _configure(root_dir, build_dir, preset=None, quiet=False)
-
-
-# ── Standalone entry point ────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    sys.exit(main())

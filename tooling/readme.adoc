@@ -128,7 +128,6 @@ uv run sdlos run viz --build-dir ../build-asan --watch
 
 == Analyze
 
-// moved
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,8 +138,44 @@ uv run sdlos run viz --build-dir ../build-asan --watch
 
 [source,sh]
 ----
-➜  sdlos git:(main) ✗ uv run --project tooling sdlos mesh generate --preset cappadocia --name cappadocia --lod lowpoly --face-count 5000 --format glb --out-dir ./assets/city-meshes/cappadocia
+➜  userspace git:(main) ✗ uv run --project tooling sdlos mesh cache clear
+  Cleared 6 cached file(s).
 ----
+
+[source,sh]
+----
+uv run --project tooling sdlos mesh generate --preset mainz --no-cache
+----
+
+The **bbox is the only knob that controls building count**.
+Everything else (`--lod`, `--face-count`, `--building-height`) affects appearance.
+
+---
+
+## 1. Expand the bounding box (biggest impact)
+
+The presets are intentionally conservative (~0.5–2 km²). Each degree of lat/lon is ~111 km, so expanding by `0.010°` on each side roughly **4×** the covered area:
+
+For any preset you can just override the bbox directly — the `--preset` and `--bbox` flags are mutually exclusive, so copy the preset bbox and widen it manually.
+
+## denser OSM coverage
+
+Some cities have far more buildings tagged per km² than others. Best ones for density
+
+**TL;DR**: some areas generated have very few OSM-tagged buildings: a bigger `--bbox` covering a wider block of the same city.
+
+
+[source,bash]
+----
+uv run --project tooling sdlos mesh generate \
+  --preset mexico-popo --volcano --volcano-height 5426 --volcano-radius 8000 --app clima --name mexico-popo
+----
+
+
+
+
+---
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────

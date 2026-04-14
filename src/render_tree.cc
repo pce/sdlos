@@ -245,6 +245,56 @@ SDL_GPUGraphicsPipeline *RenderContext::pipeline(std::string_view name) {
     return nullptr;
 }
 
+void RenderContext::drawRoundedRect(
+    float x,
+    float y,
+    float w,
+    float h,
+    float radius,
+    float bw,
+    const struct RGBAf &fill,
+    const struct RGBAf &border) {
+    if (!pass || !cmd)
+        return;
+
+    SDL_GPUGraphicsPipeline *pipe = pipeline("sdf");
+    if (!pipe) {
+        // Fallback to regular drawRect if SDF pipeline is missing
+        drawRect(x, y, w, h, fill.r, fill.g, fill.b, fill.a);
+        return;
+    }
+
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+
+    struct alignas(4) RectUniform {
+        float x, y, w, h;
+        float vw, vh;
+        float uv_x, uv_y;
+        float uv_w, uv_h;
+        float _pad0, _pad1;
+    };
+    const RectUniform vu{x, y, w, h, viewport_w, viewport_h, 0.f, 0.f, 1.f, 1.f, 0.f, 0.f};
+    SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
+
+    struct alignas(4) SDFFragUniform {
+        float w, h;
+        float radius, border_width;
+        float shadow_blur, shadow_spread;
+        float shadow_ox, shadow_oy;
+        float fill_r, fill_g, fill_b, fill_a;
+        float border_r, border_g, border_b, border_a;
+        float shadow_r, shadow_g, shadow_b, shadow_a;
+    };
+    static_assert(sizeof(SDFFragUniform) == 80, "SDFFragUniform must be 80 bytes");
+
+    const SDFFragUniform fu{w,        h,        radius, bw,     0.f,    0.f,      0.f,
+                            0.f,      fill.r,   fill.g, fill.b, fill.a, border.r, border.g,
+                            border.b, border.a, 0.f,    0.f,    0.f,    0.f};
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
+
+    SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+}
+
 // drawRectOutline — four axis-aligned filled rects:
 //
 //   ┌─────────────────────┐   ← top    (x, y,        w,     t)
@@ -1301,6 +1351,131 @@ void RenderTree::update(NodeHandle root) {
     if (!start.valid())
         return;
 
+    // ── Measure pass (post-order, bottom-up) ─────────────────────────────────
+    // Propagates intrinsic heights from leaf nodes upward through flex
+    // containers BEFORE the top-down layout pass runs.
+    //
+    // Motivation: flexLayout keeps a child's existing h when no explicit
+    // height constraint is set ("basis = -1 → keep existing w/h").  Freshly-
+    // allocated nodes start at h = 0.  Without this pass, a section col
+    // wrapping text divs (or a FlexRow whose height depends on its card
+    // columns) stays at h = 0 and its draw callback bails on `h <= 0`.
+    //
+    // StyleApplier already seeds text-leaf nodes with h ≈ fontSize.  This
+    // pass bubbles those values upward:
+    //   FlexColumn with h == 0 and no explicit height
+    //       → h = Σ(visible-child.h) + gaps + padding_top + padding_bottom
+    //   FlexRow with h == 0 and no explicit height
+    //       → h = max(visible-child.h)  + padding_top + padding_bottom
+    //
+    // Nodes that already have h > 0 (from StyleApplier or a prior layout)
+    // are left untouched, so stable frames are effectively a no-op traversal.
+    {
+        // Collect nodes in preorder into a vector; processing in reverse gives
+        // bottom-up order (every child is guaranteed to appear after its parent
+        // in preorder, so reversing ensures children are processed first).
+        std::vector<NodeHandle> preorder;
+        preorder.reserve(128);
+        {
+            std::vector<NodeHandle> stk;
+            stk.reserve(64);
+            stk.push_back(start);
+            while (!stk.empty()) {
+                const NodeHandle h = stk.back();
+                stk.pop_back();
+                RenderNode *n = nodes_.get(h);
+                if (!n || n->hidden)
+                    continue;
+                preorder.push_back(h);
+                // Push children right-to-left so left child is on top of stk
+                // and thus visited first (standard preorder).
+                const auto base = static_cast<std::ptrdiff_t>(stk.size());
+                for (NodeHandle c = n->child; c.valid();) {
+                    const RenderNode *cn = nodes_.get(c);
+                    const NodeHandle nx  = cn ? cn->sibling : k_null_handle;
+                    stk.push_back(c);
+                    c = nx;
+                }
+                std::reverse(stk.begin() + base, stk.end());
+            }
+        }
+
+        // Process in reverse (bottom-up: descendants before their ancestor).
+        for (auto it = preorder.rbegin(); it != preorder.rend(); ++it) {
+            RenderNode *n = nodes_.get(*it);
+            if (!n || n->hidden)
+                continue;
+
+            // Already has a concrete size → leave it alone.
+            if (n->h > 0.f)
+                continue;
+            // Has an explicit height / percent constraint → flex layout handles it.
+            if (n->layout_props.height >= 0.f)
+                continue;
+            if (n->layout_props.height_pct >= 0.f)
+                continue;
+
+            // flex_grow in a FlexColumn parent means the parent's flex
+            // distribution controls this node's HEIGHT.  Pre-computing an
+            // intrinsic height here would corrupt the flex calculation
+            // (the wrong value gets locked in as total_fixed, consuming space
+            // that should go to other flex siblings or to this node via
+            // flex_grow).  Skip it — the layout pass will assign the correct
+            // height via remaining-space distribution.
+            //
+            // Exception: flex_grow in a FlexRow parent allocates WIDTH
+            // (main-axis), not height.  The node's height is still the
+            // cross-axis, determined by Stretch from the row's height, so we
+            // DO want to pre-compute its intrinsic height so the FlexRow can
+            // infer its own cross-axis size from it (see below).
+            if (n->layout_props.flex_grow > 0.f) {
+                const RenderNode *par = nodes_.get(n->parent);
+                // If parent is a FlexColumn (or unknown), height comes from flex → skip.
+                if (!par || par->layout_kind == LayoutKind::FlexColumn
+                    || par->layout_kind == LayoutKind::Block
+                    || par->layout_kind == LayoutKind::None)
+                    continue;
+                // Parent is FlexRow → flex_grow allocates width, not height.
+                // Fall through to compute intrinsic height for the row's cross-axis.
+            }
+
+            // Only infer heights for flex containers (Block/None are left alone).
+            if (n->layout_kind != LayoutKind::FlexColumn && n->layout_kind != LayoutKind::FlexRow)
+                continue;
+
+            const bool is_col   = (n->layout_kind == LayoutKind::FlexColumn);
+            const float pad_top = n->visual_props.padding_top;
+            const float pad_bot = n->visual_props.padding_bottom;
+            const float gap     = n->layout_props.gap;
+
+            float sum_h = 0.f;  // FlexColumn accumulator
+            float max_h = 0.f;  // FlexRow   accumulator
+            int cnt     = 0;
+
+            for (NodeHandle c = n->child; c.valid();) {
+                const RenderNode *cn = nodes_.get(c);
+                if (!cn)
+                    break;
+                if (!cn->hidden && cn->h > 0.f) {
+                    if (is_col)
+                        sum_h += cn->h;
+                    else
+                        max_h = std::max(max_h, cn->h);
+                    ++cnt;
+                }
+                c = cn->sibling;
+            }
+
+            const float gaps_px = (cnt > 1) ? static_cast<float>(cnt - 1) * gap : 0.f;
+            const float intrinsic_h =
+                is_col ? (sum_h + gaps_px + pad_top + pad_bot) : (max_h + pad_top + pad_bot);
+
+            if (intrinsic_h > 0.f)
+                n->h = intrinsic_h;
+        }
+    }
+
+    // ── Layout pass (preorder, top-down) ─────────────────────────────────────
     // Because traversal is preorder, resolveLayout on a dirty_layout node
     // writes geometry onto direct children and marks them dirty_layout too —
     // their own layouts then run when they are visited, cascading down the
@@ -1358,16 +1533,24 @@ void RenderTree::render(NodeHandle root, RenderContext &ctx) {
     //
     // Children are pushed right-to-left so the leftmost child is processed first.
 
+    // Each entry carries:
+    //   ax, ay  — accumulated absolute screen position of node h.
+    //             Equals sum of parent-relative x/y from root down to h
+    //             (matches absolutePos(tree, h) without the parent-chain walk).
     struct Entry {
         NodeHandle h;
         bool post;
+        float ax, ay;
     };
     std::vector<Entry> stack;
     stack.reserve(64);
-    stack.push_back({root, false});
+    {
+        const RenderNode *rn = nodes_.get(root);
+        stack.push_back({root, false, rn ? rn->x : 0.f, rn ? rn->y : 0.f});
+    }
 
     while (!stack.empty()) {
-        const auto [h, post] = stack.back();
+        const auto [h, post, ax, ay] = stack.back();
         stack.pop_back();
 
         RenderNode *n = nodes_.get(h);
@@ -1385,6 +1568,12 @@ void RenderTree::render(NodeHandle root, RenderContext &ctx) {
         if (n->hidden)
             continue;
 
+        // Expose absolute position to the draw() callback via ctx.offset_x/y.
+        // Custom draw callbacks (e.g. SelectBox) use this instead of n->x/n->y
+        // (which are parent-relative) so they paint at the correct screen origin.
+        ctx.offset_x = ax;
+        ctx.offset_y = ay;
+
         // Draw this node.
         if (n->draw) {
             n->draw(ctx);
@@ -1394,9 +1583,10 @@ void RenderTree::render(NodeHandle root, RenderContext &ctx) {
         // If this node needs a post-children call, push the sentinel now
         // so it fires after all descendants have been processed.
         if (n->after_draw)
-            stack.push_back({h, true});
+            stack.push_back({h, true, ax, ay});
 
         // Push children right-to-left so the leftmost is on top of the stack.
+        // Each child's absolute position = this node's absolute + child's own x/y.
         std::vector<NodeHandle> kids;
         for (NodeHandle c = n->child; c.valid();) {
             const RenderNode *cn = nodes_.get(c);
@@ -1406,8 +1596,10 @@ void RenderTree::render(NodeHandle root, RenderContext &ctx) {
                 kids.push_back(c);
             c = cn->sibling;
         }
-        for (auto it = kids.rbegin(); it != kids.rend(); ++it)
-            stack.push_back({*it, false});
+        for (auto it = kids.rbegin(); it != kids.rend(); ++it) {
+            const RenderNode *cn = nodes_.get(*it);
+            stack.push_back({*it, false, ax + cn->x, ay + cn->y});
+        }
     }
 }
 

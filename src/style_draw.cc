@@ -1,5 +1,6 @@
 #include "style_draw.h"
 
+#include "core/parse.h"
 #include "text_renderer.h"
 
 #include <charconv>
@@ -75,11 +76,7 @@ static bool parseHexColor(std::string_view s, RGBAf &out) noexcept {
 
 [[nodiscard]]
 static float toFloat(std::string_view s) noexcept {
-    if (s.empty())
-        return 0.f;
-    float v = 0.f;
-    std::from_chars(s.data(), s.data() + s.size(), v);
-    return v;
+    return pce::sdlos::parse_float(s, 0.f);
 }
 
 // Count UTF-8 code points (not bytes) — used for rough text width estimation.
@@ -104,22 +101,8 @@ static std::size_t utf8Len(std::string_view s) noexcept {
 }
 
 // Coordinate transform
-//   Layout stores parent-relative x/y.  Walk the parent chain to accumulate
-//   the absolute screen position for use in draw calls.
-
-[[nodiscard]]
-static std::pair<float, float> absolutePos(const RenderTree &tree, NodeHandle handle) noexcept {
-    float ax = 0.f, ay = 0.f;
-    for (NodeHandle h = handle; h.valid();) {
-        const RenderNode *n = tree.node(h);
-        if (!n)
-            break;
-        ax += n->x;
-        ay += n->y;
-        h   = n->parent;
-    }
-    return {ax, ay};
-}
+//   Layout stores parent-relative x/y.  absolutePos() is provided by
+//   render_tree.h — walks the parent chain to get the absolute screen origin.
 
 // Tree walk
 static void
@@ -142,7 +125,6 @@ walkTree(RenderTree &tree, NodeHandle h, const std::function<void(NodeHandle, Re
 
 }  // anonymous namespace
 
-// bindDrawCallbacks
 /**
  * @brief Binds draw callbacks
  *
@@ -183,18 +165,11 @@ void bindDrawCallbacks(RenderTree &tree, NodeHandle root) {
 
             const auto [ax, ay] = absolutePos(tree, h);
 
-            // opacity
-            // Multiplied into every alpha below.  Re-read each frame so that
-            // an Animated<float> stored in StyleMap via setStyle("opacity", ...)
-            // takes effect immediately.  Clamp to [0, 1].
-            const float op = [&]() noexcept -> float {
-                const auto sv = self->style("opacity");
-                if (sv.empty())
-                    return 1.f;
-                float v = 1.f;
-                std::from_chars(sv.data(), sv.data() + sv.size(), v);
-                return v < 0.f ? 0.f : (v > 1.f ? 1.f : v);
-            }();
+            // opacity — read directly from the native RenderNode field.
+            // Behavior code writes n->opacity = anim.current() in update();
+            // StyleApplier sets it from CSS `opacity: 0.5` at parse time.
+            // No string allocation or from_chars needed here.
+            const float op = self->opacity < 0.f ? 0.f : self->opacity > 1.f ? 1.f : self->opacity;
 
             // background
             // Re-read each frame so setStyle("backgroundColor", ...) is
@@ -203,8 +178,28 @@ void bindDrawCallbacks(RenderTree &tree, NodeHandle root) {
             if (hasBg) {
                 const auto bgSv = self->style("backgroundColor");
                 RGBAf bg{0.f, 0.f, 0.f, 0.f};
-                if (!bgSv.empty() && parseHexColor(bgSv, bg) && bg.a * op > 0.001f)
-                    ctx.drawRect(ax, ay, self->w, self->h, bg.r, bg.g, bg.b, bg.a * op);
+                if (!bgSv.empty() && parseHexColor(bgSv, bg) && bg.a * op > 0.001f) {
+                    const float radius = self->visual_props.border_radius;
+                    if (radius > 0.f) {
+                        // borderRadius set → use the SDF pipeline for rounded background.
+                        // Read border styles too in case we can draw them in one pass.
+                        const auto bwSv = self->style("borderWidth");
+                        const auto bcSv = self->style("borderColor");
+                        RGBAf border{0.f, 0.f, 0.f, 0.f};
+                        float bw = 0.f;
+                        if (!bwSv.empty() && !bcSv.empty()) {
+                            if (parseHexColor(bcSv, border)) {
+                                bw = toFloat(bwSv);
+                            }
+                        }
+                        // Composite opacity into the fill and border colors.
+                        bg.a     *= op;
+                        border.a *= op;
+                        ctx.drawRoundedRect(ax, ay, self->w, self->h, radius, bw, bg, border);
+                    } else {
+                        ctx.drawRect(ax, ay, self->w, self->h, bg.r, bg.g, bg.b, bg.a * op);
+                    }
+                }
             }
 
             // image
@@ -290,8 +285,10 @@ void bindDrawCallbacks(RenderTree &tree, NodeHandle root) {
             }
 
             // border
-            // Re-read each frame (supports animated border width/color later).
-            {
+            // If borderRadius is active, the border was already handled during
+            // the background draw (unified SDF pass). Only run this separate
+            // pass for sharp-cornered rectangles (the legacy CPU-style path).
+            if (self->visual_props.border_radius <= 0.f) {
                 const auto bwSv = self->style("borderWidth");
                 const auto bcSv = self->style("borderColor");
                 if (!bwSv.empty() && !bcSv.empty()) {

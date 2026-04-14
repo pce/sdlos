@@ -252,6 +252,24 @@ class GltfScene {
      */
     void clearMeshes(RenderTree &tree) noexcept;
 
+    // Reload the GLB for a single scene3d node without disturbing other
+    // entries in the scene.  Targeted version of clearMeshes+attach:
+    //   1. Finds and releases all entries whose scene3d_handle == scene3d_node.
+    //   2. Reads the current src= attribute on that node.
+    //   3. Resolves the path via resolveGltfPath and calls loadFile().
+    // Returns the number of new primitives loaded, or -1 on failure.
+    // Call this when swapping models at runtime (e.g. animal carousel).
+    /**
+     * @brief Reload the GLB for one scene3d node, leaving others untouched.
+     *
+     * @param tree          RenderTree that owns the proxy nodes.
+     * @param scene3d_node  Handle of the scene3d node whose src= has changed.
+     * @param base_path     Base directory used by resolveGltfPath() (SDL_GetBasePath()).
+     * @return Number of primitives loaded from the new GLB, or -1 on error.
+     */
+    int
+    reloadNode(RenderTree &tree, NodeHandle scene3d_node, const std::string &base_path) noexcept;
+
     // Mark all proxy RenderNodes dirty so draw callbacks re-read StyleMap.
     // Call after css.applyTo().
     /**
@@ -438,6 +456,27 @@ class GltfScene {
      */
     std::size_t meshCount() const noexcept { return entries_.size(); }
 
+    // Override the scene directional light.
+    //   dir       — direction the light travels (toward the surface, world space).
+    //               Normalised internally. Default: oblique SW sun at ~42° elevation.
+    //   color_rgb — linear RGB tint for the directional beam (default warm white).
+    //   intensity — multiplier applied to diffuse + specular (default 2.2).
+    void setLight(
+        const float dir[3],
+        const float color_rgb[3] = nullptr,
+        float intensity          = -1.f) noexcept {
+        light_.dir[0] = dir[0];
+        light_.dir[1] = dir[1];
+        light_.dir[2] = dir[2];
+        if (color_rgb) {
+            light_.color[0] = color_rgb[0];
+            light_.color[1] = color_rgb[1];
+            light_.color[2] = color_rgb[2];
+        }
+        if (intensity >= 0.f)
+            light_.intensity = intensity;
+    }
+
   private:
     struct MeshEntry {
         GpuMesh gpu;
@@ -556,9 +595,13 @@ class GltfScene {
     RenderTree *tree_ref_ = nullptr;
 
     struct Light {
-        float dir[3]    = {-0.4f, -0.9f, -0.2f};
-        float color[3]  = {1.0f, 0.97f, 0.9f};
-        float intensity = 2.f;
+        // Direction the light travels toward the surface (world space, need not be
+        // unit length — the shader normalises).  Default: oblique SW sun at ~42°
+        // elevation gives good shadow relief on vertical building facades vs. the
+        // previous near-overhead 63° angle which left façades almost black.
+        float dir[3]    = {-0.52f, -0.67f, -0.54f};
+        float color[3]  = {1.0f, 0.97f, 0.88f};  // slightly warmer afternoon tint
+        float intensity = 2.2f;                  // slightly higher to compensate
     } light_;
 };
 

@@ -130,6 +130,11 @@ int    g_reveal_stage = 0;
 float  g_reveal_timer = 0.f;   // fires immediately on first frame
 Uint64 g_last_tick_ns = 0;
 
+// Live viewport dimensions — updated every frame from the Scene3DHook.
+// Seeded from the compile-time defaults so the first tick() call is sane.
+float  g_vw = static_cast<float>(SDLOS_WIN_W);
+float  g_vh = static_cast<float>(SDLOS_WIN_H);
+
 } // namespace
 
 
@@ -238,6 +243,12 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         renderer.setScene3DHook(
             [](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap,
                float vw, float vh) noexcept {
+                // Keep viewport globals fresh; re-build projection on resize.
+                if (vw != g_vw || vh != g_vh) {
+                    g_vw = vw;
+                    g_vh = vh;
+                    g_scene.camera().perspective(45.f, g_vw / g_vh);
+                }
                 g_scene.render(cmd, swap, vw, vh);
             });
         renderer.setGpuPreShutdownHook([]() noexcept { g_scene.shutdown(); });
@@ -314,10 +325,10 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                         s.info);
     }
 
-    // 6. Perspective camera — initial orbital position
-    g_scene.camera().perspective(
-        45.f,
-        static_cast<float>(SDLOS_WIN_W) / static_cast<float>(SDLOS_WIN_H));
+    // 6. Perspective camera — initial orbital position.
+    // g_vw/g_vh hold the default window size; the Scene3DHook above will
+    // correct the aspect ratio on the very first rendered frame.
+    g_scene.camera().perspective(45.f, g_vw / g_vh);
     updateOrbitCamera();
 
     // Cache stable handles used by closures below.
@@ -337,11 +348,9 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                 0.050f);
             g_last_tick_ns = now_ns;
 
-            const float vw = static_cast<float>(SDLOS_WIN_W);
-            const float vh = static_cast<float>(SDLOS_WIN_H);
-
             // 3D AABB projection (used by tickHover / hitTest).
-            g_scene.tick(*g_tree, vw, vh);
+            // g_vw/g_vh are kept current by the Scene3DHook each frame.
+            g_scene.tick(*g_tree, g_vw, g_vh);
 
             // Debug: print bounds (per-frame projection check)
             if (g_reveal_stage > 0) {

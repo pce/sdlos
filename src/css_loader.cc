@@ -41,10 +41,10 @@ static std::string kebabToCamel(std::string_view prop) {
     // CSS custom properties (--foo-bar) are stored verbatim in the StyleMap so
     // that GltfScene can read them with the same key it writes in setStyle():
     //   CSS:  --rotation-x: -90   →  StyleMap key "--rotation-x"
-    //   C++:  n->style("--rotation-x")  → "−90"
+    //   C++:  n->style("--rotation-x")  → "-90"
     // Only standard layout properties (background-color, flex-grow …) get the
     // camelCase conversion expected by the 2-D layout engine.
-    if (prop.size() >= 2 && prop[0] == '-' && prop[1] == '--')
+    if (prop.size() >= 2 && prop[0] == '-' && prop[1] == '-')
         return std::string(prop);
 
     std::string result;
@@ -96,20 +96,6 @@ static bool isSimpleSelector(std::string_view sel) noexcept {
     }
 
     return true;
-}
-
-[[nodiscard]]
-static std::pair<float, float> absolutePos(const RenderTree &tree, NodeHandle h) noexcept {
-    float ax = 0.f, ay = 0.f;
-    for (NodeHandle p = h; p.valid();) {
-        const RenderNode *n = tree.node(p);
-        if (!n)
-            break;
-        ax += n->x;
-        ay += n->y;
-        p   = n->parent;
-    }
-    return {ax, ay};
 }
 
 static void walkTree(

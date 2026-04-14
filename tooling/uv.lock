@@ -1131,11 +1131,8 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "jinja2" },
-    { name = "libclang" },
-    { name = "lizard" },
     { name = "pyyaml" },
     { name = "questionary" },
-    { name = "radon" },
     { name = "rich" },
     { name = "watchfiles" },
 ]
@@ -1158,12 +1155,16 @@ mesh = [
 ]
 sca = [
     { name = "libclang" },
+    { name = "lizard" },
+    { name = "radon" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1171,9 +1172,8 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "fast-simplification", marker = "extra == 'mesh'", specifier = ">=0.1.13" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "libclang", specifier = ">=18.1.1" },
-    { name = "libclang", marker = "extra == 'sca'", specifier = ">=18.1" },
-    { name = "lizard", specifier = ">=1.21.3" },
+    { name = "libclang", marker = "extra == 'sca'", specifier = ">=18.1.1" },
+    { name = "lizard", marker = "extra == 'sca'", specifier = ">=1.21.3" },
     { name = "mapbox-earcut", marker = "extra == 'mesh'", specifier = ">=2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9" },
     { name = "numpy", marker = "extra == 'mesh'", specifier = ">=2.4.4" },
@@ -1182,7 +1182,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "questionary", specifier = ">=2.0" },
-    { name = "radon", specifier = ">=6.0.1" },
+    { name = "radon", marker = "extra == 'sca'", specifier = ">=6.0.1" },
     { name = "requests", marker = "extra == 'mesh'", specifier = ">=2.33.1" },
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
@@ -1190,12 +1190,14 @@ requires-dist = [
     { name = "trimesh", marker = "extra == 'mesh'", specifier = ">=4.11.5" },
     { name = "watchfiles", specifier = ">=0.21" },
 ]
-provides-extras = ["sca", "dev", "mesh"]
+provides-extras = ["sca", "mesh", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "mypy", specifier = ">=1.9" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "ruff", specifier = ">=0.4" },
 ]
 
 [[package]]

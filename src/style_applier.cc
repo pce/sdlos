@@ -1,8 +1,8 @@
 #include "style_applier.h"
 
 #include "jade/jade_parser.h"
+#include "parse.h"
 
-#include <charconv>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -12,14 +12,14 @@ namespace pce::sdlos {
 
 namespace {
 
-// std::from_chars is locale-independent and allocation-free.
+// parse_float (from parse.h) is locale-independent and allocation-free.
 [[nodiscard]]
 static std::optional<float> toFloat(std::string_view s) noexcept {
     if (s.empty())
         return std::nullopt;
     float v{};
-    const auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
-    return (ec == std::errc{}) ? std::optional<float>{v} : std::nullopt;
+    const auto [ptr, ok] = pce::sdlos::parse_float(s.data(), s.data() + s.size(), v);
+    return ok ? std::optional<float>{v} : std::nullopt;
 }
 
 [[nodiscard]]
@@ -232,18 +232,21 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
         const auto pv = n.style("padding");
         if (!pv.empty()) {
             float vals[4]{-1.f, -1.f, -1.f, -1.f};
-            int   count = 0;
-            const char* p   = pv.data();
-            const char* end = p + pv.size();
+            int count       = 0;
+            const char *p   = pv.data();
+            const char *end = p + pv.size();
             while (p < end && count < 4) {
                 // skip whitespace
-                while (p < end && *p == ' ') ++p;
-                if (p >= end) break;
+                while (p < end && *p == ' ')
+                    ++p;
+                if (p >= end)
+                    break;
                 float v{};
-                const auto [next, ec] = std::from_chars(p, end, v);
-                if (ec != std::errc{}) break;
+                const auto [next, ok] = pce::sdlos::parse_float(p, end, v);
+                if (!ok)
+                    break;
                 vals[count++] = v * px_scale;
-                p = next;
+                p             = next;
             }
             if (count == 1) {
                 n.visual_props.padding_top    = vals[0];
@@ -269,6 +272,20 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
         }
     }
 
+    // opacity — multiplier for all draw calls on this node.
+    // Supports: `opacity: 0.5`  (float in [0, 1]) or `opacity: 50%`
+    {
+        const auto op = n.style("opacity");
+        if (!op.empty()) {
+            if (op.back() == '%') {
+                if (const auto f = toFloat(op.substr(0, op.size() - 1)))
+                    n.opacity = (*f) / 100.f;
+            } else if (const auto f = toFloat(op)) {
+                n.opacity = *f < 0.f ? 0.f : (*f > 1.f ? 1.f : *f);
+            }
+        }
+    }
+
     // ── objectFit — how an img fills its bounding box ────────────────────────
     {
         const auto of = n.style("objectFit");
@@ -288,6 +305,49 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
         n.visual_props.padding_top = (*f) * px_scale;
     if (const auto f = toFloat(n.style("paddingBottom")))
         n.visual_props.padding_bottom = (*f) * px_scale;
+
+    // Intrinsic text height
+    //
+    // The flex layout engine keeps a child's existing h when no explicit sizing
+    // is set (basis = -1 → "auto: keep existing w/h").  For freshly-allocated
+    // nodes that carries the default h = 0, so a text-only div with no
+    // height/height_pct/flex_basis/flex_grow never gets space and its draw
+    // callback bails out on the `self->h <= 0` guard — content invisible.
+    //
+    // Fix: seed layout_props.height (and n.h) from fontSize so the parent
+    // FlexColumn treats the node as having at least one line's worth of height.
+    // Only applied when ALL of the following are true:
+    //   - the node has a non-empty `text` style
+    //   - no explicit height / height_pct / flex_basis was given
+    //   - the node has no flex_grow (which would size it via remaining space)
+    //
+    // This mirrors the CSS "line-height ≈ font-size" intrinsic-size rule and
+    // ensures dynamically-loaded page content (which receives no CSS pass) is
+    // visible on the first rendered frame.
+    {
+        const auto txt_sv = n.style("text");
+        if (!txt_sv.empty() && n.layout_props.height < 0.f  // no explicit logical height
+            && n.layout_props.height_pct < 0.f              // no percent height
+            && n.layout_props.flex_basis < 0.f              // no flex-basis
+            && n.layout_props.flex_grow <= 0.f              // no flex-grow allocation
+        ) {
+            float fs         = 16.f;                        // default font size
+            const auto fs_sv = n.style("fontSize");
+            if (!fs_sv.empty()) {
+                if (const auto f = toFloat(fs_sv))
+                    fs = *f;
+            }
+            // layout_props.height is the unscaled (jade-attribute) basis used by
+            // flexLayout Pass 1: child->h = lp.height.  This matches every other
+            // jade height= attribute — raw value in lp.height, physical value in
+            // n.h.  After layout runs, self->h = lp.height = fs (unscaled), which
+            // is what the draw callback reads.  n.h is set to fs * px_scale so
+            // the pre-layout physical value is also reasonable, but flexLayout
+            // overwrites it before draw anyway.
+            n.layout_props.height = fs;             // unscaled — layout basis
+            n.h                   = fs * px_scale;  // physical — overwritten by layout
+        }
+    }
 }
 
 /**

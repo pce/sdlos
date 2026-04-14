@@ -1,5 +1,6 @@
 #include "gltf_scene.h"
 
+#include "../core/parse.h"
 #include "../css_loader.h"
 #include "math3d.h"
 
@@ -9,10 +10,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
-#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <expected>
 #include <fastgltf/core.hpp>
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
@@ -169,9 +170,9 @@ void GltfScene::parseHexColor(std::string_view hex, float (&out)[4]) noexcept {
 float GltfScene::parseFloat(std::string_view s, float fallback) noexcept {
     if (s.empty())
         return fallback;
-    float value          = fallback;
-    const auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
-    return (ec == std::errc{}) ? value : fallback;
+    float value = fallback;
+    pce::sdlos::parse_float(s.data(), s.data() + s.size(), value);
+    return value;
 }
 
 /*static*/
@@ -220,6 +221,76 @@ bool GltfScene::init(
 
     std::cerr << "[GltfScene] init OK\n";
     return true;
+}
+
+// ── Path resolution for scene3d src= attributes ───────────────────────────
+//
+// Returns the resolved absolute path on success, or an error string on failure.
+//
+// Priority order:
+//   1. VFS URI (scheme://path) — strip the scheme, resolve the remainder
+//      against base_path.  Full VFS routing (reading via pce::vfs::Vfs) is
+//      TBD; for now we map the known schemes to the binary data directory so
+//      that src="asset://data/models/city/city.gltf" already works correctly
+//      alongside bare relative paths.
+//      Supported schemes: asset://, file://
+//   2. Absolute path — used as-is (existence not checked; caller decides).
+//   3. Relative path — probed in two locations:
+//        a. base_path / src            (normal build layout after DATA_DIR copy)
+//        b. base_path / "data" / src   (dev fallback: src written without the
+//                                       "data/" prefix, useful when running the
+//                                       binary from the source tree)
+//      The first existing location wins.
+//
+// On failure the error string contains a human-readable diagnostic that the
+// caller may forward to std::cerr or a log sink — no I/O happens here.
+//
+// TODO: accept pce::vfs::Vfs* so assets can be read through the mount system,
+//       enabling memory-backed, streamed, and remote asset sources.
+[[nodiscard]]
+static std::expected<std::filesystem::path, std::string>
+resolveGltfPath(std::string_view src, const std::filesystem::path &base_path) noexcept {
+    namespace fs = std::filesystem;
+
+    // 1. Strip VFS URI scheme when present.
+    //    "asset://data/models/mainz/mainz.gltf" → "data/models/mainz/mainz.gltf"
+    //    "file://data/models/mainz/mainz.gltf"  → "data/models/mainz/mainz.gltf"
+    std::string unknown_scheme_warn;
+    if (const auto sep = src.find("://"); sep != std::string_view::npos) {
+        const std::string_view scheme = src.substr(0, sep);
+        src                           = src.substr(sep + 3);  // skip "://"
+        if (scheme != "asset" && scheme != "file") {
+            unknown_scheme_warn = std::string{"[GltfScene] unknown VFS scheme '"}.append(scheme)
+                                + "' — treating path part as relative";
+        }
+    }
+
+    // 2. Absolute path — caller is responsible; return as-is.
+    if (const fs::path p(src); p.is_absolute())
+        return p;
+
+    // 3a. Primary probe: base_path / src
+    //     Matches the normal build layout where cmake DATA_DIR has copied
+    //     all app data next to the binary:
+    //       <binary>/data/models/mainz/mainz.gltf
+    if (const fs::path candidate = (base_path / src).lexically_normal(); fs::exists(candidate))
+        return candidate;
+
+    // 3b. Dev-mode fallback: base_path / "data" / src
+    //     Handles the case where src= was written without the "data/" prefix
+    //     (e.g. src="models/mainz/mainz.gltf") but the binary lives in a
+    //     build directory where data/ is a sibling.
+    if (const fs::path candidate = (base_path / "data" / src).lexically_normal();
+        fs::exists(candidate))
+        return candidate;
+
+    // Neither probe found the file.
+    std::string msg = std::string{"[GltfScene] glTF not found"};
+    if (!unknown_scheme_warn.empty())
+        msg += "\n  note: " + unknown_scheme_warn;
+    msg += "\n  src=\"" + std::string{src} + "\"";
+    msg += "\n  base=\"" + base_path.string() + "\"";
+    return std::unexpected(std::move(msg));
 }
 
 /**
@@ -283,15 +354,14 @@ int GltfScene::attach(RenderTree &tree, NodeHandle tree_root, const std::string 
             continue;
         }
 
-        const std::filesystem::path gltf_path =
-            std::filesystem::path(base_path) / std::string(src_sv);
+        const auto resolved = resolveGltfPath(src_sv, std::filesystem::path(base_path));
 
-        if (!std::filesystem::exists(gltf_path)) {
-            std::cerr << "[GltfScene] glTF file not found: " << gltf_path << "\n";
+        if (!resolved) {
+            std::cerr << resolved.error() << "\n";
             continue;
         }
 
-        loadFile(gltf_path, tree, sh);
+        loadFile(*resolved, tree, sh);
     }
 
     const int loaded = static_cast<int>(entries_.size() - before);
@@ -559,6 +629,12 @@ void GltfScene::render(
         for (const auto &e : entries_) {
             if (!e.gpu.valid())
                 continue;
+            // Skip entries whose parent scene3d container is display:none.
+            if (e.scene3d_handle.valid()) {
+                const RenderNode *sn = tree_ref_->node(e.scene3d_handle);
+                if (sn && sn->style("display") == "none")
+                    continue;
+            }
             drawEntry(pass, cmd, e, *tree_ref_, vw, vh);
         }
     }
@@ -1120,27 +1196,30 @@ bool GltfScene::loadFile(
                     const bool large_offset = std::abs(cx) > 500.f || std::abs(cy) > 500.f;
                     // Condition B: Z span ≪ X and Y spans → city mesh in Z-up / UTM
                     const bool flat_zup = (spx > 100.f) && (spy > 100.f) && (spz > 0.f)
-                                          && (spz < spx * 0.05f) && (spz < spy * 0.05f);
+                                       && (spz < spx * 0.05f) && (spz < spy * 0.05f);
 
                     if (large_offset && flat_zup) {
                         for (GpuVertex &v : verts) {
                             const float ox = v.px, oy = v.py, oz = v.pz;
                             const float ony = v.ny, onz = v.nz;
-                            v.px = ox  - cx;
-                            v.py = oz  - cz;  // Z (height) → Y (GLTF up)
-                            v.pz = cy  - oy;  // Y (north)  → −Z (GLTF depth, RH)
+                            v.px = ox - cx;
+                            v.py = oz - cz;  // Z (height) → Y (GLTF up)
+                            v.pz = cy - oy;  // Y (north)  → −Z (GLTF depth, RH)
                             // Normals: same rotation (proper rotation, no scaling)
                             v.ny = onz;
                             v.nz = -ony;
                         }
                         // Recompute AABB in the new Y-up coordinate space
-                        const float ny_min = aabb_min[2] - cz;
-                        const float ny_max = aabb_max[2] - cz;
-                        const float nz_min = cy - aabb_max[1];
-                        const float nz_max = cy - aabb_min[1];
-                        aabb_min[0] -= cx;  aabb_max[0] -= cx;
-                        aabb_min[1] = ny_min; aabb_max[1] = ny_max;
-                        aabb_min[2] = nz_min; aabb_max[2] = nz_max;
+                        const float ny_min  = aabb_min[2] - cz;
+                        const float ny_max  = aabb_max[2] - cz;
+                        const float nz_min  = cy - aabb_max[1];
+                        const float nz_max  = cy - aabb_min[1];
+                        aabb_min[0]        -= cx;
+                        aabb_max[0]        -= cx;
+                        aabb_min[1]         = ny_min;
+                        aabb_max[1]         = ny_max;
+                        aabb_min[2]         = nz_min;
+                        aabb_max[2]         = nz_max;
                         std::cerr << "[GltfScene] loadFile: UTM Z-up→Y-up applied"
                                   << "  X:[" << aabb_min[0] << "," << aabb_max[0] << "]"
                                   << "  Y:[" << aabb_min[1] << "," << aabb_max[1] << "]"
@@ -1371,6 +1450,62 @@ void GltfScene::clearMeshes(RenderTree &tree) noexcept {
     }
     entries_.clear();
     std::cerr << "[GltfScene] clearMeshes: all entries released\n";
+}
+
+int GltfScene::reloadNode(
+    RenderTree &tree,
+    NodeHandle scene3d_node,
+    const std::string &base_path) noexcept {
+    // 1. Release and erase every entry that belongs to this scene3d node.
+    //    Iterating with index instead of iterator avoids invalidation trouble.
+    for (std::size_t i = entries_.size(); i-- > 0;) {
+        auto &e = entries_[i];
+        if (e.scene3d_handle != scene3d_node)
+            continue;
+
+        if (e.proxy_handle != k_null_handle) {
+            tree.detach(e.proxy_handle);
+            tree.free(e.proxy_handle);
+        }
+        if (device_) {
+            if (e.gpu.vertex_buf) {
+                SDL_ReleaseGPUBuffer(device_, e.gpu.vertex_buf);
+                e.gpu.vertex_buf = nullptr;
+            }
+            if (e.gpu.index_buf) {
+                SDL_ReleaseGPUBuffer(device_, e.gpu.index_buf);
+                e.gpu.index_buf = nullptr;
+            }
+        }
+        entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+
+    // 2. Resolve the new src= path from the scene3d node's current style.
+    const RenderNode *sn = tree.node(scene3d_node);
+    if (!sn)
+        return -1;
+
+    const auto src_sv = sn->style("src");
+    if (src_sv.empty()) {
+        std::cerr << "[GltfScene] reloadNode: scene3d node has no src= attribute\n";
+        return -1;
+    }
+
+    const auto resolved = resolveGltfPath(src_sv, std::filesystem::path(base_path));
+
+    if (!resolved) {
+        std::cerr << resolved.error() << "\n";
+        return -1;
+    }
+
+    // 3. Load the new GLB into the same parent scene3d node.
+    const std::size_t before = entries_.size();
+    loadFile(*resolved, tree, scene3d_node);
+    const int loaded = static_cast<int>(entries_.size() - before);
+
+    std::cerr << "[GltfScene] reloadNode: " << loaded << " primitive(s) loaded from "
+              << resolved->string() << "\n";
+    return loaded;
 }
 
 /**

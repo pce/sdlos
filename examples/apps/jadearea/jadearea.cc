@@ -151,20 +151,22 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     sdlos_log("[jadearea] nodes ok — editor-wrap + preview-wrap found");
 
-    // 2. Compute TextArea pixel dimensions
-    // SDLOS_WIN_W / SDLOS_WIN_H are compile-time defines set by CMake.
-    // They are visible here because this file is #include-d into jade_host.cc.
+    // 2. Compute TextArea pixel dimensions from the actual window size at init.
+    // SDL_GetWindowSize() returns the live logical-pixel dimensions, so the
+    // editor fills the real window even when it differs from the CMake defaults.
     //
     // Layout breakdown (tallies with jadearea.jade):
     //   toolbar      : 44 px
     //   pane header  : 28 px
-    //   content area : WIN_H − 44 − 28 = WIN_H − 72  px
-    //   half width   : WIN_W / 2 − 1 (1 px divider)
+    //   content area : win_h − 44 − 28 = win_h − 72  px
+    //   half width   : win_w / 2 − 1   (1 px centre divider)
 
-    constexpr float kPaneW =
-        static_cast<float>(SDLOS_WIN_W) * 0.5f - 1.f;
-    constexpr float kPaneH =
-        static_cast<float>(SDLOS_WIN_H) - 44.f - 28.f;
+    int win_w = SDLOS_WIN_W, win_h = SDLOS_WIN_H;   // compile-time fallback
+    if (SDL_Window *sdl_win = renderer.GetWindow())
+        SDL_GetWindowSize(sdl_win, &win_w, &win_h);
+
+    const float kPaneW = static_cast<float>(win_w) * 0.5f - 1.f;
+    const float kPaneH = static_cast<float>(win_h) - 44.f - 28.f;
 
     // 3. Build the TextArea config
     TextAreaConfig edcfg;

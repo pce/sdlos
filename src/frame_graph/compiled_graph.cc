@@ -1,6 +1,7 @@
 #include "compiled_graph.h"
 
-#include <charconv>
+#include "../core/parse.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -253,7 +254,7 @@ void CompiledGraph::apply_style(
 
     // All other keys are Bucket-C float uniforms.
     float f = 0.f;
-    std::from_chars(val.data(), val.data() + val.size(), f);
+    pce::sdlos::parse_float(val.data(), val.data() + val.size(), f);
     patch(pass_id, key, f);
 }
 

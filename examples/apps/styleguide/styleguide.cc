@@ -174,9 +174,9 @@ std::unique_ptr<AnimalAnimState>  g_animal_state;
 // Idle:      no transition running; overlay is fully transparent.
 enum class FadeState { Idle, FadingOut, FadingIn };
 
-FadeState g_fade_state       = FadeState::Idle;
-float     g_fade_t           = 0.f;    ///< elapsed time inside current fade phase
-int       g_fade_target_page = -1;     ///< page queued during FadingOut
+FadeState                    g_fade_state       = FadeState::Idle;
+pce::sdlos::Animated<float>  g_fade_alpha;         ///< drives overlay opacity [0→1 out, 1→0 in]
+int                          g_fade_target_page = -1;
 
 // Orbit camera state (used on the scene3d page)
 // Angles and distance are now stored in GltfCamera::orbit_* fields.
@@ -184,12 +184,20 @@ bool   g_dragging  = false;
 float  g_drag_mx   =  0.f;
 float  g_drag_my   =  0.f;
 
+// Live window dimensions — updated each frame by the Scene3DHook lambda,
+// which receives the actual swap-texture size from the renderer.
+// SDLOS_WIN_W / SDLOS_WIN_H are used only as the initial default values.
+float  g_vw = static_cast<float>(SDLOS_WIN_W);
+float  g_vh = static_cast<float>(SDLOS_WIN_H);
+
 pce::sdlos::css::StyleSheet g_scene_css;
 
-/// updateCrystalRotation  —  apply current animated rotation values to the crystal node
+/// updateCrystalRotation  —  apply current Animated<float> rotation values to the
+/// crystal proxy node's StyleMap so buildModelMatrix() picks them up next frame.
 ///
-// Reads g_crystal_state->rotation_z and rotation_y, writes them to the node
-// style attributes where the draw callback can read them.
+/// Keys MUST match what buildModelMatrix() reads:
+///   "--rotation-z" / "--rotation-y"  (CSS custom-property names, double-dash prefix)
+/// NOT "rotate-z" / "rotate-y" — those are not consumed by the GLTF pipeline.
 static void updateCrystalRotation()
 {
     using namespace pce::sdlos;
@@ -198,19 +206,19 @@ static void updateCrystalRotation()
     RenderNode* n = g_tree->node(g_crystal_h);
     if (!n) return;
 
-    // Get current animated rotation values.
+    // Evaluate animated values at the current clock tick.
     const float rot_z = g_crystal_state->rotation_z.current();
     const float rot_y = g_crystal_state->rotation_y.current();
 
-    // Encode rotations as style attributes (comma-separated or separate).
-    // The draw callback can read these with n->style("rotate-z") etc.
+    // Write into the CSS custom-property keys that buildModelMatrix() reads.
+    // "%.4g" gives compact output (no trailing zeros) without losing precision.
     char buf_z[32];
     char buf_y[32];
-    std::snprintf(buf_z, sizeof(buf_z), "%.1f", rot_z);
-    std::snprintf(buf_y, sizeof(buf_y), "%.1f", rot_y);
+    std::snprintf(buf_z, sizeof(buf_z), "%.4g", rot_z);
+    std::snprintf(buf_y, sizeof(buf_y), "%.4g", rot_y);
 
-    n->setStyle("rotate-z", buf_z);
-    n->setStyle("rotate-y", buf_y);
+    n->setStyle("--rotation-z", buf_z);   // consumed by GltfScene::buildModelMatrix()
+    n->setStyle("--rotation-y", buf_y);   // consumed by GltfScene::buildModelMatrix()
     n->dirty_render = true;
 }
 
@@ -236,16 +244,14 @@ static bool loadSceneCss(const std::filesystem::path& path,
 
 /// setOverlayAlpha  —  drive the full-screen fade overlay
 ///
-// `a` is [0, 1].  0 = fully transparent (normal view).  1 = fully opaque black.
-//
-// The overlay is a LayoutKind::None div that was injected into the root by
-// jade_app_init.  It sits on top of all page content and behind nothing.
-// Its x/y/w/h are refreshed here every call so window resizes are handled
-// automatically.
-//
-// Opacity is encoded as the alpha byte of a "#000000XX" hex colour so the
-// existing draw callback (which re-reads backgroundColor each frame) picks
-// it up with no engine changes.
+/// `a` is [0, 1].  0 = fully transparent (normal view).  1 = fully opaque black.
+///
+/// Writes directly to `RenderNode::opacity` (no string allocation, no hex
+/// encoding).  The draw callback in style_draw.cc reads `self->opacity` as a
+/// plain float multiplier for every rect/text/image draw call.
+///
+/// The overlay's backgroundColor is fixed at "#000000" (set at node creation);
+/// only opacity changes per frame, so no StyleMap churn.
 static void setOverlayAlpha(float a)
 {
     using namespace pce::sdlos;
@@ -261,11 +267,7 @@ static void setOverlayAlpha(float a)
         n->h = root->h;
     }
 
-    const float clamped = a < 0.f ? 0.f : (a > 1.f ? 1.f : a);
-    const unsigned ab   = static_cast<unsigned>(clamped * 255.f + 0.5f);
-    char buf[12];
-    std::snprintf(buf, sizeof(buf), "#000000%02x", ab);
-    n->setStyle("backgroundColor", buf);
+    n->opacity      = a < 0.f ? 0.f : (a > 1.f ? 1.f : a);
     n->dirty_render = true;
 }
 
@@ -288,13 +290,17 @@ static void navigatePage(int target)
     // If a fade-in is running, skip to its end first (instant cut is better
     // than a half-revealed page vanishing into another fade-out).
     if (g_fade_state == FadeState::FadingIn) {
+        g_fade_alpha.set(0.f);
         setOverlayAlpha(0.f);
         g_fade_state = FadeState::Idle;
     }
 
     g_fade_target_page = target;
     g_fade_state       = FadeState::FadingOut;
-    g_fade_t           = 0.f;
+    // Animated<float> handles the clock — no manual g_fade_t needed.
+    g_fade_alpha.transition(1.f,
+                            k_fade_out_dur * 1000.f,
+                            pce::sdlos::easing::easeIn);
 }
 
 static void clearChildren(pce::sdlos::RenderTree& tree,
@@ -318,7 +324,8 @@ static void showNav()
 
     g_nav_timer = k_nav_hide_time;
 
-    // Reset page-container height so sg-main's flexLayout redistributes cleanly.
+    // Reset page-container height to 0 so the flex layout of sg-main
+    // redistributes the freed space cleanly on the next layout pass.
     if (g_page_container.valid())
         if (RenderNode* pc = g_tree->node(g_page_container))
             pc->h = 0.f;
@@ -329,6 +336,11 @@ static void showNav()
         n->dirty_render        = true;
         g_tree->markLayoutDirty(g_nav_bar);
     }
+    // Cascade a full layout pass from the jade root so sg-main's flex
+    // correctly redistributes height to page-container (flex-grow:1)
+    // and nav-bar (fixed k_nav_h) in a single preorder traversal.
+    if (g_root.valid())
+        g_tree->markLayoutDirty(g_root);
 }
 
 static void hideNav()
@@ -336,7 +348,8 @@ static void hideNav()
     using namespace pce::sdlos;
     if (!g_tree || !g_nav_bar.valid()) return;
 
-    // Reset page-container height so it can take the full window on next layout.
+    // Reset page-container height so the flex layout can give it the
+    // full window height once nav-bar collapses to 0.
     if (g_page_container.valid())
         if (RenderNode* pc = g_tree->node(g_page_container))
             pc->h = 0.f;
@@ -347,6 +360,9 @@ static void hideNav()
         n->dirty_render        = true;
         g_tree->markLayoutDirty(g_nav_bar);
     }
+    // Same root-level cascade as showNav so page-container expands to fill.
+    if (g_root.valid())
+        g_tree->markLayoutDirty(g_root);
 }
 
 
@@ -379,6 +395,29 @@ static void updateDots()
         g_tree->markLayoutDirty(dots_h);
 }
 
+static void initNavIcons()
+{
+    // Set PREV / NEXT buttons to Font Awesome 6 Solid chevrons.
+    // Done once at init; the buttons have no C++ state so we don't need a
+    // separate update function — just write the text into the node directly.
+    //   U+F053  fa-chevron-left   UTF-8: EF 81 93
+    //   U+F054  fa-chevron-right  UTF-8: EF 81 94
+    using namespace pce::sdlos;
+    if (!g_tree) return;
+
+    const NodeHandle h_prev = g_tree->findById(g_root, "nav-prev");
+    const NodeHandle h_next = g_tree->findById(g_root, "nav-next");
+
+    if (RenderNode* n = g_tree->node(h_prev)) {
+        n->setStyle("text", "\xef\x81\x93");
+        n->dirty_render = true;
+    }
+    if (RenderNode* n = g_tree->node(h_next)) {
+        n->setStyle("text", "\xef\x81\x94");
+        n->dirty_render = true;
+    }
+}
+
 static void updatePlayBtn()
 {
     using namespace pce::sdlos;
@@ -388,8 +427,8 @@ static void updatePlayBtn()
     if (!h.valid()) return;
 
     if (RenderNode* n = g_tree->node(h)) {
-        // UTF-8 for ▶ (U+25B6) and ⏸ (U+23F8)
-        n->setStyle("text", g_playing ? "\xe2\x8f\xb8" : "\xe2\x96\xb6");
+        // FA6 Solid: U+F04B fa-play (EF 81 8B), U+F04C fa-pause (EF 81 8C)
+        n->setStyle("text", g_playing ? "\xef\x81\x8c" : "\xef\x81\x8b");
         n->dirty_render = true;
     }
 }
@@ -405,6 +444,12 @@ static void update3DVisibility()
             const bool show = (g_page == k_3d_page_idx);
             n->setStyle("display", show ? "block" : "none");
             g_tree->markDirty(sg3d);
+            // Restore crystal camera when entering the 3D Scene page.
+            // orbit(azimuth_deg, elevation_deg, distance): tuned for the crystal shard.
+            if (show) {
+                g_scene.camera().setOrbitTarget(0.f, 1.f, 0.f);
+                g_scene.camera().orbit(20.f, 18.f, 5.f);
+            }
         }
     }
 
@@ -414,6 +459,13 @@ static void update3DVisibility()
             const bool show = (g_page == k_animal_page_idx);
             n->setStyle("display", show ? "block" : "none");
             g_tree->markDirty(animal_scene);
+            // Reset camera for the animal carousel when entering the Animal Farm page.
+            // Lower orbit target + slightly elevated, front-facing view at a comfortable
+            // distance.  Animals are scaled 3× (--scale: 3.0) so distance 6 frames them well.
+            if (show) {
+                g_scene.camera().setOrbitTarget(0.f, 0.5f, 0.f);
+                g_scene.camera().orbit(0.f, 12.f, 6.f);
+            }
         }
     }
 }
@@ -430,10 +482,29 @@ static void updateAnimalScene()
     if (!n) return;
 
     const int idx = g_animal_state->current_animal_idx;
-    n->setStyle("src", k_animal_models[idx]);
-    g_tree->markDirty(scene_h);
 
-    // Update UI text (hidden by default)
+    // 1. Update src= on the scene3d node, then hot-swap the GLB.
+    //    reloadNode() removes only the entries that belong to this scene3d
+    //    node, releases their GPU buffers, resolves the new src= path and
+    //    calls loadFile() — leaving the crystal and all other entries intact.
+    n->setStyle("src", k_animal_models[idx]);
+    const int prims = g_scene.reloadNode(*g_tree, scene_h, g_base_path);
+    sdlos_log("[styleguide] animal changed to: " + std::string(k_animal_names[idx])
+              + "  (" + std::to_string(prims) + " prim(s))");
+
+    // 2. Refresh the proxy handle — reloadNode() creates a new proxy child
+    //    with the same mesh-id ("parrot-mesh") so findById still works.
+    g_animal_state->parrot_h = g_tree->findById(g_root, "parrot-mesh");
+    if (g_animal_state->parrot_h.valid()) {
+        if (RenderNode* pn = g_tree->node(g_animal_state->parrot_h)) {
+            pn->setStyle("--scale",       "3.0");
+            pn->setStyle("--translate-y", "0");
+            pn->setStyle("--rotation-x",  "0");
+            pn->dirty_render = true;
+        }
+    }
+
+    // 3. Update name text in the reveal panel.
     const NodeHandle name_h = g_tree->findById(g_root, "animal-name-text");
     if (name_h.valid()) {
         if (RenderNode* nn = g_tree->node(name_h)) {
@@ -442,11 +513,13 @@ static void updateAnimalScene()
         }
     }
 
-    // Reset reveal state
+    // 4. Reset reveal state and animation accumulators.
     g_animal_state->name_revealed = false;
     g_animal_state->reveal_y.set(0.f);
+    g_animal_state->hop_y.set(0.f);
+    g_animal_state->roll_x.set(0.f);
 
-    sdlos_log("[styleguide] animal changed to: " + std::string(k_animal_names[idx]));
+    g_tree->markDirty(scene_h);
 }
 
 static void loadPage(int page)
@@ -488,9 +561,26 @@ static void loadPage(int page)
         g_tree->appendChild(g_page_container, err);
     }
 
-    // 3. Cascade a full re-layout + re-render from the root.
+    // 3. Cascade a full re-layout + re-render from the jade root.
+    // markLayoutDirty(g_page_container) propagates up; markLayoutDirty(g_root)
+    // ensures the downward cascade also starts from the top of the jade tree.
+    // NOTE: g_tree->root() returns k_null_handle (setRoot is never called by
+    // jade_host), so we use g_root (the jade app root) for forceAllDirty.
     g_tree->markLayoutDirty(g_page_container);
-    g_tree->forceAllDirty(g_tree->root());
+    g_tree->markLayoutDirty(g_root);
+    g_tree->forceAllDirty(g_root);
+
+    sdlos_log("[styleguide] loadPage: page-container h=" +
+              std::to_string(static_cast<int>(
+                  [&]() -> float {
+                      const RenderNode* pc = g_tree->node(g_page_container);
+                      return pc ? pc->h : -1.f;
+                  }()))
+              + "  nav-bar lp.h=" + std::to_string(static_cast<int>(
+                  [&]() -> float {
+                      const RenderNode* nb = g_tree->node(g_nav_bar);
+                      return nb ? nb->layout_props.height : -1.f;
+                  }())));
 
 
     // 4. Update chrome that reflects page state.
@@ -512,40 +602,35 @@ static void loadPage(int page)
 }
 
 /// tickFade  —  called every frame from the root update callback
-/// Drives g_fade_state forward, writing to the overlay each tick.
+/// Drives g_fade_state forward using g_fade_alpha (Animated<float>).
+/// No dt parameter needed — Animated<float> uses SDL_GetTicks() internally.
 /// Returns true while a transition is active so the caller knows to keep
 /// setting dirty_render.
-static bool tickFade(float dt)
+static bool tickFade()
 {
     switch (g_fade_state) {
 
     case FadeState::FadingOut: {
-        g_fade_t += dt;
-        const float raw = g_fade_t / k_fade_out_dur;
-        const float t   = raw < 1.f ? raw : 1.f;
-        // ease-in quadratic: slow start → quick blackout
-        setOverlayAlpha(t * t);
+        // Mirror the animated value onto the overlay each frame.
+        setOverlayAlpha(g_fade_alpha.current());
 
-        if (g_fade_t >= k_fade_out_dur) {
+        if (g_fade_alpha.finished()) {
             // Screen is now black — swap the page content invisibly.
             loadPage(g_fade_target_page);
             // Keep overlay fully opaque so the new page is hidden on first draw.
+            g_fade_alpha.transition(0.f,
+                                    k_fade_in_dur * 1000.f,
+                                    pce::sdlos::easing::easeOut);
             setOverlayAlpha(1.f);
             g_fade_state = FadeState::FadingIn;
-            g_fade_t     = 0.f;
         }
         return true;
     }
 
     case FadeState::FadingIn: {
-        g_fade_t += dt;
-        const float raw = g_fade_t / k_fade_in_dur;
-        const float t   = raw < 1.f ? raw : 1.f;
-        // ease-out quadratic: quick reveal → slow settle
-        const float inv = 1.f - t;
-        setOverlayAlpha(inv * inv);
+        setOverlayAlpha(g_fade_alpha.current());
 
-        if (g_fade_t >= k_fade_in_dur) {
+        if (g_fade_alpha.finished()) {
             setOverlayAlpha(0.f);
             g_fade_state = FadeState::Idle;
         }
@@ -590,7 +675,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Fade state — always start clean so a hot-reload or sdlos:navigate
     // never leaves the overlay stuck in a mid-transition state.
     g_fade_state       = FadeState::Idle;
-    g_fade_t           = 0.f;
+    g_fade_alpha.set(0.f);
     g_fade_target_page = -1;
     g_fade_overlay_h   = pce::sdlos::k_null_handle;
 
@@ -605,6 +690,15 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         sdlos_log("[styleguide] WARNING: #page-container not found — check jade");
     if (!g_nav_bar.valid())
         sdlos_log("[styleguide] WARNING: #nav-bar not found — check jade");
+
+    // 1b. Load Font Awesome 6 Solid as an icon fallback.
+    //     All FA codepoints live in the Unicode Private Use Area (U+F000+),
+    //     so they never collide with glyphs in the primary or Twemoji fonts.
+    //     loadAppFonts() has already built the primary + Twemoji chain before
+    //     jade_app_init() runs; this appends FA at the end of that chain so
+    //     PUA glyphs (PREV ‹, NEXT ›, PLAY ▶, PAUSE ⏸ equivalents) resolve
+    //     to crisp vector FA icons instead of emoji or missing-glyph boxes.
+    renderer.AddFallbackFontPath("data/fonts/fa-6-solid-900.otf", 16.f);
 
     // 2. GltfScene init
     const bool init_ok = g_scene.init(
@@ -621,6 +715,12 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         renderer.setScene3DHook(
             [](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swap,
                float vw, float vh) noexcept {
+                // Update live dimensions and re-apply perspective on resize.
+                if (vw != g_vw || vh != g_vh) {
+                    g_vw = vw;
+                    g_vh = vh;
+                    g_scene.camera().perspective(45.f, g_vw / g_vh);
+                }
                 g_scene.render(cmd, swap, vw, vh);
             });
         renderer.setGpuPreShutdownHook([]() noexcept { g_scene.shutdown(); });
@@ -629,12 +729,23 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // Allocate animal state early
     g_animal_state = std::make_unique<AnimalAnimState>();
 
-    // 3. Override scene3d src before attach()
+    // 3. Attach scene3d nodes to the render tree.
     //
-    // jade_host's resolveAssetPaths() already ran and resolved the jade's
-    // src="data/models/Crystal_Small_03.glb" relative to the JADE SOURCE
-    // directory.  Override it here to point at the binary-dir copy that
-    // CMake placed next to the executable.
+    // GltfScene::attach() does a DFS over the tree, finds every node whose
+    // tag == "scene3d", loads its src= GLB file, and creates one child
+    // proxy RenderNode per mesh primitive.  The proxy gets its id from the
+    // mesh-id= attribute on the parent scene3d node (e.g. "sg-crystal" and
+    // "parrot-mesh"), which is what the subsequent findById() calls rely on.
+    //
+    // resolveGltfPath() in gltf_scene.cc probes:
+    //   1. base_path / src          (e.g. /build/ + data/models/Crystal_Small_03.glb)
+    //   2. base_path / "data" / src (dev-mode fallback)
+    // SDL_GetBasePath() → g_base_path already points at the binary dir where
+    // CMake copied the data/ tree, so probe 1 succeeds.
+    if (init_ok) {
+        const int prims = g_scene.attach(tree, root, g_base_path);
+        sdlos_log("[styleguide] scene3d attach: " + std::to_string(prims) + " primitive(s)");
+    }
 
 
     // 5. Load scene.css — 3-D material overrides
@@ -710,7 +821,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
         // Target at (0, 1, 0) so the model center (mid-height) is in view.
         g_scene.camera().perspective(
             45.f,
-            static_cast<float>(SDLOS_WIN_W) / static_cast<float>(SDLOS_WIN_H));
+            g_vw / g_vh);
         g_scene.camera().setOrbitTarget(0.f, 1.f, 0.f);
         g_scene.camera().orbit(20.f, 18.f, 5.f);
     }
@@ -720,6 +831,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
     //7. Show nav bar on startup (auto-hides after k_nav_hide_time)
     showNav();
+    initNavIcons();
     updatePlayBtn();
 
      // 8. Per-frame update: timers + 3D tick + fade
@@ -733,15 +845,15 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
              g_last_ns = now;
 
              // 3-D AABB projection (hover / hit-test).
-             g_scene.tick(*g_tree,
-                          static_cast<float>(SDLOS_WIN_W),
-                          static_cast<float>(SDLOS_WIN_H));
+             g_scene.tick(*g_tree, g_vw, g_vh);
 
              // Crystal animation tick — update rotation and keep node dirty while animating
              if (g_crystal_state && g_crystal_state->auto_spin && g_crystal_h.valid()) {
-                 // Check if rotation animation has completed
+                 // Loop: when the current 360° cycle finishes, normalise the angle back
+                 // to 0° and kick off a fresh cycle.  Without the set(0) the next
+                 // transition(360.f) would find from==to==360 and produce no movement.
                  if (g_crystal_state->rotation_z.finished()) {
-                     // Loop: start a new 360° rotation
+                     g_crystal_state->rotation_z.set(0.f);   // normalise → [0°, 360°)
                      g_crystal_state->rotation_z.transition(
                          360.f,
                          4000.f,
@@ -763,8 +875,8 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                      hideNav();
              }
 
-             // Page-transition fade (fade-to-black between pages).
-             tickFade(dt);
+              // Page-transition fade (fade-to-black between pages).
+              tickFade();
 
              // Animal animation update
              if (g_animal_state && g_animal_state->parrot_h.valid() && g_page == k_animal_page_idx) {
@@ -778,32 +890,26 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                      g_tree->markDirty(g_animal_state->parrot_h);
                  }
 
-                 // Update name reveal UI animation
-                 const NodeHandle reveal_h = g_tree->findById(g_root, "animal-name-container");
-                 if (reveal_h.valid()) {
-                     if (RenderNode* rn = g_tree->node(reveal_h)) {
-                         const float t = g_animal_state->reveal_y.current();
-                         // Animate background alpha: hidden=fully transparent, revealed=semi-opaque
-                         const unsigned ab = static_cast<unsigned>(t * 153.f + 0.5f); // 0→0, 1→99 (60%)
-                         char buf[12];
-                         std::snprintf(buf, sizeof(buf), "#000000%02x", ab);
-                         rn->setStyle("backgroundColor", buf);
-                         rn->dirty_render = true;
-                     }
-                 }
-                 // Update name text visibility
-                 const NodeHandle name_h = g_tree->findById(g_root, "animal-name-text");
-                 if (name_h.valid()) {
-                     if (RenderNode* rn = g_tree->node(name_h)) {
-                         const float t = g_animal_state->reveal_y.current();
-                         // Color alpha: fully transparent when hidden, white when revealed
-                         const unsigned ab = static_cast<unsigned>(t * 255.f + 0.5f);
-                         char buf[12];
-                         std::snprintf(buf, sizeof(buf), "#ffffff%02x", ab);
-                         rn->setStyle("color", buf);
-                         rn->dirty_render = true;
-                     }
-                 }
+                  // Update name reveal UI animation
+                  const NodeHandle reveal_h = g_tree->findById(g_root, "animal-name-container");
+                  if (reveal_h.valid()) {
+                      if (RenderNode* rn = g_tree->node(reveal_h)) {
+                          // Fade the whole container in/out via opacity.
+                          // backgroundColor stays fixed at "#00000099" (60% black).
+                          // opacity drives the final composite alpha.
+                          rn->opacity      = g_animal_state->reveal_y.current();
+                          rn->dirty_render = true;
+                      }
+                  }
+                  // Update name text visibility — child of the container; its own
+                  // opacity stacks multiplicatively with the parent's draw alpha.
+                  const NodeHandle name_h = g_tree->findById(g_root, "animal-name-text");
+                  if (name_h.valid()) {
+                      if (RenderNode* rn = g_tree->node(name_h)) {
+                          rn->opacity      = g_animal_state->reveal_y.current();
+                          rn->dirty_render = true;
+                      }
+                  }
              }
 
              // Auto-advance slideshow.
@@ -868,7 +974,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     });
 
     bus.subscribe("animal:sound", [](const std::string&) {
-        sdlos_log("[styleguide] Mooo! Baaa! (Sound system placeholder triggered)");
+        sdlos_log("[styleguide] Mooo! (Sound system placeholder triggered)");
         // Trigger a tiny hop to acknowledge
         if (g_animal_state)
             g_animal_state->hop_y.transition(0.2f, 150.f, pce::sdlos::easing::easeOutSpringBouncy);
@@ -880,7 +986,9 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
 
          // Special handling for crystal: boost the spin speed on click
          if (payload == "sg-crystal" && g_crystal_state) {
-             // Accelerate: complete one more full rotation at faster speed
+             // Accelerate from wherever we are right now.
+             // current() is already in [0°, 360°) thanks to the loop's set(0) reset,
+             // so adding 360° always produces a well-defined one-revolution burst.
              const float current_rot = g_crystal_state->rotation_z.current();
              g_crystal_state->rotation_z.transition(
                  current_rot + 360.f,         // one extra revolution from current position
@@ -1044,12 +1152,13 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                 n->w = root_node->w;
                 n->h = root_node->h;
             } else {
-                n->w = static_cast<float>(SDLOS_WIN_W) * renderer.pixelScaleX();
-                n->h = static_cast<float>(SDLOS_WIN_H) * renderer.pixelScaleY();
+                n->w = g_vw * renderer.pixelScaleX();
+                n->h = g_vh * renderer.pixelScaleY();
             }
-            // Fully transparent to start; tickFade() writes the alpha byte.
-            n->setStyle("backgroundColor", "#00000000");
-            //n->setStyle("backgroundColor", "#000000FF");
+            // Fixed opaque black — opacity drives the visible alpha [0, 1].
+            // setOverlayAlpha() writes n->opacity directly; no StyleMap churn.
+            n->setStyle("backgroundColor", "#000000");
+            n->opacity      = 0.f;  // start fully transparent
             n->dirty_render = false;
         }
         bindDrawCallbacks(tree, overlay);
@@ -1061,5 +1170,3 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
               + std::to_string(k_page_count)     + " pages"
               + "  [fade overlay active]");
 }
-
-

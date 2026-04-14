@@ -193,6 +193,14 @@ struct RenderContext {
     // (u_time) so shaders can use it for jitter, animation, etc.
     float time = 0.f;
 
+    // Absolute screen-space origin of the node currently being drawn.
+    // Set by RenderTree::render() before each draw() call by accumulating
+    // parent-relative x/y down the traversal stack.
+    // Draw callbacks must use (offset_x + local_x, offset_y + local_y) for
+    // all drawRect / drawText / drawImage calls.
+    float offset_x = 0.f;
+    float offset_y = 0.f;
+
     // Callback that returns (or lazily compiles) a named node shader pipeline.
     // Set by SDLRenderer::Render(); null means _shader nodes fall back to
     // regular drawImage.
@@ -346,6 +354,28 @@ struct RenderContext {
      */
     [[nodiscard]]
     SDL_GPUGraphicsPipeline *pipeline(std::string_view name);
+
+    /**
+     * @brief Draws rounded rect with optional shadow
+     *
+     * @param x       Horizontal coordinate in physical pixels
+     * @param y       Vertical coordinate in physical pixels
+     * @param w       Width in physical pixels
+     * @param h       Height in physical pixels
+     * @param radius  Corner radius in pixels
+     * @param bw      Border width in pixels
+     * @param fill    Fill color
+     * @param border  Border color
+     */
+    void drawRoundedRect(
+        float x,
+        float y,
+        float w,
+        float h,
+        float radius,
+        float bw,
+        const struct RGBAf &fill,
+        const struct RGBAf &border);
 };
 
 [[nodiscard]]
@@ -395,6 +425,15 @@ struct RenderNode {
     // Geometry — pixel space, parent-relative
     float x{}, y{}, w{}, h{};
 
+    // Opacity multiplier [0, 1].  Applied to every draw call for this node
+    // (background, border, text, image alpha).  Does NOT cascade to children
+    // automatically — set per-node or use a parent draw wrapper.
+    //
+    // CSS:        `opacity: 0.5`            → parsed by StyleApplier
+    // Animated:   `n->opacity = anim.current()`  — set directly from update()
+    // Default:    1.0 (fully opaque)
+    float opacity = 1.f;
+
     bool dirty_layout : 1 = true;
     bool dirty_render : 1 = true;
     bool hidden       : 1 = false;  // display:none — skip layout & render
@@ -423,14 +462,6 @@ struct RenderNode {
     //              "gap", "backgroundColor", "color", "fontSize".
     StyleMap styles;
 
-    // Return the value for key, or an empty string_view if not present.
-    /**
-     * @brief Style
-     *
-     * @param key  Lookup key
-     *
-     * @return Integer result; negative values indicate an error code
-     */
     [[nodiscard]]
     std::string_view style(std::string_view key) const noexcept {
         for (const auto &[k, v] : styles)
@@ -529,6 +560,11 @@ class Signal {
             obs(value_);
     }
 
+    /**
+     * @brief Observe
+     *
+     * @return Reference to the result
+     */
     /**
      * @brief Observe
      *
@@ -879,6 +915,16 @@ class RenderTree {
      *
      * @return Integer result; negative values indicate an error code
      */
+    /**
+     * @brief Capacity
+     *
+     * @return Integer result; negative values indicate an error code
+     */
+    /**
+     * @brief Node count
+     *
+     * @return Integer result; negative values indicate an error code
+     */
 
     [[nodiscard]]
     core::frame_arena &arena() noexcept {
@@ -931,5 +977,23 @@ class RenderTree {
     core::frame_arena arena_;
     NodeHandle root_ = k_null_handle;
 };
+
+/// Walks the parent chain from `handle` up to the root, accumulating
+/// parent-relative x/y into an absolute screen-space position.
+/// This is the canonical way for draw() callbacks to find their screen origin
+/// when ctx.offset_x/y is not yet available (e.g. in legacy callbacks).
+[[nodiscard]]
+inline std::pair<float, float> absolutePos(const RenderTree &tree, NodeHandle handle) noexcept {
+    float ax = 0.f, ay = 0.f;
+    for (NodeHandle h = handle; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h   = n->parent;
+    }
+    return {ax, ay};
+}
 
 }  // namespace pce::sdlos

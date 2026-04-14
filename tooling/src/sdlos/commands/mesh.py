@@ -109,15 +109,35 @@ class CityPreset:
 # Bboxes are sized to walkable downtown cores (~0.5–2 km²) so OSM fetch
 # completes in a few seconds without hitting Overpass sub-query limits.
 CITY_PRESETS: dict[str, CityPreset] = {
-
-    # ── Germany ───────────────────────────────────────────────────────────────
-    "mainz": CityPreset(
-        key             = "mainz",
-        label           = "Mainz — Altstadt / Dom",
-        bbox            = (49.999, 49.993, 8.278, 8.266),
-        building_height = 12.0,
-        notes           = "Medieval old town, Rhine riverfront, Dom square",
+    "mount_etna": CityPreset(
+        key             = "mount_etna",
+        label           = "Mount Etna — Sicily, Italy",
+        bbox            = (37.800, 37.700, 15.100, 14.900),
+        building_height = 5.0,
+        notes           = "Active stratovolcano on Sicily (3,326 m) — use --volcano --volcano-height 3326 --volcano-radius 20000",
     ),
+    "stromboli": CityPreset(
+        key             = "stromboli",
+        label           = "Stromboli — Aeolian Islands, Italy",
+        bbox            = (38.805, 38.785, 15.225, 15.200),
+        building_height = 5.0,
+        notes           = "The 'Lighthouse of the Mediterranean' (924 m) — use --volcano --volcano-height 924 --volcano-radius 3000",
+    ),
+    "chania_lefka_ori": CityPreset(
+        key             = "chania_lefka_ori",
+        label           = "Lefka Ori (White Mountains) — Chania, Crete",
+        bbox            = (35.350, 35.250, 24.100, 23.950),
+        building_height = 6.0,
+        notes           = "Towering limestone peaks near Chania; distinct geometric appearance — use --dem for the karst topography",
+    ),
+    "teide_volcano": CityPreset(
+        key             = "teide_volcano",
+        label           = "Mount Teide — Tenerife, Canary Islands",
+        bbox            = (28.320, 28.220, -16.580, -16.700),
+        building_height = 5.0,
+        notes           = "Highest point in Spain (3,715 m) — use --volcano --volcano-height 3715 --volcano-radius 15000",
+    ),
+
     "cologne": CityPreset(
         key             = "cologne",
         label           = "Cologne — Altstadt / Dom",
@@ -139,8 +159,62 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 18.0,
         notes           = "Museumsinsel, Unter den Linden, Alexanderplatz edge",
     ),
-
-    # ── Italy ─────────────────────────────────────────────────────────────────
+    "mainz": CityPreset(
+        key             = "mainz",
+        label           = "Mainz — Altstadt (full)",
+        bbox            = (50.002, 49.986, 8.287, 8.257),
+        building_height = 12.0,
+        notes           = "Full Altstadt: Dom, Markt, Kaiserstraße, Holzturm, Kaisertor, Rheinufer (~1.8 × 2.1 km)",
+    ),
+    "mainz-core": CityPreset(
+        key             = "mainz-core",
+        label           = "Mainz — Dom / Markt core",
+        bbox            = (49.999, 49.993, 8.278, 8.266),
+        building_height = 12.0,
+        notes           = "Compact core: Dom square, Markt, Rheinufer (~666 × 857 m). Fast fetch.",
+    ),
+    "munich": CityPreset(
+        key             = "munich",
+        label           = "Munich — Marienplatz / Altstadt",
+        bbox            = (48.140, 48.131, 11.581, 11.566),
+        building_height = 16.0,
+        notes           = "Marienplatz, Frauenkirche, Kaufingerstraße, Neues Rathaus",
+    ),
+    "nurnberg": CityPreset(
+        key             = "nurnberg",
+        label           = "Nürnberg — Altstadt",
+        bbox            = (49.460, 49.451, 11.086, 11.071),
+        building_height = 12.0,
+        notes           = "Hauptmarkt, Kaiserburg, St. Lorenz, Weißgerbergasse",
+    ),
+    "frankfurt": CityPreset(
+        key             = "frankfurt",
+        label           = "Frankfurt am Main — Bankenviertel / Römerberg",
+        bbox            = (50.115, 50.104, 8.692, 8.674),
+        building_height = 40.0,
+        notes           = "European banking skyline: Commerzbank Tower, Messeturm, Römerberg old town, Main riverfront — tallest cluster in continental Europe",
+    ),
+    "freiburg": CityPreset(
+        key             = "freiburg",
+        label           = "Freiburg im Breisgau — Altstadt / Münsterplatz",
+        bbox            = (47.999, 47.988, 7.862, 7.839),
+        building_height = 12.0,
+        notes           = "Münster (rose window, market), Rathausplatz, Schwabentor, Martinstor, arcaded Bächle-stream streets — Black Forest gateway city, fine late-Gothic Altstadt",
+    ),
+    "lübeck": CityPreset(
+        key             = "lübeck",
+        label           = "Lübeck — Holstentor / Altstadt",
+        bbox            = (53.871, 53.860, 10.696, 10.677),
+        building_height = 14.0,
+        notes           = "Holstentor, Marktplatz, seven-spire skyline, Buddenbrookhaus, Petrikirche — UNESCO, best-preserved Hanseatic brick-Gothic city",
+    ),
+    "regensburg": CityPreset(
+        key             = "regensburg",
+        label           = "Regensburg — Altstadt / Dom St. Peter",
+        bbox            = (49.022, 49.013, 12.102, 12.084),
+        building_height = 14.0,
+        notes           = "Steinerne Brücke (12th-c. stone bridge), Dom St Peter, Altes Rathaus, Haidplatz — UNESCO, best-preserved medieval city in Germany north of the Alps",
+    ),
     "rome": CityPreset(
         key             = "rome",
         label           = "Rome — Historic Centre",
@@ -155,8 +229,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 20.0,
         notes           = "Duomo, Galleria Vittorio Emanuele, Scala, Brera",
     ),
-
-    # ── France ────────────────────────────────────────────────────────────────
     "paris": CityPreset(
         key             = "paris",
         label           = "Paris — Île de la Cité / Marais",
@@ -164,8 +236,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 18.0,
         notes           = "Notre-Dame, Sainte-Chapelle, Place du Châtelet",
     ),
-
-    # ── Netherlands ───────────────────────────────────────────────────────────
     "amsterdam": CityPreset(
         key             = "amsterdam",
         label           = "Amsterdam — Grachtengordel",
@@ -180,8 +250,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 11.0,
         notes           = "Same bbox as 'amsterdam'",
     ),
-
-    # ── United Kingdom ────────────────────────────────────────────────────────
     "london": CityPreset(
         key             = "london",
         label           = "London — The City / Square Mile",
@@ -189,8 +257,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 30.0,
         notes           = "Bank, St Paul's, Leadenhall, Lloyd's cluster",
     ),
-
-    # ── Greece ────────────────────────────────────────────────────────────────
     "athens": CityPreset(
         key             = "athens",
         label           = "Athens — Monastiraki / Plaka",
@@ -198,8 +264,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 10.0,
         notes           = "Monastiraki sq, Plaka, Thissio, foot of Acropolis",
     ),
-
-    # ── Austria ───────────────────────────────────────────────────────────────
     "vienna": CityPreset(
         key             = "vienna",
         label           = "Vienna — Innere Stadt",
@@ -207,8 +271,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 22.0,
         notes           = "Stephansdom, Graben, Hofburg, Burgring",
     ),
-
-    # ── Czech Republic ────────────────────────────────────────────────────────
     "prague": CityPreset(
         key             = "prague",
         label           = "Prague — Staré Město",
@@ -216,8 +278,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 16.0,
         notes           = "Old Town Square, Charles Bridge end, Josefov",
     ),
-
-    # ── Hungary ───────────────────────────────────────────────────────────────
     "budapest": CityPreset(
         key             = "budapest",
         label           = "Budapest — Belváros / Inner City",
@@ -225,8 +285,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 18.0,
         notes           = "Vörösmarty tér, Váci utca, Ferenciek tere",
     ),
-
-    # ── Portugal ──────────────────────────────────────────────────────────────
     "lisbon": CityPreset(
         key             = "lisbon",
         label           = "Lisbon — Alfama / Baixa",
@@ -234,14 +292,12 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 13.0,
         notes           = "Praça do Comércio, Rossio, Alfama quarter",
     ),
-
-    # ── Spain ─────────────────────────────────────────────────────────────────
     "madrid": CityPreset(
         key             = "madrid",
-        label           = "Madrid — Centro",
-        bbox            = (40.421, 40.412, -3.697, -3.712),
+        label           = "Madrid — Centro / Gran Vía",
+        bbox            = (40.426, 40.408, -3.690, -3.718),
         building_height = 18.0,
-        notes           = "Puerta del Sol, Gran Vía, Plaza Mayor",
+        notes           = "Gran Vía full length, Puerta del Sol, Plaza Mayor, La Latina, Huertas — ~2 × 2 km block grid; add --dem for ground plane",
     ),
     "barcelona": CityPreset(
         key             = "barcelona",
@@ -250,8 +306,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 20.0,
         notes           = "Gothic Quarter, La Rambla, Born district",
     ),
-
-    # ── USA ───────────────────────────────────────────────────────────────────
     "nyc": CityPreset(
         key             = "nyc",
         label           = "New York City — Financial District",
@@ -280,8 +334,6 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 18.0,
         notes           = "City Hall, Rittenhouse Sq, Old City corridor",
     ),
-
-    # ── Japan ─────────────────────────────────────────────────────────────────
     "tokyo": CityPreset(
         key             = "tokyo",
         label           = "Tokyo — Shinjuku West",
@@ -303,60 +355,1048 @@ CITY_PRESETS: dict[str, CityPreset] = {
         building_height = 8.0,
         notes           = "Kinkaku-ji (Golden Pavilion), Kinugasa district, Ninna-ji vicinity",
     ),
-
-    # ── Turkey ────────────────────────────────────────────────────────────────
+    "kyoto-hiei": CityPreset(
+        key             = "kyoto-hiei",
+        label           = "Mt. Hiei — Hieizan above Kyoto",
+        bbox            = (35.120, 34.990, 135.900, 135.750),
+        building_height = 6.0,
+        notes           = "Sacred Mt. Hiei (848 m) on the NE skyline of Kyoto, site of Enryaku-ji temple — use --volcano --volcano-height 848 --volcano-radius 6000 for the mountain cone",
+    ),
     "cappadocia": CityPreset(
         key             = "cappadocia",
         label           = "Cappadocia — Göreme Fairy Chimneys",
         bbox            = (38.655, 38.633, 34.843, 34.817),
         building_height = 5.0,
-        notes           = "Göreme town, fairy chimney rock formations, cave dwellings, Open Air Museum — organic non-rectangular geometry",
+        notes           = "Göreme town, fairy chimney rock formations, cave dwellings, Open Air Museum — organic non-rectangular geometry; for the volcanic backdrop use --preset erciyes or --preset mt-hasan with --volcano",
+    ),
+    "erciyes": CityPreset(
+        key             = "erciyes",
+        label           = "Mt. Erciyes — Erciyes Dağı, Cappadocia",
+        bbox            = (38.630, 38.440, 35.570, 35.320),
+        building_height = 5.0,
+        notes           = "Dominant stratovolcano (3,916 m) near Kayseri whose Pliocene eruptions deposited the tuff layer that eroded into Cappadocia's fairy chimneys — use --volcano --volcano-height 3916 --volcano-radius 20000",
+    ),
+    "mt-hasan": CityPreset(
+        key             = "mt-hasan",
+        label           = "Mt. Hasan — Hassan Dağı, Cappadocia",
+        bbox            = (38.220, 38.050, 34.270, 34.060),
+        building_height = 5.0,
+        notes           = "Twin-peaked stratovolcano (3,268 m) 40 km W of Göreme, visible from the Cappadocian valleys — use --volcano --volcano-height 3268 --volcano-radius 15000",
+    ),
+    "quito": CityPreset(
+        key             = "quito",
+        label           = "Quito — Centro Histórico",
+        bbox            = (- 0.218, -0.232, -78.507, -78.522),
+        building_height = 12.0,
+        notes           = "UNESCO colonial centre: Plaza Grande, La Catedral, La Compañía, La Ronda — dense 2–4 storey Spanish-colonial blocks",
+    ),
+    "austin": CityPreset(
+        key             = "austin",
+        label           = "Austin TX — Downtown / 6th Street",
+        bbox            = (30.271, 30.261, -97.735, -97.750),
+        building_height = 28.0,
+        notes           = "Congress Ave, 6th Street entertainment district, Republic Square — mix of high-rises and historic 2-storey blocks",
+    ),
+    "sydney": CityPreset(
+        key             = "sydney",
+        label           = "Sydney — CBD / Circular Quay",
+        bbox            = (-33.857, -33.870, 151.216, 151.200),
+        building_height = 30.0,
+        notes           = "Opera House precinct, Circular Quay ferry terminal, The Rocks historic district, CBD high-rise core",
+    ),
+    "toronto": CityPreset(
+        key             = "toronto",
+        label           = "Toronto — Bay Street Financial District",
+        bbox            = (43.654, 43.641, -79.371, -79.390),
+        building_height = 40.0,
+        notes           = "Bay St towers, Union Station, CN Tower base, St Lawrence Market — tallest Canadian skyline",
+    ),
+    "vancouver": CityPreset(
+        key             = "vancouver",
+        label           = "Vancouver — Downtown / Coal Harbour",
+        bbox            = (49.291, 49.279, -123.101, -123.124),
+        building_height = 30.0,
+        notes           = "Canada Place, Gastown, Granville Street, Robson Square — 2010 Winter Olympics host",
+    ),
+    "montreal": CityPreset(
+        key             = "montreal",
+        label           = "Montreal — Vieux-Montréal",
+        bbox            = (45.511, 45.499, -73.548, -73.563),
+        building_height = 16.0,
+        notes           = "Notre-Dame Basilica, Place d'Armes, Old Port, Rue Saint-Paul — 1976 Summer Olympics host",
+    ),
+    "calgary": CityPreset(
+        key             = "calgary",
+        label           = "Calgary — Downtown Core",
+        bbox            = (51.053, 51.041, -114.055, -114.079),
+        building_height = 35.0,
+        notes           = "Stephen Avenue Walk, Bow Tower, Eau Claire, energy-sector high-rises — 1988 Winter Olympics host",
+    ),
+    "oslo": CityPreset(
+        key             = "oslo",
+        label           = "Oslo — Sentrum / Aker Brygge",
+        bbox            = (59.919, 59.906, 10.753, 10.721),
+        building_height = 18.0,
+        notes           = "Rådhusplassen (City Hall), Aker Brygge waterfront, National Theatre, Karl Johans gate — 1952 Winter Olympics host",
+    ),
+    "copenhagen": CityPreset(
+        key             = "copenhagen",
+        label           = "Copenhagen — Nyhavn / Indre By",
+        bbox            = (55.684, 55.672, 12.592, 12.561),
+        building_height = 20.0,
+        notes           = "Nyhavn coloured gabled houses, Strøget pedestrian street, Christiansborg Palace, Rådhuspladsen, Tivoli Gardens — Danish capital, compact 17th–19th c. streetscape",
+    ),
+    "stockholm": CityPreset(
+        key             = "stockholm",
+        label           = "Stockholm — Gamla Stan / Royal Palace",
+        bbox            = (59.334, 59.320, 18.086, 18.057),
+        building_height = 14.0,
+        notes           = "Gamla Stan medieval island, Royal Palace, Storkyrkan, Riddarholmen, Stortorget — best-preserved medieval city core in Northern Europe",
+    ),
+    "malmo": CityPreset(
+        key             = "malmo",
+        label           = "Malmö — Stortorget / Gamla Staden",
+        bbox            = (55.609, 55.598, 13.016, 12.991),
+        building_height = 11.0,
+        notes           = "Stortorget (Sweden's oldest surviving square), Lilla Torg, St Peter's Church, Gamla Väster — historic Danish-era city (ceded 1658), Öresund Bridge approach",
+    ),
+    "moscow": CityPreset(
+        key             = "moscow",
+        label           = "Moscow — Red Square / Kitai-gorod",
+        bbox            = (55.760, 55.748, 37.638, 37.607),
+        building_height = 16.0,
+        notes           = "Red Square, St Basil's Cathedral, GUM, Zaryadye Park, Kremlin walls — 1980 Summer Olympics host",
+    ),
+    "seoul": CityPreset(
+        key             = "seoul",
+        label           = "Seoul — Myeongdong / City Hall",
+        bbox            = (37.572, 37.557, 126.993, 126.971),
+        building_height = 28.0,
+        notes           = "Seoul City Hall, Myeongdong shopping district, Deoksugung Palace, Namdaemun — 1988 Summer Olympics host",
+    ),
+    "beijing": CityPreset(
+        key             = "beijing",
+        label           = "Beijing — Wangfujing / Dongcheng",
+        bbox            = (39.922, 39.907, 116.421, 116.399),
+        building_height = 30.0,
+        notes           = "Wangfujing commercial street, Oriental Plaza, Dongdan, Chongwenmen — 2008 Summer / 2022 Winter Olympics host",
+    ),
+    "mexico-city": CityPreset(
+        key             = "mexico-city",
+        label           = "Mexico City — Centro Histórico",
+        bbox            = (19.441, 19.427, -99.124, -99.143),
+        building_height = 14.0,
+        notes           = "Zócalo, Catedral Metropolitana, Templo Mayor, Palacio Nacional — dense colonial grid, 1968 Summer Olympics host",
+    ),
+    "rio": CityPreset(
+        key             = "rio",
+        label           = "Rio de Janeiro — Centro / Cinelândia",
+        bbox            = (-22.897, -22.914, -43.162, -43.185),
+        building_height = 20.0,
+        notes           = "Arcos da Lapa, Teatro Municipal, Cinelândia, Candelária church, Avenida Rio Branco — 2016 Summer Olympics host",
+    ),
+    "pripyat": CityPreset(
+        key             = "pripyat",
+        label           = "Pripyat — Chernobyl Exclusion Zone",
+        bbox            = (51.414, 51.400, 30.063, 30.046),
+        building_height = 9.0,
+        notes           = "Abandoned Soviet city evacuated April 1986: Palace of Culture, Ferris wheel, apartment blocks, hospital, school — all mapped in OSM",
+    ),
+    "dubai": CityPreset(
+        key             = "dubai",
+        label           = "Dubai — Downtown / Burj Khalifa",
+        bbox            = (25.202, 25.190, 55.285, 55.267),
+        building_height = 80.0,
+        notes           = "Burj Khalifa, Dubai Mall, DIFC towers, Sheikh Zayed Road — world's densest supertall cluster",
+    ),
+    "casablanca": CityPreset(
+        key             = "casablanca",
+        label           = "Casablanca — Place Mohammed V / Hassan II",
+        bbox            = (33.602, 33.590, -7.607, -7.634),
+        building_height = 14.0,
+        notes           = "Place Mohammed V, Hassan II Mosque vicinity, Boulevard Mohammed V — Art Deco and Moorish downtown grid",
+    ),
+    "marrakesh": CityPreset(
+        key             = "marrakesh",
+        label           = "Marrakesh — Medina / Djemaa el-Fna",
+        bbox            = (31.632, 31.618, -7.979, -7.999),
+        building_height = 8.0,
+        notes           = "Djemaa el-Fna square, Koutoubia Mosque, Medina souks, Ben Youssef Madrasa — UNESCO World Heritage medina, dense organic street fabric",
+    ),
+    "mumbai": CityPreset(
+        key             = "mumbai",
+        label           = "Mumbai — Fort / Nariman Point",
+        bbox            = (18.946, 18.920, 72.843, 72.818),
+        building_height = 25.0,
+        notes           = "Nariman Point, Fort district, Chhatrapati Shivaji Terminus, Gateway of India — financial capital, mix of Victorian Gothic and Art Deco high-rises",
+    ),
+    "delhi": CityPreset(
+        key             = "delhi",
+        label           = "New Delhi — Connaught Place / Rajpath",
+        bbox            = (28.638, 28.622, 77.228, 77.207),
+        building_height = 15.0,
+        notes           = "Connaught Place, India Gate precinct, Rajpath — Lutyens' colonial grid with strict heritage height controls",
+    ),
+    "jaipur": CityPreset(
+        key             = "jaipur",
+        label           = "Jaipur — Old City / Pink City",
+        bbox            = (26.934, 26.919, 75.836, 75.816),
+        building_height = 10.0,
+        notes           = "Hawa Mahal, City Palace, Jantar Mantar, bazaar grid — UNESCO-listed Pink City, dense 2–4 storey pink sandstone fabric",
+    ),
+    "kolkata": CityPreset(
+        key             = "kolkata",
+        label           = "Kolkata — BBD Bagh / Dalhousie",
+        bbox            = (22.580, 22.566, 88.374, 88.352),
+        building_height = 18.0,
+        notes           = "BBD Bagh, Writers' Building, Howrah Bridge approach — former British colonial capital, Victorian warehouse district",
+    ),
+    "jakarta": CityPreset(
+        key             = "jakarta",
+        label           = "Jakarta — Kota Tua (Old Batavia)",
+        bbox            = (-6.128, -6.143, 106.821, 106.806),
+        building_height = 12.0,
+        notes           = "Fatahillah Square, Dutch colonial VOC warehouses, Kali Besar canal, Bank Museum — 17th-century trading post, dense colonial grid",
+    ),
+    "bangkok": CityPreset(
+        key             = "bangkok",
+        label           = "Bangkok — Rattanakosin Island / Grand Palace",
+        bbox            = (13.758, 13.742, 100.503, 100.484),
+        building_height = 12.0,
+        notes           = "Grand Palace, Wat Pho, Sanam Luang, Khao San Road — historic royal island, mix of temple complexes, shophouses and colonial administrative buildings (Ong-Bak country)",
+    ),
+    "istanbul": CityPreset(
+        key             = "istanbul",
+        label           = "Istanbul — Ortaköy / Bosphorus Bridge",
+        bbox            = (41.055, 41.034, 29.054, 29.012),
+        building_height = 20.0,
+        notes           = "Ortaköy Mosque at the foot of the 15 Temmuz Şehitler Köprüsü suspension bridge, Beşiktaş waterfront, Beylerbeyi — where Europe meets Asia; wide bbox captures the full ~1.5 km bridge span",
+    ),
+    "kathmandu": CityPreset(
+        key             = "kathmandu",
+        label           = "Kathmandu — Durbar Square / Thamel",
+        bbox            = (27.718, 27.700, 85.320, 85.298),
+        building_height = 9.0,
+        notes           = "Kathmandu Durbar Square, Thamel district, Asan bazaar — dense Newari brick architecture, UNESCO Kathmandu Valley World Heritage site",
+    ),
+    "tirana": CityPreset(
+        key             = "tirana",
+        label           = "Tirana — Skanderbeg Square",
+        bbox            = (41.336, 41.323, 19.829, 19.808),
+        building_height = 18.0,
+        notes           = "Skanderbeg Square, Et'hem Bey Mosque, National History Museum — mix of Ottoman, Italian Fascist-era, communist and post-1990 colourful facades",
+    ),
+    "berat": CityPreset(
+        key             = "berat",
+        label           = "Berat — Mangalem / City of a Thousand Windows",
+        bbox            = (40.712, 40.700, 19.955, 19.937),
+        building_height = 10.0,
+        notes           = "Mangalem and Gorica Ottoman quarters, Byzantine Kalaja castle above — UNESCO 'museum city', whitewashed houses with rows of large windows reflected in the Osum river",
+    ),
+    "gjirokaster": CityPreset(
+        key             = "gjirokaster",
+        label           = "Gjirokastër — Old Town / Castle",
+        bbox            = (40.081, 40.068, 20.149, 20.131),
+        building_height = 8.0,
+        notes           = "Ottoman stone tower-houses (kula), Old Bazaar, Gjirokastër Castle — UNESCO 'city of stone', distinctive grey-schist roofed vernacular architecture",
+    ),
+    "florence": CityPreset(
+        key             = "florence",
+        label           = "Florence — Historic Centre",
+        bbox            = (43.776, 43.764, 11.263, 11.242),
+        building_height = 18.0,
+        notes           = "Duomo (Brunelleschi dome), Palazzo Vecchio, Uffizi, Ponte Vecchio, Oltrarno — UNESCO Renaissance historic centre",
+    ),
+    "venice": CityPreset(
+        key             = "venice",
+        label           = "Venice — San Marco / Rialto",
+        bbox            = (45.441, 45.428, 12.350, 12.325),
+        building_height = 14.0,
+        notes           = "Piazza San Marco, Rialto Bridge, Grand Canal palazzi — UNESCO lagoon city, Gothic and Byzantine facades rising directly from the water",
+    ),
+    "dubrovnik": CityPreset(
+        key             = "dubrovnik",
+        label           = "Dubrovnik — Old City",
+        bbox            = (42.645, 42.636, 18.117, 18.102),
+        building_height = 10.0,
+        notes           = "City walls, Stradun, Sponza Palace, Franciscan Monastery — UNESCO medieval Dalmatian city, compact limestone grid inside intact 13th-century walls",
+    ),
+    "kotor": CityPreset(
+        key             = "kotor",
+        label           = "Kotor — Walled Old Town",
+        bbox            = (42.431, 42.420, 18.781, 18.764),
+        building_height = 9.0,
+        notes           = "Venetian-era walled old town, St Tryphon Cathedral, Sea Gate — UNESCO, most intact medieval fortified city on the Adriatic",
+    ),
+    "bruges": CityPreset(
+        key             = "bruges",
+        label           = "Bruges — Markt / Historic Centre",
+        bbox            = (51.213, 51.203, 3.232, 3.215),
+        building_height = 14.0,
+        notes           = "Markt, Belfry, Burg Square, Begijnhof, canal network — UNESCO, best-preserved medieval Flemish city",
+    ),
+    "bern": CityPreset(
+        key             = "bern",
+        label           = "Bern — Altstadt / Zytglogge",
+        bbox            = (46.952, 46.942, 7.460, 7.437),
+        building_height = 14.0,
+        notes           = "Zytglogge clocktower, Kramgasse arcades, Bärengraben, Münster, Bundeshaus — UNESCO, Swiss capital, 6 km of continuous sandstone arcade streets",
+    ),
+    "zurich": CityPreset(
+        key             = "zurich",
+        label           = "Zürich — Altstadt / Grossmünster",
+        bbox            = (47.379, 47.369, 8.548, 8.528),
+        building_height = 18.0,
+        notes           = "Grossmünster, Fraumünster (Chagall windows), Limmatquai, Bahnhofstrasse, Lindenhügel — Switzerland's largest city, intact dual-bank Altstadt",
+    ),
+    "lucerne": CityPreset(
+        key             = "lucerne",
+        label           = "Lucerne — Kapellbrücke / Altstadt",
+        bbox            = (47.058, 47.046, 8.319, 8.296),
+        building_height = 14.0,
+        notes           = "Kapellbrücke (oldest roofed wooden bridge in Europe, 1333), Wasserturm, Spreuerbrücke, Altstadt muralled facades — compact Alpine lakeside medieval city",
+    ),
+    "luxembourg": CityPreset(
+        key             = "luxembourg",
+        label           = "Luxembourg City — Ville Haute / Bock Casemates",
+        bbox            = (49.614, 49.602, 6.135, 6.117),
+        building_height = 16.0,
+        notes           = "Place d'Armes, Bock Casemates, Adolphe Bridge, Cathedral Notre-Dame — UNESCO, dramatically sited capital atop sandstone cliffs above two river valleys",
+    ),
+    "valletta": CityPreset(
+        key             = "valletta",
+        label           = "Valletta — Republic Street / Grand Harbour",
+        bbox            = (35.901, 35.893, 14.519, 14.504),
+        building_height = 14.0,
+        notes           = "St John's Co-Cathedral, Grand Harbour, Upper Barrakka Gardens, Republic Street — UNESCO, Europe's smallest capital, Baroque Order of Malta fortified city",
+    ),
+    "tallinn": CityPreset(
+        key             = "tallinn",
+        label           = "Tallinn — Old Town (Vanalinn)",
+        bbox            = (59.444, 59.431, 24.757, 24.731),
+        building_height = 12.0,
+        notes           = "Toompea upper town, Town Hall Square, St Olaf's Church, medieval towers — UNESCO, best-preserved Hanseatic medieval city in Northern Europe",
+    ),
+    "riga": CityPreset(
+        key             = "riga",
+        label           = "Riga — Old Town / Art Nouveau Quarter",
+        bbox            = (56.954, 56.942, 24.121, 24.098),
+        building_height = 16.0,
+        notes           = "Blackheads House, Town Hall Square, Dom Cathedral, Alberta iela Art Nouveau facades — UNESCO, world's finest Art Nouveau streetscapes alongside Hanseatic old town",
+    ),
+    "vilnius": CityPreset(
+        key             = "vilnius",
+        label           = "Vilnius — Old Town / Gediminas Tower",
+        bbox            = (54.690, 54.677, 25.295, 25.272),
+        building_height = 14.0,
+        notes           = "Gediminas Tower, Cathedral Square, Užupis bohemian quarter, Pilies Street — UNESCO, largest surviving Baroque old town in Northern Europe",
+    ),
+    "krakow": CityPreset(
+        key             = "krakow",
+        label           = "Kraków — Rynek Główny / Wawel",
+        bbox            = (50.066, 50.050, 19.950, 19.924),
+        building_height = 16.0,
+        notes           = "Rynek Główny (Europe's largest medieval market square), Wawel Royal Castle, St Mary's Basilica, Kazimierz Jewish Quarter — UNESCO",
+    ),
+    "salzburg": CityPreset(
+        key             = "salzburg",
+        label           = "Salzburg — Altstadt / Getreidegasse",
+        bbox            = (47.804, 47.792, 13.057, 13.034),
+        building_height = 18.0,
+        notes           = "Getreidegasse, Salzburg Cathedral, Residenzplatz, Hohensalzburg Fortress approach — UNESCO Baroque Alpine city, Mozart birthplace",
+    ),
+    "porto": CityPreset(
+        key             = "porto",
+        label           = "Porto — Ribeira / Dom Luís Bridge",
+        bbox            = (41.148, 41.135, -8.601, -8.624),
+        building_height = 14.0,
+        notes           = "Ribeira waterfront, Dom Luís I Bridge, Palácio da Bolsa — UNESCO, azulejo-tiled Baroque facades, port wine lodges across the Douro",
+    ),
+    "cairo": CityPreset(
+        key             = "cairo",
+        label           = "Cairo — Islamic Cairo / Khan el-Khalili",
+        bbox            = (30.056, 30.038, 31.274, 31.253),
+        building_height = 12.0,
+        notes           = "Khan el-Khalili bazaar, Al-Azhar Mosque, Fatimid al-Qahira medieval core — UNESCO Historic Cairo, densest surviving medieval Islamic city fabric",
+    ),
+    "fez": CityPreset(
+        key             = "fez",
+        label           = "Fez — Fès el-Bali (Old Medina)",
+        bbox            = (34.071, 34.054, -4.963, -4.989),
+        building_height = 8.0,
+        notes           = "World's largest car-free urban zone, Al-Qarawiyyin (oldest university), Chouara tanneries — UNESCO, most complex medina on Earth",
+    ),
+    "jerusalem": CityPreset(
+        key             = "jerusalem",
+        label           = "Jerusalem — Old City",
+        bbox            = (31.785, 31.769, 35.243, 35.224),
+        building_height = 10.0,
+        notes           = "Jewish Quarter, Church of the Holy Sepulchre, Dome of the Rock, Western Wall — UNESCO, holy to Judaism, Christianity and Islam",
+    ),
+    "hoi-an": CityPreset(
+        key             = "hoi-an",
+        label           = "Hội An — Ancient Town",
+        bbox            = (15.882, 15.874, 108.345, 108.328),
+        building_height = 7.0,
+        notes           = "Japanese Covered Bridge, Chinese Assembly Halls, merchant house facades — UNESCO, outstanding 15th–19th c. Southeast Asian trading architecture",
+    ),
+    "pingyao": CityPreset(
+        key             = "pingyao",
+        label           = "Pingyao — Ancient Walled City",
+        bbox            = (37.203, 37.188, 112.186, 112.163),
+        building_height = 8.0,
+        notes           = "Ming-dynasty city walls, Rishengchang Exchange House (world's first bank), courtyard houses — UNESCO, best-preserved ancient Han Chinese city",
+    ),
+    "havana": CityPreset(
+        key             = "havana",
+        label           = "Havana — Habana Vieja",
+        bbox            = (23.145, 23.129, -82.339, -82.361),
+        building_height = 14.0,
+        notes           = "Plaza Vieja, Plaza de la Catedral, Obispo Street — UNESCO, crumbling Spanish Baroque and Art Deco streetscapes",
+    ),
+    "cusco": CityPreset(
+        key             = "cusco",
+        label           = "Cusco — Historic Centre",
+        bbox            = (-13.508, -13.524, -71.967, -71.987),
+        building_height = 8.0,
+        notes           = "Plaza de Armas, Qorikancha Inca temple, San Blas barrio — UNESCO, Inca precision-cut stonework foundations beneath Spanish colonial churches",
+    ),
+    "cartagena": CityPreset(
+        key             = "cartagena",
+        label           = "Cartagena — Old Walled City",
+        bbox            = (10.431, 10.415, -75.535, -75.558),
+        building_height = 10.0,
+        notes           = "Las Murallas city walls, Plaza de Bolívar, colourful colonial facades — UNESCO, finest Spanish colonial military architecture in the Americas",
+    ),
+
+    "zanzibar": CityPreset(
+        key             = "zanzibar",
+        label           = "Zanzibar — Stone Town",
+        bbox            = (-6.155, -6.172, 39.200, 39.181),
+        building_height = 8.0,
+        notes           = "House of Wonders, Old Fort, Arab-Omani merchant houses, carved wooden doors — UNESCO, Swahili-Arab-Persian-Indian architectural fusion on the Indian Ocean",
+    ),
+    # ── New Zealand ───────────────────────────────────────────────────────────
+    "nz-taranaki": CityPreset(
+        key             = "nz-taranaki",
+        label           = "Mt. Taranaki — Egmont Volcano, New Zealand",
+        bbox            = (-39.080, -39.510, 174.310, 173.820),
+        building_height = 5.0,
+        notes           = "Near-perfect symmetrical stratovolcano (2,518 m), 'Fuji of the Southern Hemisphere' — use --volcano --volcano-height 2518 --volcano-radius 25000 for the cone mesh",
+    ),
+    # ── Italy (Campania) ──────────────────────────────────────────────────────
+    "naples": CityPreset(
+        key             = "naples",
+        label           = "Naples — Centro Storico / Spaccanapoli",
+        bbox            = (40.852, 40.836, 14.268, 14.247),
+        building_height = 14.0,
+        notes           = "Piazza del Plebiscito, Royal Palace, San Carlo, Spaccanapoli axis, Castel Nuovo — UNESCO, largest historic centre in Europe, dense 4–6 storey fabric",
+    ),
+    # ── Terrain / Volcano presets ─────────────────────────────────────────────
+    # Location bboxes for volcano scenes.  Combine with --volcano to generate a
+    # parametric cone instead of fetching OSM buildings.
+    "tokyo-fujihama": CityPreset(
+        key             = "tokyo-fujihama",
+        label           = "Fujisan — Mt. Fuji / Kawaguchiko",
+        bbox            = (35.450, 35.270, 138.840, 138.620),
+        building_height = 7.0,
+        notes           = "Mt. Fuji stratovolcano (3,776 m) — use --volcano for the mountain cone; buildings-only fetch returns sparse 5th-station / Kawaguchiko lakeshore facilities",
+    ),
+    "mexico-popo": CityPreset(
+        key             = "mexico-popo",
+        label           = "Popocatépetl — Active Stratovolcano",
+        bbox            = (19.100, 18.945, -98.540, -98.705),
+        building_height = 5.0,
+        notes           = "Active stratovolcano 5,426 m asl, 70 km SE of Mexico City — use --volcano for the cone mesh; sparse OSM coverage inside the exclusion zone",
+    ),
+    "quito-pichincha": CityPreset(
+        key             = "quito-pichincha",
+        label           = "Pichincha — Twin-Peaked Stratovolcano above Quito",
+        bbox            = (-0.080, -0.265, -78.488, -78.700),
+        building_height = 5.0,
+        notes           = "Rucu (4,696 m) and Guagua Pichincha (4,784 m) directly west of Quito city centre — use --volcano for the cone mesh",
+    ),
+    # ── Ukraine ───────────────────────────────────────────────────────────────
+    "kyiv": CityPreset(
+        key             = "kyiv",
+        label           = "Kyiv — Maidan Nezalezhnosti / Khreshchatyk",
+        bbox            = (50.457, 50.444, 30.527, 30.509),
+        building_height = 18.0,
+        notes           = "Independence Square (Maidan), Khreshchatyk boulevard, Bessarabska market — Stalinist-era civic buildings alongside 19th-c. eclectic facades; the symbolic heart of modern Ukraine",
+    ),
+    "kyiv-lavra": CityPreset(
+        key             = "kyiv-lavra",
+        label           = "Kyiv — Pechersk Lavra / Cave Monastery",
+        bbox            = (50.439, 50.427, 30.562, 30.546),
+        building_height = 14.0,
+        notes           = "Kyivo-Pecherska Lavra (UNESCO): Dormition Cathedral, Great Lavra Bell Tower (96 m), Baroque refectory church, underground cave system — hilltop monastery complex above the Dnipro river",
+    ),
+    "lviv": CityPreset(
+        key             = "lviv",
+        label           = "Lviv — Rynok Square / Old Town",
+        bbox            = (49.845, 49.834, 24.038, 24.019),
+        building_height = 16.0,
+        notes           = "Rynok Square, Latin Cathedral, Dominican Cathedral, Black Stone House, Dormition Church — UNESCO, finest Renaissance-to-Baroque streetscape in Eastern Europe; cross-roads of Polish, Austrian and Ukrainian culture",
+    ),
+    "odesa": CityPreset(
+        key             = "odesa",
+        label           = "Odesa — Potemkin Steps / Primorsky Boulevard",
+        bbox            = (46.490, 46.480, 30.739, 30.724),
+        building_height = 16.0,
+        notes           = "Odesa Opera House, Potemkin Steps (192 granite treads), Primorsky Boulevard, Vorontsov Palace — Neoclassical Black Sea port-city grid; Eisenstein filming location",
+    ),
+    "kharkiv": CityPreset(
+        key             = "kharkiv",
+        label           = "Kharkiv — Freedom Square / Derzhprom",
+        bbox            = (49.999, 49.991, 36.236, 36.219),
+        building_height = 20.0,
+        notes           = "Derzhprom (1928 — world's first Soviet constructivist skyscraper complex), Freedom Square (one of Europe's largest at 12 ha), Gosprom, Assumption Cathedral — monumental avant-garde Soviet ensemble",
+    ),
+    "chernivtsi": CityPreset(
+        key             = "chernivtsi",
+        label           = "Chernivtsi — University / Theatre Square",
+        bbox            = (48.301, 48.290, 25.943, 25.922),
+        building_height = 12.0,
+        notes           = "Chernivtsi University (UNESCO — Residence of Bukovinian Metropolitans, 1882): Moorish-Gothic-Romanesque complex by Czech architect Hlavka, with Byzantine domed chapel and ornate brickwork — Austro-Hungarian Bukovina gem",
+    ),
+    "kamianets": CityPreset(
+        key             = "kamianets",
+        label           = "Kamianets-Podilskyi — Fortress / Smotrych Canyon",
+        bbox            = (48.682, 48.668, 26.581, 26.558),
+        building_height = 12.0,
+        notes           = "Medieval fortress on a rock island almost entirely encircled by a canyon bend of the Smotrych river — one of Europe's most dramatic castle settings; combine with --dem for the canyon topography",
+    ),
+    "hoverla": CityPreset(
+        key             = "hoverla",
+        label           = "Hoverla — Highest Peak of Ukraine / Chornohora Massif",
+        bbox            = (48.220, 48.060, 24.620, 24.380),
+        building_height = 5.0,
+        notes           = "Hoverla (2,061 m) — highest summit of the Ukrainian Carpathians; Chornohora massif, Carpathian Biosphere Reserve. Use --volcano --volcano-height 2061 --volcano-radius 8000 for the mountain cone",
+    ),
+    # ── Poland ────────────────────────────────────────────────────────────────
+    "warsaw": CityPreset(
+        key             = "warsaw",
+        label           = "Warsaw — Stare Miasto / Royal Castle",
+        bbox            = (52.254, 52.244, 21.016, 20.999),
+        building_height = 14.0,
+        notes           = "Royal Castle, Old Town Market Square, St John's Cathedral — UNESCO; entire historic centre meticulously rebuilt from rubble after 90% destruction in 1944",
+    ),
+    "gdansk": CityPreset(
+        key             = "gdansk",
+        label           = "Gdańsk — Długi Targ / Motława Quay",
+        bbox            = (54.352, 54.343, 18.655, 18.641),
+        building_height = 16.0,
+        notes           = "Długi Targ, Green Gate, Golden Gate, St Mary's (largest brick Gothic church in the world), Motława canal — Hanseatic merchant city; Solidarność birthplace",
+    ),
+    "wroclaw": CityPreset(
+        key             = "wroclaw",
+        label           = "Wrocław — Rynek / Cathedral Island",
+        bbox            = (51.116, 51.104, 17.040, 17.018),
+        building_height = 18.0,
+        notes           = "Rynek market square, Gothic Town Hall, Cathedral Island (Ostrów Tumski), Wrocław University — Silesian city of 12 islands; architectural layers from Romanesque to Modernist",
+    ),
+    # ── Bosnia & Herzegovina ──────────────────────────────────────────────────
+    "sarajevo": CityPreset(
+        key             = "sarajevo",
+        label           = "Sarajevo — Baščaršija / Latin Bridge",
+        bbox            = (43.861, 43.851, 18.435, 18.415),
+        building_height = 10.0,
+        notes           = "Baščaršija Ottoman bazaar, Gazi Husrev-beg Mosque, Latin Bridge (Franz Ferdinand assassination site, 1914), Vijećnica City Hall — Ottoman, Austro-Hungarian and Yugoslav layers compressed into a mountain valley",
+    ),
+    "mostar": CityPreset(
+        key             = "mostar",
+        label           = "Mostar — Stari Most / Kujundžiluk Bazaar",
+        bbox            = (43.340, 43.330, 17.816, 17.799),
+        building_height = 8.0,
+        notes           = "Stari Most (Old Bridge, 1557, UNESCO), Kujundžiluk Ottoman bazaar, Koski Mehmed-Pasha Mosque — single-arch Ottoman bridge over the emerald Neretva gorge; dramatic canyon setting ideal for --dem terrain",
+    ),
+    # ── Serbia ────────────────────────────────────────────────────────────────
+    "belgrade": CityPreset(
+        key             = "belgrade",
+        label           = "Belgrade — Kalemegdan / Knez Mihajlova",
+        bbox            = (44.825, 44.815, 20.461, 20.444),
+        building_height = 18.0,
+        notes           = "Kalemegdan Fortress at the Sava–Danube confluence, Knez Mihajlova pedestrian street, National Theatre — Roman, Byzantine, Ottoman and Habsburg strata at a strategic river junction",
+    ),
+    # ── Romania ───────────────────────────────────────────────────────────────
+    "bucharest": CityPreset(
+        key             = "bucharest",
+        label           = "Bucharest — Palace of Parliament / Bulevardul Unirii",
+        bbox            = (44.432, 44.422, 26.098, 26.081),
+        building_height = 20.0,
+        notes           = "Palace of the Parliament (world's 2nd largest building by volume, 12 storeys, 1984–1997), Bulevardul Unirii — Ceaușescu's megalomaniac civic axis replacing a demolished Ottoman-era neighbourhood",
+    ),
+    "brasov": CityPreset(
+        key             = "brasov",
+        label           = "Brașov — Council Square / Black Church",
+        bbox            = (45.645, 45.635, 25.597, 25.577),
+        building_height = 12.0,
+        notes           = "Piața Sfatului, Black Church (largest Gothic church in Romania), medieval city walls, Saxon towers — Transylvanian fortified Saxon city ringed by the Carpathian Postăvar massif; combine with --dem for the mountain cirque",
+    ),
+    "sighisoara": CityPreset(
+        key             = "sighisoara",
+        label           = "Sighișoara — Citadel / Clock Tower",
+        bbox            = (46.222, 46.214, 24.799, 24.781),
+        building_height = 10.0,
+        notes           = "Cetățuie citadel, Clock Tower (14th c.), coloured merchant houses, covered wooden stairway to hill church — UNESCO; only continuously inhabited medieval citadel in Europe; birthplace of Vlad the Impaler",
+    ),
+    # ── Bulgaria ──────────────────────────────────────────────────────────────
+    "sofia": CityPreset(
+        key             = "sofia",
+        label           = "Sofia — Alexander Nevsky / Vitosha Boulevard",
+        bbox            = (42.701, 42.691, 23.336, 23.318),
+        building_height = 16.0,
+        notes           = "Alexander Nevsky Cathedral (largest Orthodox church on the Balkans), Vitosha Boulevard, National Palace of Culture, Ivan Vazov Theatre — Sofia above the ancient Thracian Serdica, Mt. Vitosha as backdrop",
+    ),
+    "plovdiv": CityPreset(
+        key             = "plovdiv",
+        label           = "Plovdiv — Old Town / Kapana",
+        bbox            = (42.153, 42.143, 24.754, 24.736),
+        building_height = 10.0,
+        notes           = "National Revival merchant houses on the Three Hills, Dzhumaya Mosque, Roman amphitheatre (intact), Kapana creative district — European Capital of Culture 2019; one of Europe's oldest continuously inhabited cities (8,000 years)",
+    ),
+    # ── North Macedonia ───────────────────────────────────────────────────────
+    "ohrid": CityPreset(
+        key             = "ohrid",
+        label           = "Ohrid — Old Town / Lake Ohrid",
+        bbox            = (41.121, 41.111, 20.805, 20.790),
+        building_height = 9.0,
+        notes           = "Plaošnik church complex, Samuel's Fortress, St John at Kaneo (cliff-perched Byzantine church above the lake) — UNESCO natural and cultural WHS; Lake Ohrid is one of Europe's oldest and deepest lakes",
+    ),
+    # ── Belarus ───────────────────────────────────────────────────────────────
+    "minsk": CityPreset(
+        key             = "minsk",
+        label           = "Minsk — Independence Avenue / Stalin Baroque",
+        bbox            = (53.908, 53.898, 27.563, 27.545),
+        building_height = 22.0,
+        notes           = "Independence Avenue (one of Europe's most intact Stalinist ensembles, 15 km), Government House, Red Church, Gates of Minsk triumphal towers — entirely rebuilt post-WWII as a Soviet showcase capital; extraordinary architectural time-capsule",
+    ),
+    # ── Alps / Dolomites ──────────────────────────────────────────────────────
+    "dolomiti-tre-cime": CityPreset(
+        key             = "dolomiti-tre-cime",
+        label           = "Tre Cime di Lavaredo — Dolomites, Italy",
+        bbox            = (46.640, 46.590, 12.340, 12.260),
+        building_height = 5.0,
+        notes           = "Tre Cime (2,999 m) — the iconic triple limestone pinnacle; UNESCO Dolomites WHS. OSM gives the Auronzo hut and rifugi. Use --dem for the scree-and-cliff terrain or --volcano for a simplified cone backdrop",
+    ),
+    "dolomiti-marmolada": CityPreset(
+        key             = "dolomiti-marmolada",
+        label           = "Marmolada — Queen of the Dolomites",
+        bbox            = (46.470, 46.400, 11.900, 11.810),
+        building_height = 5.0,
+        notes           = "Marmolada (3,343 m) — highest peak of the Dolomites; shrinking glacier on the north face, WWI Città di Ghiaccio ice tunnels. Use --dem for the glacier/ridge topography",
+    ),
+    "dolomiti-seceda": CityPreset(
+        key             = "dolomiti-seceda",
+        label           = "Seceda — Val Gardena / Odle Group, Dolomites",
+        bbox            = (46.630, 46.530, 11.770, 11.650),
+        building_height = 6.0,
+        notes           = "Seceda plateau (2,518 m) above Ortisei; Odle/Geisler pinnacles behind, Val Gardena Ladin villages below — photogenic layered ridge with cable-car infrastructure well-mapped in OSM",
+    ),
+    "matterhorn": CityPreset(
+        key             = "matterhorn",
+        label           = "Matterhorn — Zermatt, Swiss/Italian Alps",
+        bbox            = (46.020, 45.930, 7.720, 7.580),
+        building_height = 8.0,
+        notes           = "Matterhorn (4,478 m) — near-perfect pyramid; Zermatt car-free resort village at its foot. OSM: dense chalet and hotel fabric. Use --volcano --volcano-height 4478 --volcano-radius 6000 for the iconic pyramid cone",
+    ),
+    "mont-blanc": CityPreset(
+        key             = "mont-blanc",
+        label           = "Mont Blanc — Chamonix / Highest Alpine Summit",
+        bbox            = (45.950, 45.760, 7.010, 6.750),
+        building_height = 8.0,
+        notes           = "Mont Blanc (4,808 m) — highest peak in the Alps and Western Europe; Chamonix resort town below, Aiguilles Rouges opposite, Mer de Glace glacier. Use --dem for glacier/moraine topography; OSM gives Chamonix town fabric",
+    ),
+    "eiger": CityPreset(
+        key             = "eiger",
+        label           = "Eiger — Grindelwald / Bernese Oberland",
+        bbox            = (46.650, 46.510, 8.080, 7.930),
+        building_height = 8.0,
+        notes           = "Eiger (3,967 m) north face — 1,800 m of vertical limestone; Grindelwald village at the base, Jungfrau railway station at 3,454 m. OSM has the village and rack-railway infrastructure",
+    ),
+    "zugspitze": CityPreset(
+        key             = "zugspitze",
+        label           = "Zugspitze — Garmisch-Partenkirchen, Highest German Peak",
+        bbox            = (47.460, 47.380, 11.030, 10.920),
+        building_height = 8.0,
+        notes           = "Zugspitze (2,962 m) — highest peak in Germany; Garmisch-Partenkirchen resort and 1936 Winter Olympics venue below. Use --dem for the Zugspitzplatt glacial plateau; OSM gives the town and cable-car termini",
+    ),
+    "grossglockner": CityPreset(
+        key             = "grossglockner",
+        label           = "Grossglockner — Highest Peak in Austria",
+        bbox            = (47.120, 47.020, 12.740, 12.620),
+        building_height = 5.0,
+        notes           = "Grossglockner (3,798 m) — Austria's highest summit; Pasterze glacier (longest in the Eastern Alps), Franz-Josefs-Höhe viewpoint, Hochalpenstraße alpine road. Use --dem for the glacier cirque topography",
+    ),
+    # ── Patagonia ─────────────────────────────────────────────────────────────
+    "torres-del-paine": CityPreset(
+        key             = "torres-del-paine",
+        label           = "Torres del Paine — Patagonian Granite Towers, Chile",
+        bbox            = (-50.840, -51.100, -72.700, -73.050),
+        building_height = 4.0,
+        notes           = "Torres del Paine (2,850 m) and Cuernos del Paine — UNESCO Biosphere Reserve; vertical granite monoliths rising 2,000 m directly from the Patagonian steppe. Use --dem for the massif terrain; OSM maps park infrastructure and trekking huts",
+    ),
+    "fitz-roy": CityPreset(
+        key             = "fitz-roy",
+        label           = "Fitz Roy — El Chaltén / Patagonian Andes, Argentina",
+        bbox            = (-49.150, -49.380, -72.900, -73.200),
+        building_height = 4.0,
+        notes           = "Monte Fitz Roy / Cerro Chaltén (3,405 m) and Cerro Torre (3,128 m) — jagged granite spires perpetually shrouded in cloud; El Chaltén trekking village below. Use --dem; OSM has village and trail hut network",
+    ),
+    # ── Caucasus / Near East ──────────────────────────────────────────────────
+    "elbrus": CityPreset(
+        key             = "elbrus",
+        label           = "Mt. Elbrus — Highest Peak in Europe / Greater Caucasus",
+        bbox            = (43.500, 43.180, 42.650, 42.200),
+        building_height = 5.0,
+        notes           = "Elbrus (5,642 m west summit) — highest peak in Europe and the Caucasus; twin-summit dormant volcano with 22 glaciers. Use --volcano --volcano-height 5642 --volcano-radius 20000 for the broad dome cone",
+    ),
+    "kazbek": CityPreset(
+        key             = "kazbek",
+        label           = "Mt. Kazbek — Georgian Military Highway / Gergeti Trinity Church",
+        bbox            = (42.780, 42.580, 44.620, 44.380),
+        building_height = 5.0,
+        notes           = "Kazbek (5,047 m) — dormant stratovolcano above the Daryal Gorge; Gergeti Trinity Church (14th c.) perched at 2,170 m on a spur below the glacier — one of the world's most photogenic mountain churches",
+    ),
+    "ararat": CityPreset(
+        key             = "ararat",
+        label           = "Mt. Ararat — Ağrı Dağı, Eastern Turkey",
+        bbox            = (39.900, 39.450, 44.600, 43.950),
+        building_height = 5.0,
+        notes           = "Great Ararat (5,137 m) — sacred dormant stratovolcano; near-perfect cone visible from Yerevan, Noah's Ark tradition, Armenian national symbol (despite being in Turkey). Use --volcano --volcano-height 5137 --volcano-radius 20000",
+    ),
+    # ── Iceland ───────────────────────────────────────────────────────────────
+    "snaefellsjokull": CityPreset(
+        key             = "snaefellsjokull",
+        label           = "Snæfellsjökull — Glacier Volcano / Snæfellsnes, Iceland",
+        bbox            = (64.930, 64.650, -23.550, -23.980),
+        building_height = 4.0,
+        notes           = "Snæfellsjökull (1,446 m) — Jules Verne's 'Journey to the Centre of the Earth' entrance; glacier-capped stratovolcano at the tip of Snæfellsnes peninsula. Use --volcano --volcano-height 1446 --volcano-radius 8000",
+    ),
+    "hekla": CityPreset(
+        key             = "hekla",
+        label           = "Hekla — Most Active Volcano in Iceland",
+        bbox            = (64.100, 63.850, -19.450, -19.900),
+        building_height = 4.0,
+        notes           = "Hekla (1,491 m) — elongated ridge fissure volcano, erupted 20+ times since 874 AD; historically called 'Gateway to Hell' in medieval Europe. Use --volcano --volcano-height 1491 --volcano-radius 12000",
+    ),
+    "eyjafjallajokull": CityPreset(
+        key             = "eyjafjallajokull",
+        label           = "Eyjafjallajökull — Glacier Volcano, Iceland",
+        bbox            = (63.720, 63.520, -19.400, -19.900),
+        building_height = 4.0,
+        notes           = "Eyjafjallajökull (1,651 m) — glacier-topped stratovolcano whose 2010 eruption shut European airspace for 6 days. Use --volcano --volcano-height 1651 --volcano-radius 10000",
+    ),
+    # ── South America volcanoes ───────────────────────────────────────────────
+    "cotopaxi": CityPreset(
+        key             = "cotopaxi",
+        label           = "Cotopaxi — Active Stratovolcano, Ecuador",
+        bbox            = (-0.500, -0.900, -78.200, -78.700),
+        building_height = 5.0,
+        notes           = "Cotopaxi (5,897 m) — one of the world's highest active volcanoes; near-perfect snow-capped cone rising above the Andean páramo. Use --volcano --volcano-height 5897 --volcano-radius 15000",
+    ),
+    "chimborazo": CityPreset(
+        key             = "chimborazo",
+        label           = "Chimborazo — Farthest Point from Earth's Centre, Ecuador",
+        bbox            = (-1.320, -1.620, -78.650, -78.980),
+        building_height = 5.0,
+        notes           = "Chimborazo (6,268 m) — Ecuador's highest peak; due to equatorial bulge its summit is the farthest point from Earth's centre; dormant stratovolcano with multiple glacier-covered summits. Use --volcano --volcano-height 6268 --volcano-radius 18000",
+    ),
+    "aconcagua": CityPreset(
+        key             = "aconcagua",
+        label           = "Aconcagua — Highest Peak in the Americas, Argentina",
+        bbox            = (-32.440, -32.860, -69.750, -70.200),
+        building_height = 4.0,
+        notes           = "Aconcagua (6,961 m) — highest mountain in both the Western and Southern Hemispheres; non-volcanic but formed by tectonic collision of Nazca and South American plates. Use --volcano --volcano-height 6961 --volcano-radius 15000 for a simplified cone",
+    ),
+    "villarrica": CityPreset(
+        key             = "villarrica",
+        label           = "Villarrica — Active Cone Volcano / Lake District, Chile",
+        bbox            = (-39.250, -39.600, -71.750, -72.150),
+        building_height = 5.0,
+        notes           = "Villarrica (2,847 m) — one of Chile's most active volcanoes; near-perfect snow-capped cone above Lago Villarrica and the resort town of Pucón. Use --volcano --volcano-height 2847 --volcano-radius 10000",
+    ),
+    "osorno": CityPreset(
+        key             = "osorno",
+        label           = "Osorno — Perfect Cone Volcano / Chilean Lake District",
+        bbox            = (-40.900, -41.300, -72.250, -72.750),
+        building_height = 5.0,
+        notes           = "Osorno (2,652 m) — perfectly symmetrical glaciated stratovolcano reflected in Lago Llanquihue; often called the 'Fuji of South America'. Use --volcano --volcano-height 2652 --volcano-radius 10000",
+    ),
+    # ── Africa ────────────────────────────────────────────────────────────────
+    "kilimanjaro": CityPreset(
+        key             = "kilimanjaro",
+        label           = "Kilimanjaro — Highest Peak in Africa, Tanzania",
+        bbox            = (-2.900, -3.250, 37.550, 37.150),
+        building_height = 5.0,
+        notes           = "Kibo summit (5,895 m) — Africa's highest peak; free-standing stratovolcano rising 4,877 m above the Tanzanian savanna; three volcanic cones (Kibo, Mawenzi, Shira). Use --volcano --volcano-height 5895 --volcano-radius 25000 for the mountain cone",
+    ),
+    # ── Hawaii ────────────────────────────────────────────────────────────────
+    "mauna-kea": CityPreset(
+        key             = "mauna-kea",
+        label           = "Mauna Kea — Tallest Mountain from Base, Hawai'i",
+        bbox            = (20.000, 19.600, -155.200, -155.750),
+        building_height = 5.0,
+        notes           = "Mauna Kea (4,205 m above sea level; 10,210 m from ocean floor — tallest from base) — dormant shield volcano; 13 astronomical observatories on summit in arid cold desert. Use --volcano --volcano-height 4205 --volcano-radius 35000 for the broad shield dome",
+    ),
+    "mauna-loa": CityPreset(
+        key             = "mauna-loa",
+        label           = "Mauna Loa — Largest Volcano on Earth, Hawai'i",
+        bbox            = (19.700, 19.200, -155.300, -155.900),
+        building_height = 5.0,
+        notes           = "Mauna Loa (4,169 m) — largest volcano on Earth by volume (75,000 km³); broad shield profile, active (erupted 2022). Use --volcano --volcano-height 4169 --volcano-radius 50000 for the shield shape",
+    ),
+    # ── Pacific Ring of Fire ──────────────────────────────────────────────────
+    "mayon": CityPreset(
+        key             = "mayon",
+        label           = "Mayon — World's Most Perfect Volcanic Cone, Philippines",
+        bbox            = (13.380, 13.100, 123.820, 123.540),
+        building_height = 6.0,
+        notes           = "Mayon (2,463 m) — most active volcano in the Philippines, extraordinary 47.5° slope symmetry; Legazpi city and Daraga church in the foreground. Use --volcano --volcano-height 2463 --volcano-radius 8000",
+    ),
+    "merapi": CityPreset(
+        key             = "merapi",
+        label           = "Merapi — Most Active Volcano in Java / Indonesia",
+        bbox            = (-7.380, -7.700, 110.580, 110.300),
+        building_height = 6.0,
+        notes           = "Merapi (2,930 m) — most active volcano in Indonesia; pyroclastic flow scars on the slopes, Prambanan temple complex 28 km south. Use --volcano --volcano-height 2930 --volcano-radius 12000",
+    ),
+    "bromo": CityPreset(
+        key             = "bromo",
+        label           = "Mt. Bromo — Caldera / Tengger Massif, Java",
+        bbox            = (-7.840, -8.060, 113.070, 112.820),
+        building_height = 4.0,
+        notes           = "Bromo (2,329 m) — active volcano inside the enormous Tengger caldera (10 km wide sea-of-sand); Semeru (3,676 m — Java's highest) on the horizon. Use --volcano --volcano-height 2329 --volcano-radius 5000 for the inner cone",
+    ),
+    # ── North America (mountains) ─────────────────────────────────────────────
+    "rainier": CityPreset(
+        key             = "rainier",
+        label           = "Mt. Rainier — Most Glaciated Peak in Contiguous USA",
+        bbox            = (47.000, 46.680, -121.520, -121.960),
+        building_height = 5.0,
+        notes           = "Rainier (4,392 m) — active stratovolcano; 26 glaciers covering 91 km²; most glaciated peak in the contiguous US, a Decade Volcano. Use --volcano --volcano-height 4392 --volcano-radius 20000",
+    ),
+    "st-helens": CityPreset(
+        key             = "st-helens",
+        label           = "Mt. St. Helens — 1980 Eruption Crater, Washington",
+        bbox            = (46.330, 46.050, -121.990, -122.420),
+        building_height = 5.0,
+        notes           = "Mt. St. Helens (2,549 m after the 1980 eruption removed 400 m of summit) — lateral blast removed the north flank; crater open to the north. Use --volcano --volcano-height 2549 --volcano-radius 10000",
+    ),
+    "denali": CityPreset(
+        key             = "denali",
+        label           = "Denali — Highest Peak in North America, Alaska",
+        bbox            = (63.200, 62.900, -150.750, -151.300),
+        building_height = 4.0,
+        notes           = "Denali (6,190 m) — highest peak in North America; McKinley massif rising 5,500 m from the Kahiltna glacier base — greatest base-to-summit rise of any land peak. Use --volcano --volcano-height 6190 --volcano-radius 30000",
+    ),
+    # ── New Zealand (additional) ──────────────────────────────────────────────
+    "aoraki": CityPreset(
+        key             = "aoraki",
+        label           = "Aoraki / Mt. Cook — Highest Peak in New Zealand",
+        bbox            = (-43.420, -43.750, 170.320, 169.940),
+        building_height = 4.0,
+        notes           = "Aoraki/Mt. Cook (3,724 m) — highest peak in New Zealand; Tasman Glacier (longest in Australasia) on its eastern flank, Hooker Valley below. Use --dem or --volcano --volcano-height 3724 --volcano-radius 12000",
+    ),
+    "ngauruhoe": CityPreset(
+        key             = "ngauruhoe",
+        label           = "Ngauruhoe — Mt. Doom / Tongariro National Park, NZ",
+        bbox            = (-39.020, -39.280, 175.780, 175.470),
+        building_height = 4.0,
+        notes           = "Ngauruhoe (2,291 m) — near-perfect active andesite cone, filmed as Mt. Doom in Lord of the Rings; adjacent Tongariro Red Crater and Blue Lake. Use --volcano --volcano-height 2291 --volcano-radius 5000",
+    ),
+    # ── Norway (terrain) ──────────────────────────────────────────────────────
+    "preikestolen": CityPreset(
+        key             = "preikestolen",
+        label           = "Preikestolen — Pulpit Rock / Lysefjord, Norway",
+        bbox            = (59.050, 58.910, 6.270, 6.100),
+        building_height = 5.0,
+        notes           = "Preikestolen (604 m) — flat-topped cliff rising vertically above Lysefjord; Forsand village and ferry dock below. Use --dem for the plateau and fjord topography; OSM maps the ferry terminal and trailhead",
+    ),
+    "lofoten": CityPreset(
+        key             = "lofoten",
+        label           = "Lofoten Islands — Dramatic Arctic Peaks, Norway",
+        bbox            = (68.230, 68.020, 14.650, 13.950),
+        building_height = 6.0,
+        notes           = "Svolværgeita and Vagakallen peaks (942 m) rising directly from the sea above the fishing village of Svolvær — UNESCO tentative site; red and yellow rorbu (fishermen's cabins) in OSM, knife-edge ridges for --dem",
     ),
 }
 
 # Canonical display order for `sdlos mesh presets` — grouped by region
 _PRESET_ORDER = [
     # Germany
-    "mainz", "cologne", "hamburg", "berlin",
+    "mainz", "mainz-core", "cologne", "hamburg", "berlin", "munich", "nurnberg", "frankfurt",
+    "freiburg", "lübeck", "regensburg",
     # Italy
-    "rome", "milan",
+    "rome", "milan", "florence", "venice", "naples",
     # France
     "paris",
     # Netherlands
     "amsterdam",
-    # UK
+    # Switzerland
+    "bern", "zurich", "lucerne",
+    # Belgium
+    "bruges",
+    # Luxembourg
+    "luxembourg",
+    # Malta
+    "valletta",
+    # United Kingdom
     "london",
+    # Norway
+    "oslo",
+    # Sweden
+    "stockholm", "malmo",
+    # Denmark
+    "copenhagen",
+    # Baltic
+    "tallinn", "riga", "vilnius",
     # Greece
     "athens",
-    # Central Europe capitals
-    "vienna", "prague", "budapest",
+    # Central Europe
+    "vienna", "salzburg", "prague", "budapest", "krakow",
     # Iberia
-    "lisbon", "madrid", "barcelona",
+    "lisbon", "porto", "madrid", "barcelona",
+    # Adriatic
+    "dubrovnik", "kotor",
+    # Albania
+    "tirana", "berat", "gjirokaster",
+    # Russia
+    "moscow",
+    # Canada
+    "toronto", "vancouver", "montreal", "calgary",
     # USA
-    "nyc", "chicago", "detroit", "philadelphia",
-    # Asia
-    "tokyo", "osaka", "kyoto",
+    "nyc", "chicago", "detroit", "philadelphia", "austin",
+    # Mexico
+    "mexico-city", "mexico-popo",
+    # Caribbean
+    "havana",
+    # South America
+    "quito", "rio", "cusco", "cartagena", "quito-pichincha",
+    # New Zealand
+    "nz-taranaki",
+    # Japan
+    "tokyo", "osaka", "kyoto", "kyoto-hiei", "tokyo-fujihama",
+    # East Asia
+    "seoul", "beijing", "pingyao",
     # Turkey
-    "cappadocia",
+    "istanbul", "cappadocia", "erciyes", "mt-hasan",
+    # Middle East
+    "dubai", "jerusalem",
+    # North Africa
+    "casablanca", "marrakesh", "fez",
+    # Egypt
+    "cairo",
+    # India
+    "mumbai", "delhi", "jaipur", "kolkata",
+    # Southeast Asia
+    "jakarta", "bangkok", "hoi-an",
+    # Nepal
+    "kathmandu",
+    # Australia
+    "sydney",
+    # East Africa
+    "zanzibar",
+    # Ukraine
+    "kyiv", "kyiv-lavra", "lviv", "odesa", "kharkiv", "chernivtsi", "kamianets",
+    "pripyat", "hoverla",
+    # Poland
+    "warsaw", "gdansk", "wroclaw",
+    # Bosnia & Herzegovina
+    "sarajevo", "mostar",
+    # Serbia
+    "belgrade",
+    # Romania
+    "bucharest", "brasov", "sighisoara",
+    # Bulgaria
+    "sofia", "plovdiv",
+    # North Macedonia
+    "ohrid",
+    # Belarus
+    "minsk",
+    # Alps / Dolomites
+    "dolomiti-tre-cime", "dolomiti-marmolada", "dolomiti-seceda",
+    "matterhorn", "mont-blanc", "eiger", "zugspitze", "grossglockner",
+    # Patagonia
+    "torres-del-paine", "fitz-roy",
+    # Caucasus / Near East
+    "elbrus", "kazbek", "ararat",
+    # Iceland
+    "snaefellsjokull", "hekla", "eyjafjallajokull",
+    # South America (volcanoes)
+    "cotopaxi", "chimborazo", "aconcagua", "villarrica", "osorno",
+    # Africa (mountains)
+    "kilimanjaro",
+    # Hawaii
+    "mauna-kea", "mauna-loa",
+    # Pacific Ring of Fire
+    "mayon", "merapi", "bromo",
+    # North America (mountains)
+    "rainier", "st-helens", "denali",
+    # New Zealand (additional)
+    "aoraki", "ngauruhoe",
+    # Norway (terrain)
+    "preikestolen", "lofoten",
 ]
 
 # Region grouping for the presets table display
 _PRESET_REGIONS: list[tuple[str, list[str]]] = [
-    ("Germany",         ["mainz", "cologne", "hamburg", "berlin"]),
-    ("Italy",           ["rome", "milan"]),
+    ("Germany",         ["mainz", "mainz-core", "cologne", "hamburg", "berlin", "munich", "nurnberg", "frankfurt", "freiburg", "lübeck", "regensburg"]),
+    ("Italy",           ["rome", "milan", "florence", "venice", "naples"]),
     ("France",          ["paris"]),
     ("Netherlands",     ["amsterdam"]),
+    ("Switzerland",     ["bern", "zurich", "lucerne"]),
+    ("Belgium",         ["bruges"]),
+    ("Luxembourg",      ["luxembourg"]),
+    ("Malta",           ["valletta"]),
     ("United Kingdom",  ["london"]),
+    ("Norway",          ["oslo"]),
+    ("Sweden",          ["stockholm", "malmo"]),
+    ("Denmark",         ["copenhagen"]),
+    ("Baltic",          ["tallinn", "riga", "vilnius"]),
     ("Greece",          ["athens"]),
-    ("Central Europe",  ["vienna", "prague", "budapest"]),
-    ("Iberia",          ["lisbon", "madrid", "barcelona"]),
-    ("USA",             ["nyc", "chicago", "detroit", "philadelphia"]),
-    ("Japan",           ["tokyo", "osaka", "kyoto"]),
-    ("Turkey",          ["cappadocia"]),
+    ("Central Europe",  ["vienna", "salzburg", "prague", "budapest", "krakow"]),
+    ("Iberia",          ["lisbon", "porto", "madrid", "barcelona"]),
+    ("Adriatic",        ["dubrovnik", "kotor"]),
+    ("Albania",         ["tirana", "berat", "gjirokaster"]),
+    ("Russia",          ["moscow"]),
+    ("Canada",          ["toronto", "vancouver", "montreal", "calgary"]),
+    ("USA",             ["nyc", "chicago", "detroit", "philadelphia", "austin"]),
+    ("Mexico",          ["mexico-city", "mexico-popo"]),
+    ("Caribbean",       ["havana"]),
+    ("South America",   ["quito", "rio", "cusco", "cartagena", "quito-pichincha"]),
+    ("Japan",           ["tokyo", "osaka", "kyoto", "kyoto-hiei", "tokyo-fujihama"]),
+    ("East Asia",       ["seoul", "beijing", "pingyao"]),
+    ("Turkey",          ["istanbul", "cappadocia", "erciyes", "mt-hasan"]),
+    ("Middle East",     ["dubai", "jerusalem"]),
+    ("North Africa",    ["casablanca", "marrakesh", "fez"]),
+    ("Egypt",           ["cairo"]),
+    ("India",           ["mumbai", "delhi", "jaipur", "kolkata"]),
+    ("Southeast Asia",  ["jakarta", "bangkok", "hoi-an"]),
+    ("Nepal",           ["kathmandu"]),
+    ("Australia",       ["sydney"]),
+    ("New Zealand",     ["nz-taranaki", "aoraki", "ngauruhoe"]),
+    ("East Africa",     ["zanzibar"]),
+    ("Ukraine",              ["kyiv", "kyiv-lavra", "lviv", "odesa", "kharkiv", "chernivtsi", "kamianets", "pripyat", "hoverla"]),
+    ("Poland",               ["warsaw", "gdansk", "wroclaw"]),
+    ("Bosnia & Herzegovina", ["sarajevo", "mostar"]),
+    ("Serbia",               ["belgrade"]),
+    ("Romania",              ["bucharest", "brasov", "sighisoara"]),
+    ("Bulgaria",             ["sofia", "plovdiv"]),
+    ("North Macedonia",      ["ohrid"]),
+    ("Belarus",              ["minsk"]),
+    ("Alps / Dolomites",     ["dolomiti-tre-cime", "dolomiti-marmolada", "dolomiti-seceda", "matterhorn", "mont-blanc", "eiger", "zugspitze", "grossglockner"]),
+    ("Patagonia",            ["torres-del-paine", "fitz-roy"]),
+    ("Caucasus / Near East", ["elbrus", "kazbek", "ararat"]),
+    ("Iceland",              ["snaefellsjokull", "hekla", "eyjafjallajokull"]),
+    ("S. America volcanoes", ["cotopaxi", "chimborazo", "aconcagua", "villarrica", "osorno"]),
+    ("Africa (mountains)",   ["kilimanjaro"]),
+    ("Hawaii",               ["mauna-kea", "mauna-loa"]),
+    ("Pacific Ring of Fire", ["mayon", "merapi", "bromo"]),
+    ("N. America mountains", ["rainier", "st-helens", "denali"]),
+    ("Norway (terrain)",     ["preikestolen", "lofoten"]),
 ]
 
-
-#  lazy import helper
 
 def _require_mesh_deps() -> None:
     """Raise a clean UsageError when the mesh optional deps are absent."""
@@ -374,8 +1414,6 @@ def _require_mesh_deps() -> None:
             "\nThen re-run your command."
         )
 
-
-#  bbox parsing
 
 def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
     """Parse ``"north,south,east,west"`` into a float 4-tuple.
@@ -407,7 +1445,6 @@ def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
     return north, south, east, west
 
 
-#  OSM height helpers
 
 def _building_height(row: "Any", default: float) -> float:  # noqa: F821
     """Return the best available building height from an OSM feature row.
@@ -675,6 +1712,10 @@ def _generate(
     no_cache: bool = False,
     endpoint: Optional[str] = None,
     timeout: int = 180,
+    volcano: bool = False,
+    volcano_height: float = 2000.0,
+    volcano_radius: float = 5000.0,
+    volcano_segments: int = 64,
     quiet: bool,
 ) -> Path:
     """Run the full generation pipeline and return the output path.
@@ -806,234 +1847,280 @@ def _generate(
         _tiles = [(north, south, east, west)]
         _log(f"  area {_area_m2 / 1e6:.2f} km² — single query")
 
-    #  2. Fetch OSM buildings (with local GeoJSON cache)
-    import geopandas as gpd
-
-    cp = _cache_path_for(north, south, east, west)
-
-    if cp.exists() and not no_cache:
-        _log(f"cache hit  {cp.name}  (use --no-cache to re-fetch)")
-        try:
-            gdf = gpd.read_file(str(cp))
-        except Exception:
-            _log("  [warn] cache read failed — re-fetching from OSM")
-            cp.unlink(missing_ok=True)
-            gdf = None
-    else:
-        gdf = None
-
-    if gdf is None:
-        _log("fetching OSM buildings …")
-        try:
-            _all_gdfs: list["gpd.GeoDataFrame"] = []
-            for _i, (_tn, _ts, _te, _tw) in enumerate(_tiles):
-                if len(_tiles) > 1:
-                    _log(
-                        f"  tile {_i + 1}/{len(_tiles)}  "
-                        f"N={_tn:.4f} S={_ts:.4f} E={_te:.4f} W={_tw:.4f}"
-                    )
-                def _fetch_tile(
-                    ep: str,
-                    tn: float = _tn, ts: float = _ts,
-                    te: float = _te, tw: float = _tw,
-                ) -> "gpd.GeoDataFrame":
-                    return _fetch_buildings_raw(
-                        north=tn, south=ts, east=te, west=tw,
-                        endpoint=ep,
-                        timeout=_http_timeout,
-                    )
-                _all_gdfs.append(
-                    _with_overpass_fallback(endpoints_to_try, _fetch_tile, quiet)
-                )
-
-            if len(_all_gdfs) == 1:
-                gdf = _all_gdfs[0]
-            else:
-                import pandas as _pd
-                gdf = gpd.GeoDataFrame(
-                    _pd.concat(_all_gdfs, ignore_index=True),
-                    crs=_all_gdfs[0].crs,
-                )
-                # Drop duplicate features that straddle tile boundaries.
-                _before = len(gdf)
-                gdf = gdf.drop_duplicates(subset=["geometry"])
-                if len(gdf) < _before:
-                    _log(
-                        f"  deduped  {_before - len(gdf)} duplicate features "
-                        f"across tile boundaries"
-                    )
-
-        except Exception as exc:
-            n_tried = len(endpoints_to_try)
-            raise click.ClickException(
-                f"OSM fetch failed on all {n_tried} endpoint(s): {exc}\n\n"
-                "Possible causes:\n"
-                "  • All Overpass mirrors are overloaded or down\n"
-                "      → check https://status.overpass-api.de/\n"
-                "      → wait a few minutes and retry\n"
-                "      → pin a specific mirror:  --endpoint URL\n"
-                "  • No internet connection\n"
-                "  • Bounding box is outside an area with OSM coverage\n\n"
-                "Public Overpass mirrors to try with --endpoint:\n"
-                "  https://overpass.kumi.systems/api/interpreter    (reliable)\n"
-                "  https://lz4.overpass-api.de/api/interpreter      (fast mirror)\n"
-                "  https://overpass.openstreetmap.fr/api/interpreter\n\n"
-                "Status page:  https://status.overpass-api.de/"
-            ) from exc
-
-        # Persist to cache (GeoJSON; columns with list values are dropped
-        # because GeoJSON does not support them).
-        try:
-            saveable = gdf.copy()
-            for col in saveable.columns:
-                if col == "geometry":
-                    continue
-                if saveable[col].apply(lambda x: isinstance(x, list)).any():
-                    saveable = saveable.drop(columns=[col])
-            saveable.to_file(str(cp), driver="GeoJSON")
-            _log(f"  cached   {cp.name}")
-        except Exception as exc:
-            _log(f"  [warn] could not write cache: {exc}")
-
-    _log(f"  {len(gdf)} features returned")
-
-    # 3. Project to metric CRS (UTM)
-    # osmnx returns WGS-84 (degrees). We need metres for extrusion height.
-    try:
-        gdf_proj = ox.projection.project_gdf(gdf)
-    except Exception:
-        # Fallback: use a simple equirectangular approximation if projection fails
-        gdf_proj = gdf
-
-    # 3b. Simplify + filter noise (after projection — coords now in metres)
-    # simplify(1.0) — removes sub-metre vertex noise from dense OSM traces
-    #                 without visibly changing building outlines at city scale.
-    # area > 10 m²  — drops OSM noise: manholes, pillar bases, sub-polygon
-    #                 artefacts that survive relation parsing.
-    _n_before_filter = len(gdf_proj)
-    gdf_proj["geometry"] = gdf_proj["geometry"].simplify(1.0)
-    gdf_proj = gdf_proj[
-        ~gdf_proj["geometry"].is_empty & (gdf_proj.area > 10.0)
-    ].copy()
-    _n_filtered = _n_before_filter - len(gdf_proj)
-    if _n_filtered:
-        _log(f"  filtered  {_n_filtered} tiny / degenerate features (< 10 m²)")
-
-    # 4. Extrude each polygon to a 3D mesh
-    # Guard: trimesh requires a polygon triangulator (mapbox-earcut or triangle)
-    # to extrude footprints.  Without one it prints the same warning once per
-    # building — thousands of times — then silently skips everything.  Check
-    # once up front and raise a clean, actionable error instead.
-    _triangulator: str | None = None
-    for _tri_pkg, _tri_name in (("mapbox_earcut", "mapbox-earcut"), ("triangle", "triangle")):
-        try:
-            __import__(_tri_pkg)
-            _triangulator = _tri_name
-            break
-        except ImportError:
-            pass
-    if _triangulator is None:
-        raise click.ClickException(
-            "No polygon triangulator found — trimesh cannot extrude building "
-            "footprints without one.\n\n"
-            "Install the recommended open-source engine:\n"
-            "  uv add --optional mesh mapbox-earcut\n\n"
-            "Then re-run the command."
+    # ── Volcano cone shortcut (steps 2–5 replaced) ───────────────────────────
+    # When --volcano is set, generate a parametric cone centred on the bbox
+    # mid-point and skip the Overpass fetch entirely.
+    if volcano:
+        _log(
+            f"mode      volcano cone  h={volcano_height:.0f} m  "
+            f"r={volcano_radius:.0f} m  segments={volcano_segments}"
         )
-
-    import warnings as _warnings
-
-    # LOD pre-processing: building count cap + 2D footprint simplification
-    # A rectangular prism (4-sided footprint) extrudes to 12 triangles minimum.
-    # If face_count / 12 < n_buildings the budget cannot show every building —
-    # we keep the N largest by projected area, then simplify each 2D footprint
-    # polygon before extrusion (Douglas-Peucker, 3 m tolerance).  This directly
-    # controls extruded vertex count without relying on mesh decimation, which
-    # cannot reduce a solid below its minimum face count (~12) and silently
-    # no-ops on disconnected multi-building scenes.
-    _MIN_FACES_PER_BLDG = 12   # physical minimum triangles for a rectangular prism
-    _lod_simplify_tol   = 3.0  # 2-D footprint D-P tolerance in projected metres
-
-    if lod == "lowpoly":
-        _max_bldgs   = max(1, face_count // _MIN_FACES_PER_BLDG)
-        _total_bldgs = len(gdf_proj)
-        if _max_bldgs < _total_bldgs:
-            _log(
-                f"  face budget {face_count:,} → keeping {_max_bldgs:,} largest "
-                f"buildings of {_total_bldgs:,} (by projected area)"
+        scene: trimesh.Trimesh = trimesh.creation.cone(
+            radius=float(volcano_radius),
+            height=float(volcano_height),
+            sections=int(volcano_segments),
+        )
+        # Z-up → Y-up (GLTF-compliant, same rotation as OSM extrusion path)
+        scene.apply_transform(
+            np.array(
+                [[1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]],
+                dtype=np.float64,
             )
-            _gdf_tmp = gdf_proj.copy()
-            _gdf_tmp["_area"] = _gdf_tmp.area
-            gdf_proj = _gdf_tmp.nlargest(_max_bldgs, "_area").drop(columns=["_area"])
+        )
+        _log(f"  {len(scene.faces):,} faces  {len(scene.vertices):,} vertices")
+
+    if not volcano:
+        #  2. Fetch OSM buildings (with local GeoJSON cache)
+        import geopandas as gpd
+
+        cp = _cache_path_for(north, south, east, west)
+
+        if cp.exists() and not no_cache:
+            _log(f"cache hit  {cp.name}  (use --no-cache to re-fetch)")
+            try:
+                gdf = gpd.read_file(str(cp))
+            except Exception:
+                _log("  [warn] cache read failed — re-fetching from OSM")
+                cp.unlink(missing_ok=True)
+                gdf = None
         else:
-            _log(
-                f"  {_total_bldgs:,} buildings × {_MIN_FACES_PER_BLDG} min faces = "
-                f"~{_total_bldgs * _MIN_FACES_PER_BLDG:,} faces floor  "
-                f"(target {face_count:,})"
+            gdf = None
+
+        if gdf is None:
+            _log("fetching OSM buildings …")
+            try:
+                _all_gdfs: list["gpd.GeoDataFrame"] = []
+                for _i, (_tn, _ts, _te, _tw) in enumerate(_tiles):
+                    if len(_tiles) > 1:
+                        _log(
+                            f"  tile {_i + 1}/{len(_tiles)}  "
+                            f"N={_tn:.4f} S={_ts:.4f} E={_te:.4f} W={_tw:.4f}"
+                        )
+                    def _fetch_tile(
+                        ep: str,
+                        tn: float = _tn, ts: float = _ts,
+                        te: float = _te, tw: float = _tw,
+                    ) -> "gpd.GeoDataFrame":
+                        return _fetch_buildings_raw(
+                            north=tn, south=ts, east=te, west=tw,
+                            endpoint=ep,
+                            timeout=_http_timeout,
+                        )
+                    _all_gdfs.append(
+                        _with_overpass_fallback(endpoints_to_try, _fetch_tile, quiet)
+                    )
+
+                if len(_all_gdfs) == 1:
+                    gdf = _all_gdfs[0]
+                else:
+                    import pandas as _pd
+                    gdf = gpd.GeoDataFrame(
+                        _pd.concat(_all_gdfs, ignore_index=True),
+                        crs=_all_gdfs[0].crs,
+                    )
+                    # Drop duplicate features that straddle tile boundaries.
+                    _before = len(gdf)
+                    gdf = gdf.drop_duplicates(subset=["geometry"])
+                    if len(gdf) < _before:
+                        _log(
+                            f"  deduped  {_before - len(gdf)} duplicate features "
+                            f"across tile boundaries"
+                        )
+
+            except Exception as exc:
+                n_tried = len(endpoints_to_try)
+                raise click.ClickException(
+                    f"OSM fetch failed on all {n_tried} endpoint(s): {exc}\n\n"
+                    "Possible causes:\n"
+                    "  • All Overpass mirrors are overloaded or down\n"
+                    "      → check https://status.overpass-api.de/\n"
+                    "      → wait a few minutes and retry\n"
+                    "      → pin a specific mirror:  --endpoint URL\n"
+                    "  • No internet connection\n"
+                    "  • Bounding box is outside an area with OSM coverage\n\n"
+                    "Public Overpass mirrors to try with --endpoint:\n"
+                    "  https://overpass.kumi.systems/api/interpreter    (reliable)\n"
+                    "  https://lz4.overpass-api.de/api/interpreter      (fast mirror)\n"
+                    "  https://overpass.openstreetmap.fr/api/interpreter\n\n"
+                    "Status page:  https://status.overpass-api.de/"
+                ) from exc
+
+            # Persist to cache (GeoJSON; columns with list values are dropped
+            # because GeoJSON does not support them).
+            try:
+                saveable = gdf.copy()
+                for col in saveable.columns:
+                    if col == "geometry":
+                        continue
+                    if saveable[col].apply(lambda x: isinstance(x, list)).any():
+                        saveable = saveable.drop(columns=[col])
+                saveable.to_file(str(cp), driver="GeoJSON")
+                _log(f"  cached   {cp.name}")
+            except Exception as exc:
+                _log(f"  [warn] could not write cache: {exc}")
+
+        _log(f"  {len(gdf)} features returned")
+
+        # 3. Project to metric CRS (UTM)
+        # osmnx returns WGS-84 (degrees). We need metres for extrusion height.
+        try:
+            gdf_proj = ox.projection.project_gdf(gdf)
+        except Exception:
+            # Fallback: use a simple equirectangular approximation if projection fails
+            gdf_proj = gdf
+
+        # 3b. Simplify + filter noise (after projection — coords now in metres)
+        # simplify(1.0) — removes sub-metre vertex noise from dense OSM traces
+        #                 without visibly changing building outlines at city scale.
+        # area > 10 m²  — drops OSM noise: manholes, pillar bases, sub-polygon
+        #                 artefacts that survive relation parsing.
+        _n_before_filter = len(gdf_proj)
+        gdf_proj["geometry"] = gdf_proj["geometry"].simplify(1.0)
+        gdf_proj = gdf_proj[
+            ~gdf_proj["geometry"].is_empty & (gdf_proj.area > 10.0)
+        ].copy()
+        _n_filtered = _n_before_filter - len(gdf_proj)
+        if _n_filtered:
+            _log(f"  filtered  {_n_filtered} tiny / degenerate features (< 10 m²)")
+
+        # 4. Extrude each polygon to a 3D mesh
+        # Guard: trimesh requires a polygon triangulator (mapbox-earcut or triangle)
+        # to extrude footprints.  Without one it prints the same warning once per
+        # building — thousands of times — then silently skips everything.  Check
+        # once up front and raise a clean, actionable error instead.
+        _triangulator: str | None = None
+        for _tri_pkg, _tri_name in (("mapbox_earcut", "mapbox-earcut"), ("triangle", "triangle")):
+            try:
+                __import__(_tri_pkg)
+                _triangulator = _tri_name
+                break
+            except ImportError:
+                pass
+        if _triangulator is None:
+            raise click.ClickException(
+                "No polygon triangulator found — trimesh cannot extrude building "
+                "footprints without one.\n\n"
+                "Install the recommended open-source engine:\n"
+                "  uv add --optional mesh mapbox-earcut\n\n"
+                "Then re-run the command."
             )
 
-    _log("extruding building polygons …")
-    meshes: list[trimesh.Trimesh] = []
-    skipped = 0
+        import warnings as _warnings
 
-    for idx, row in gdf_proj.iterrows():
-        geom = row.geometry
-        h = _building_height(row, building_height)
+        # LOD pre-processing: building count cap + 2D footprint simplification
+        # A rectangular prism (4-sided footprint) extrudes to 12 triangles minimum.
+        # If face_count / 12 < n_buildings the budget cannot show every building —
+        # we keep the N largest by projected area, then simplify each 2D footprint
+        # polygon before extrusion (Douglas-Peucker, 3 m tolerance).  This directly
+        # controls extruded vertex count without relying on mesh decimation, which
+        # cannot reduce a solid below its minimum face count (~12) and silently
+        # no-ops on disconnected multi-building scenes.
+        _MIN_FACES_PER_BLDG = 12   # physical minimum triangles for a rectangular prism
+        _lod_simplify_tol   = 3.0  # 2-D footprint D-P tolerance in projected metres
 
-        polys: list[Polygon] = []
-        if isinstance(geom, Polygon) and not geom.is_empty:
-            polys = [geom]
-        elif isinstance(geom, MultiPolygon):
-            polys = [p for p in geom.geoms if isinstance(p, Polygon) and not p.is_empty]
+        if lod == "lowpoly":
+            _max_bldgs   = max(1, face_count // _MIN_FACES_PER_BLDG)
+            _total_bldgs = len(gdf_proj)
+            if _max_bldgs < _total_bldgs:
+                _log(
+                    f"  face budget {face_count:,} → keeping {_max_bldgs:,} largest "
+                    f"buildings of {_total_bldgs:,} (by projected area)"
+                )
+                _gdf_tmp = gdf_proj.copy()
+                _gdf_tmp["_area"] = _gdf_tmp.area
+                gdf_proj = _gdf_tmp.nlargest(_max_bldgs, "_area").drop(columns=["_area"])
+            else:
+                _log(
+                    f"  {_total_bldgs:,} buildings × {_MIN_FACES_PER_BLDG} min faces = "
+                    f"~{_total_bldgs * _MIN_FACES_PER_BLDG:,} faces floor  "
+                    f"(target {face_count:,})"
+                )
 
-        for poly in polys:
-            # 2-D footprint simplification (lowpoly mode)
-            # Simplify the flat polygon before extrusion.  D-P at 3 m collapses
-            # complex canal-house outlines to 4–8 vertices; the extruded solid
-            # then has 10–18 triangles instead of 40–100+.  This is the correct
-            # LOD lever — mesh decimation cannot go below ~12 faces per solid.
-            if lod == "lowpoly":
-                poly = poly.simplify(_lod_simplify_tol, preserve_topology=True)
-                if poly.is_empty:
+        _log("extruding building polygons …")
+        meshes: list[trimesh.Trimesh] = []
+        skipped = 0
+
+        for idx, row in gdf_proj.iterrows():
+            geom = row.geometry
+            h = _building_height(row, building_height)
+
+            polys: list[Polygon] = []
+            if isinstance(geom, Polygon) and not geom.is_empty:
+                polys = [geom]
+            elif isinstance(geom, MultiPolygon):
+                polys = [p for p in geom.geoms if isinstance(p, Polygon) and not p.is_empty]
+
+            for poly in polys:
+                # 2-D footprint simplification (lowpoly mode)
+                # Simplify the flat polygon before extrusion.  D-P at 3 m collapses
+                # complex canal-house outlines to 4–8 vertices; the extruded solid
+                # then has 10–18 triangles instead of 40–100+.  This is the correct
+                # LOD lever — mesh decimation cannot go below ~12 faces per solid.
+                if lod == "lowpoly":
+                    poly = poly.simplify(_lod_simplify_tol, preserve_topology=True)
+                    if poly.is_empty:
+                        skipped += 1
+                        continue
+
+                # Ensure exterior ring is valid and has enough vertices
+                if len(poly.exterior.coords) < 4:
+                    skipped += 1
+                    continue
+                try:
+                    # Suppress trimesh's per-polygon triangulator warning — we
+                    # already verified a working engine is present above.
+                    with _warnings.catch_warnings():
+                        _warnings.simplefilter("ignore")
+                        mesh = trimesh.creation.extrude_polygon(poly, h)
+                    meshes.append(mesh)
+                except Exception:
                     skipped += 1
                     continue
 
-            # Ensure exterior ring is valid and has enough vertices
-            if len(poly.exterior.coords) < 4:
-                skipped += 1
-                continue
-            try:
-                # Suppress trimesh's per-polygon triangulator warning — we
-                # already verified a working engine is present above.
-                with _warnings.catch_warnings():
-                    _warnings.simplefilter("ignore")
-                    mesh = trimesh.creation.extrude_polygon(poly, h)
-                meshes.append(mesh)
-            except Exception:
-                skipped += 1
-                continue
+        _log(f"  {len(meshes)} meshes built  ({skipped} skipped / invalid)")
 
-    _log(f"  {len(meshes)} meshes built  ({skipped} skipped / invalid)")
+        if not meshes:
+            raise click.ClickException(
+                "No valid building polygons could be extruded.\n\n"
+                "This usually means all footprints in the cached GeoJSON are\n"
+                "degenerate after projection.  Try:\n"
+                "  sdlos mesh generate --preset amsterdam --no-cache\n"
+                "to re-fetch fresh data from Overpass."
+            )
 
-    if not meshes:
-        raise click.ClickException(
-            "No valid building polygons could be extruded.\n\n"
-            "This usually means all footprints in the cached GeoJSON are\n"
-            "degenerate after projection.  Try:\n"
-            "  sdlos mesh generate --preset amsterdam --no-cache\n"
-            "to re-fetch fresh data from Overpass."
+        # 5. Merge into one scene
+        _log("merging scene …")
+        scene: trimesh.Trimesh = trimesh.util.concatenate(meshes)
+
+        # 5a. Centre at origin
+        # GIS pipelines (UTM / WGS-84) produce global coordinates in the millions.
+        # 3-D renderers expect local coordinates near the world origin.
+        centroid = scene.vertices.mean(axis=0)
+        scene.vertices -= centroid
+
+        # 5b. Z-up → Y-up conversion (GLTF standard)
+        # trimesh.creation.extrude_polygon() extrudes along the Z axis, so the
+        # input mesh has:
+        #   X = UTM easting   (horizontal)
+        #   Y = UTM northing  (horizontal)
+        #   Z = building height (vertical / "up")
+        # GLTF requires a Y-up right-hand coordinate system:
+        #   X = right (easting)
+        #   Y = up    (height)
+        #   Z = depth (southing, negated for RH)
+        # The 4×4 homogeneous rotation below applies this swap in-place.
+        # det = +1  → proper rotation, face winding and normal handedness preserved.
+        rot_zup_to_yup = np.array(
+            [[1,  0,  0,  0],
+             [0,  0,  1,  0],
+             [0, -1,  0,  0],
+             [0,  0,  0,  1]],
+            dtype=np.float64,
         )
+        scene.apply_transform(rot_zup_to_yup)
+        _log("  applied Z-up → Y-up rotation (GLTF-compliant export)")
 
-    # 5. Merge into one scene
-    _log("merging scene …")
-    scene: trimesh.Trimesh = trimesh.util.concatenate(meshes)
-    # center geometry around origin
-    # rebase coords GIS data uses: global coordinate systems (UTM / WGS84)
-    # 3D tools expect: local coordinates near origin
-    centroid = scene.vertices.mean(axis=0)
-    scene.vertices -= centroid
-
-    _log(f"  total faces: {len(scene.faces):,}   vertices: {len(scene.vertices):,}")
+        _log(f"  total faces: {len(scene.faces):,}   vertices: {len(scene.vertices):,}")
 
     # 6. Optional: ground plane (DEM placeholder)
     if dem:
@@ -1232,6 +2319,31 @@ def cmd_mesh() -> None:
     ),
 )
 @click.option(
+    "--volcano",
+    is_flag=True, default=False,
+    help=(
+        "Generate a parametric volcano cone mesh instead of fetching OSM buildings.  "
+        "The cone is centred on the bbox mid-point.  "
+        "Pair with a terrain preset for the correct location automatically.  "
+        "e.g. --preset mexico-popo --volcano --volcano-height 5426"
+    ),
+)
+@click.option(
+    "--volcano-height",
+    type=float, default=2000.0, show_default=True, metavar="M",
+    help="Peak height of the volcano cone above the base plane in metres.",
+)
+@click.option(
+    "--volcano-radius",
+    type=float, default=5000.0, show_default=True, metavar="M",
+    help="Base radius of the volcano cone in metres.",
+)
+@click.option(
+    "--volcano-segments",
+    type=int, default=64, show_default=True, metavar="N",
+    help="Number of radial segments around the cone circumference.",
+)
+@click.option(
     "--quiet", "-q",
     is_flag=True, default=False,
     help="Suppress progress output.",
@@ -1249,9 +2361,13 @@ def cmd_generate(
     dem_depth: float,
     building_height: float,
     fmt: str,
-    out_dir: Optional[Path],
+    out_dir: OptionalPath,
     app: Optional[str],
     no_cache: bool,
+    volcano: bool,
+    volcano_height: float,
+    volcano_radius: float,
+    volcano_segments: int,
     quiet: bool,
 ) -> None:
     """Fetch OSM buildings and export a 3D region mesh.
@@ -1331,7 +2447,9 @@ def cmd_generate(
                 root = find_project_root(Path.cwd())
             except Exception:
                 root = Path.cwd()
-            out_dir = root / "examples" / "apps" / app / "data" / "models"
+            # Each city gets its own sub-folder so buffer files don't collide:
+            #   examples/apps/<app>/data/models/<name>/<name>.gltf
+            out_dir = root / "examples" / "apps" / app / "data" / "models" / resolved_name
         else:
             out_dir = Path.cwd() / "output"
 
@@ -1347,6 +2465,12 @@ def cmd_generate(
         elif place:
             click.echo(f"  place:    {place}")
         click.echo(f"  lod:      {lod}" + (f"  (target {face_count:,} faces)" if lod == "lowpoly" else ""))
+        if volcano:
+            click.echo(
+                f"  mode:     volcano cone  "
+                f"h={volcano_height:.0f} m  r={volcano_radius:.0f} m  "
+                f"segments={volcano_segments}"
+            )
         click.echo(f"  dem:      {'yes' if dem else 'no'}")
         click.echo(f"  format:   {fmt}")
         click.echo(f"  out-dir:  {out_dir}")
@@ -1368,6 +2492,10 @@ def cmd_generate(
             no_cache=no_cache,
             endpoint=endpoint,
             timeout=timeout,
+            volcano=volcano,
+            volcano_height=volcano_height,
+            volcano_radius=volcano_radius,
+            volcano_segments=volcano_segments,
             quiet=quiet,
         )
     except click.ClickException:
@@ -1391,7 +2519,7 @@ def cmd_generate(
     sys.exit(0)
 
 
-# ── sdlos mesh presets ────────────────────────────────────────────────────────
+# ── sdlos mesh presets ───────────────────────────────────────────────────────
 
 @cmd_mesh.command("presets")
 @click.option(

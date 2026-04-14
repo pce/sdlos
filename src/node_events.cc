@@ -116,10 +116,24 @@ NodeHandle dispatchClick(
         }
     }
 
-    const auto topic = n->style("onclick");
-    if (!topic.empty()) {
-        const auto payload = n->style("data-value");
-        bus.publish(std::string(topic), std::string(payload));
+    // Event bubbling — walk up the parent chain until a node with onclick is
+    // found.  This handles the common case where the deepest hit node is a
+    // text sub-node (or a decorative child) that carries no onclick itself,
+    // but its parent button wrapper does.
+    //
+    // The original hit handle is always returned so the caller's debug log
+    // shows the physically-clicked node, not the event-owning ancestor.
+    for (NodeHandle cur = hit; cur.valid();) {
+        const RenderNode *cn = tree.node(cur);
+        if (!cn)
+            break;
+        const auto topic = cn->style("onclick");
+        if (!topic.empty()) {
+            const auto payload = cn->style("data-value");
+            bus.publish(std::string(topic), std::string(payload));
+            break;  // fire once on the nearest ancestor with onclick
+        }
+        cur = cn->parent;
     }
 
     return hit;

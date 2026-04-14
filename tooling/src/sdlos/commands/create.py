@@ -219,67 +219,6 @@ def _render_and_write(app_dir: Path, cfg: AppConfig) -> None:
         )
 
 
-# ── Post-processing hook ───────────────────────────────────────────────────────
-
-def _post_process_generated(app_dir: Path, cfg: AppConfig) -> None:
-    """Run the template post-processing pipeline on the generated C++ file.
-
-    Applies (in order):
-      1. clang-format — normalise whitespace / brace style.
-      2. SCA (level 2) — flag unsafe APIs and raw pointer interfaces.
-      3. Docblocks — insert Doxygen docblocks for un-documented functions.
-
-    The pipeline is intentionally lenient: if any processor is unavailable
-    (libclang not installed, clang-format not on PATH, …) it reports the
-    error as a warning and continues.  Scaffold output is never blocked.
-
-    Only the ``behavior_cc`` file is processed — the jade and CSS files
-    are not C++ and would confuse clang-format / libclang.
-    """
-    cxx_file = app_dir / output_filename("behavior_cc", cfg.name)
-    if not cxx_file.exists():
-        return
-
-    try:
-        from ..features.post_process import make_template_pipeline
-    except ImportError:
-        if cfg.verbose:
-            print_warn("post-process skipped: sdlos.features.post_process not available")
-        return
-
-    # Build a lightweight console so the pipeline can print progress lines.
-    _console = None
-    if cfg.verbose:
-        try:
-            from rich.console import Console as _RichConsole
-            _console = _RichConsole()
-        except ImportError:
-            pass
-
-    pipeline = make_template_pipeline(
-        sca_level=2,
-        format=True,
-        docblocks=True,
-        console=_console,
-    )
-
-    results = pipeline.run(cxx_file)
-
-    if cfg.verbose:
-        for result in results:
-            if result.error:
-                print_warn(
-                    f"  [{result.processor}] {result.error}"
-                )
-            elif result.issues:
-                n = len(result.issues)
-                print_item(
-                    "sca",
-                    cxx_file.name,
-                    detail=f"({n} issue(s) — run 'sdlos analyze' for details)",
-                )
-
-
 # ── CMake ─────────────────────────────────────────────────────────────────────
 
 def _write_app_cmake(app_dir: Path, cfg: AppConfig) -> None:
@@ -360,12 +299,6 @@ def create_app(cfg: AppConfig, root_dir: Path) -> None:
 
     # ── Source files ──────────────────────────────────────────────────────────
     _render_and_write(app_dir, cfg)
-
-    # ── Post-process the generated .cxx behavior file ─────────────────────────
-    # Runs clang-format → SCA → docblocks on the freshly written file.
-    # Skipped in dry_run mode (nothing was written to disk yet).
-    if not cfg.dry_run:
-        _post_process_generated(app_dir, cfg)
 
     # ── CMake — write <name>.cmake alongside the source files ─────────────────
     _write_app_cmake(app_dir, cfg)

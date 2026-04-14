@@ -508,13 +508,12 @@ bool SDLRenderer::SetFontPath(const std::string &path, float pt_size) noexcept {
     return false;
 }
 
-bool SDLRenderer::AddFallbackFontPath(const std::string& path, float pt_size) noexcept {
+bool SDLRenderer::AddFallbackFontPath(const std::string &path, float pt_size) noexcept {
     if (!text_renderer_)
         return false;
 
     // Absolute paths are used as-is; relative ones are resolved under the data base path.
-    const std::string full =
-        (!path.empty() && path[0] == '/') ? path : data_base_path_ + path;
+    const std::string full = (!path.empty() && path[0] == '/') ? path : data_base_path_ + path;
 
     if (text_renderer_->addFallbackFont(full, pt_size)) {
         std::cout << "[SDLRenderer] emoji font: " << full << "\n";
@@ -524,21 +523,18 @@ bool SDLRenderer::AddFallbackFontPath(const std::string& path, float pt_size) no
     return false;
 }
 
-// ---------------------------------------------------------------------------
-// LoadPipeline — parse and cache a pipeline.pug render pipeline.
-//
-// The FrameGraph is created from the pug source immediately.  The first
-// CompiledGraph build is deferred to the first Render() call so the
-// swapchain texture format is available.
-//
-// Calling this again (hot-reload) replaces the old FrameGraph atomically:
-// the old compiled_graph_ is cleared first (it holds only non-owning
-// pointers) and then frame_graph_ is replaced — ResourcePool and
-// ShaderLibrary destructor releases happen during the assignment.
-// ---------------------------------------------------------------------------
 /**
- * @brief Loads pipeline
+ * @brief Loads pipeline parse and cache a pipeline.pug render pipeline.
  *
+ * The FrameGraph is created from the pug source immediately.  The first
+ * CompiledGraph build is deferred to the first Render() call so the
+ * swapchain texture format is available.
+ *
+ * Calling this again (hot-reload) replaces the old FrameGraph atomically:
+ the old compiled_graph_ is cleared first (it holds only non-owning
+ pointers) and then frame_graph_ is replaced — ResourcePool and
+ ShaderLibrary destructor releases happen during the assignment.
+
  * @param pug_path  Filesystem path
  *
  * @return true on success, false on failure
@@ -632,19 +628,18 @@ fg::CompiledGraph *SDLRenderer::GetCompiledGraph() noexcept {
     return (frame_graph_.has_value() && !compiled_graph_.empty()) ? &compiled_graph_ : nullptr;
 }
 
-/// Lazily load, compile, and cache a node shader pipeline.
-/// Reuses ui_rect_vert_ (already compiled) plus a custom fragment shader
-/// loaded from data/shaders/{platform}/{name}.frag.{ext}.
-SDL_GPUGraphicsPipeline
-    *
-    /**
-     * @brief Ensure node shader pipeline
-     *
-     * @param name  Human-readable name or identifier string
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    SDLRenderer::ensureNodeShaderPipeline(const std::string &name) noexcept {
+/**
+ * @brief Ensure node shader pipeline
+ *
+ * Lazily load, compile, and cache a node shader pipeline.
+ * Reuses ui_rect_vert_ (already compiled) plus a custom fragment shader
+ * loaded from data/shaders/{platform}/{name}.frag.{ext}.
+ *
+ * @param name  Human-readable name or identifier string
+ *
+ * @return Pointer to the result, or nullptr on failure
+ */
+SDL_GPUGraphicsPipeline *SDLRenderer::ensureNodeShaderPipeline(const std::string &name) noexcept {
     // Cache hit (including previously-failed loads stored as null).
     auto it = node_shader_cache_.find(name);
     if (it != node_shader_cache_.end())
@@ -811,6 +806,10 @@ void SDLRenderer::Shutdown() noexcept {
         SDL_ReleaseGPUGraphicsPipeline(device_, ui_text_pipeline_);
         ui_text_pipeline_ = nullptr;
     }
+    if (ui_sdf_pipeline_) {
+        SDL_ReleaseGPUGraphicsPipeline(device_, ui_sdf_pipeline_);
+        ui_sdf_pipeline_ = nullptr;
+    }
     if (ui_rect_vert_) {
         SDL_ReleaseGPUShader(device_, ui_rect_vert_);
         ui_rect_vert_ = nullptr;
@@ -822,6 +821,10 @@ void SDLRenderer::Shutdown() noexcept {
     if (ui_text_frag_) {
         SDL_ReleaseGPUShader(device_, ui_text_frag_);
         ui_text_frag_ = nullptr;
+    }
+    if (ui_sdf_frag_) {
+        SDL_ReleaseGPUShader(device_, ui_sdf_frag_);
+        ui_sdf_frag_ = nullptr;
     }
 
     if (pipeline_) {
@@ -1034,6 +1037,24 @@ fragment float4 main0(VertOut in[[stage_in]],
 )";
     }
 
+    std::string sdf_frag_src = ReadTextFile("assets/shaders/ui_sdf.frag.metal");
+    if (sdf_frag_src.empty()) {
+        sdf_frag_src = R"(
+#include <metal_stdlib>
+using namespace metal;
+struct SDFUniform { float2 inv_atlas_size; float padding0, padding1, padding2; };
+struct VertOut { float4 position [[position]]; float2 uv [[user(locn0)]]; };
+fragment float4 main0(VertOut in[[stage_in]],
+                      texture2d<float> atlas[[texture(0)]],
+                      sampler samp[[sampler(0)]],
+                      constant SDFUniform&u[[buffer(0)]]) {
+    float2 uv = in.uv * u.inv_atlas_size;
+    float4 c = atlas.sample(samp, uv);
+    return float4(c.rgb * c.a, c.a);
+}
+)";
+    }
+
     //  Compile shaders
 
     auto make_shader = [&](const std::string &src,
@@ -1055,8 +1076,9 @@ fragment float4 main0(VertOut in[[stage_in]],
     ui_rect_vert_ = make_shader(vert_src, SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
     ui_rect_frag_ = make_shader(rect_frag_src, SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
     ui_text_frag_ = make_shader(text_frag_src, SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
+    ui_sdf_frag_  = make_shader(sdf_frag_src, SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
 
-    if (!ui_rect_vert_ || !ui_rect_frag_ || !ui_text_frag_) {
+    if (!ui_rect_vert_ || !ui_rect_frag_ || !ui_text_frag_ || !ui_sdf_frag_) {
         std::cerr << "SDLRenderer::CreateUIPipelines - shader compile failed: " << SDL_GetError()
                   << "\n";
         if (ui_rect_vert_) {
@@ -1070,6 +1092,10 @@ fragment float4 main0(VertOut in[[stage_in]],
         if (ui_text_frag_) {
             SDL_ReleaseGPUShader(device_, ui_text_frag_);
             ui_text_frag_ = nullptr;
+        }
+        if (ui_sdf_frag_) {
+            SDL_ReleaseGPUShader(device_, ui_sdf_frag_);
+            ui_sdf_frag_ = nullptr;
         }
         return false;
     }
@@ -1118,6 +1144,8 @@ fragment float4 main0(VertOut in[[stage_in]],
         ui_rect_frag_ = nullptr;
         SDL_ReleaseGPUShader(device_, ui_text_frag_);
         ui_text_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_sdf_frag_);
+        ui_sdf_frag_ = nullptr;
         return false;
     }
 
@@ -1142,10 +1170,38 @@ fragment float4 main0(VertOut in[[stage_in]],
         ui_rect_frag_ = nullptr;
         SDL_ReleaseGPUShader(device_, ui_text_frag_);
         ui_text_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_sdf_frag_);
+        ui_sdf_frag_ = nullptr;
         return false;
     }
 
-    std::cerr << "SDLRenderer::CreateUIPipelines - rect + text pipelines ready\n";
+    //  ui_sdf pipeline (same vert, sampled frag)
+
+    SDL_GPUGraphicsPipelineCreateInfo spci{};
+    spci.vertex_shader      = ui_rect_vert_;  // shared vertex shader
+    spci.fragment_shader    = ui_sdf_frag_;
+    spci.primitive_type     = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    spci.vertex_input_state = vis;
+    spci.target_info        = targetInfo;
+
+    ui_sdf_pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &spci);
+    if (!ui_sdf_pipeline_) {
+        std::cerr << "SDLRenderer::CreateUIPipelines - sdf pipeline failed: " << SDL_GetError()
+                  << "\n";
+        SDL_ReleaseGPUGraphicsPipeline(device_, ui_rect_pipeline_);
+        ui_rect_pipeline_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_rect_vert_);
+        ui_rect_vert_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_rect_frag_);
+        ui_rect_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_text_frag_);
+        ui_text_frag_ = nullptr;
+        SDL_ReleaseGPUShader(device_, ui_sdf_frag_);
+        ui_sdf_frag_ = nullptr;
+        return false;
+    }
+
+    std::cerr << "SDLRenderer::CreateUIPipelines - rect + text + sdf pipelines ready\n";
     return true;
 }
 
@@ -1497,7 +1553,9 @@ void SDLRenderer::Render(double timeSeconds) {
 
         FragmentUniform fu{};
         fu.time   = static_cast<float>(timeSeconds);
-        fu.pad[0] = fu.pad[1] = fu.pad[2] = 0.0f;
+        fu.pad[0] = extra_uniform_[0];
+        fu.pad[1] = extra_uniform_[1];
+        fu.pad[2] = extra_uniform_[2];
         SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
         SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);

@@ -1,5 +1,6 @@
 #include "number_dragger.h"
 
+#include "../core/parse.h"
 #include "../text_renderer.h"
 
 #include <SDL3/SDL.h>
@@ -7,7 +8,6 @@
 #include <algorithm>
 #include <any>
 #include <cassert>
-#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -56,8 +56,8 @@ static std::optional<float> parseFloat(std::string_view sv) noexcept {
     if (sv.empty())
         return {};
     float v{};
-    auto [p, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), v);
-    return ec == std::errc{} ? std::optional<float>{v} : std::nullopt;
+    auto [p, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+    return ok ? std::optional<float>{v} : std::nullopt;
 }
 
 static bool applyValue(RenderTree &tree, NodeHandle h, NumberDraggerState &s, float raw) noexcept {
@@ -479,8 +479,8 @@ static void walkBindDragNum(RenderTree &tree, NodeHandle root) {
         if (sv.empty())
             return {};
         float v{};
-        auto [p, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), v);
-        return ec == std::errc{} ? std::optional<float>{v} : std::nullopt;
+        auto [p, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+        return ok ? std::optional<float>{v} : std::nullopt;
     };
 
     NumberDraggerConfig cfg;

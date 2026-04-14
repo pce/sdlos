@@ -44,8 +44,8 @@ app.sg-root(flexGrow="1")
       // Inner row: ❮  dots  ▶  ❯  centred in the nav bar
       row.sg-nav-row(justifyContent="center" alignItems="center" gap="24" flexGrow="1")
 
-        // Prev button — inline text so dispatchClick fires on this node
-        div#nav-prev.sg-nav-btn(onclick="sg:prev" data-value="") PREV
+        // Prev button — FA6 Solid chevron-left (U+F053, UTF-8: EF 81 93)
+        div#nav-prev.sg-nav-btn(onclick="sg:prev" data-value="")
 
         // Page-indicator dots (explicit width+height for stable flex sizing)
         row#nav-dots.sg-dots(height="44" width="120" justifyContent="center" alignItems="center" gap="10")
@@ -55,8 +55,8 @@ app.sg-root(flexGrow="1")
           div#dot-3.sg-dot
           div#dot-4.sg-dot
 
-        // Play / Pause toggle — inline text
-        div#nav-play.sg-nav-btn(onclick="sg:playpause" data-value="") PLAY
+        // Play / Pause toggle — FA6 Solid play U+F04B (UTF-8: EF 81 8B); overridden by updatePlayBtn()
+        div#nav-play.sg-nav-btn(onclick="sg:playpause" data-value="")
 
-        // Next button — inline text
-        div#nav-next.sg-nav-btn(onclick="sg:next" data-value="") NEXT
+        // Next button — FA6 Solid chevron-right (U+F054, UTF-8: EF 81 94)
+        div#nav-next.sg-nav-btn(onclick="sg:next" data-value="")

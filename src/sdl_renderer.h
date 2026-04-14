@@ -233,7 +233,7 @@ class SDLRenderer {
     /// Add an emoji / fallback font chained behind the primary via
     /// TTF_AddFallbackFont().  Relative paths are resolved under GetDataBasePath().
     /// Must be called after SetFontPath() (or after a successful loadAppFonts).
-    bool AddFallbackFontPath(const std::string& path, float pt_size) noexcept;
+    bool AddFallbackFontPath(const std::string &path, float pt_size) noexcept;
 
     /* 3D scene pre-pass hook
      * Called once per frame BEFORE the 2D UI pass, inside the same command
@@ -277,6 +277,12 @@ class SDLRenderer {
         return (f == SDL_GPU_TEXTUREFORMAT_INVALID) ? SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM : f;
     }
 
+    /// Raw SDL window handle.  Use with SDL_GetWindowSize() / SDL_GetWindowSizeInPixels()
+    /// to query the actual live window dimensions at runtime — preferred over the
+    /// compile-time SDLOS_WIN_W / SDLOS_WIN_H constants whenever the window is resizable.
+    /// Returns nullptr before Initialize() completes.
+    SDL_Window *GetWindow() const noexcept { return sdl_window_; }
+
     // Fired at the top of Shutdown() before the GPU device is destroyed.
     // Use to call GltfScene::shutdown() from behaviors that own GPU resources
     // in static-duration objects.  Cleared after first call.
@@ -287,6 +293,15 @@ class SDLRenderer {
      *
      * @param hook  Opaque resource handle
      */
+    /// Push extra floats into the background shader's pad[0..2] slots.
+    /// weatherType: 0=Sunny 1=Rainy 2=Snowy 3=Hail 4=Cloudy (fractional = cross-fade)
+    /// Call from the app behavior whenever the weather condition changes.
+    void setWeatherUniform(float weatherType, float pad1 = 0.f, float pad2 = 0.f) noexcept {
+        extra_uniform_[0] = weatherType;
+        extra_uniform_[1] = pad1;
+        extra_uniform_[2] = pad2;
+    }
+
     void setGpuPreShutdownHook(GpuPreShutdownHook hook) noexcept {
         gpu_pre_shutdown_hook_ = std::move(hook);
     }
@@ -379,6 +394,10 @@ class SDLRenderer {
     Uint32 ui_texture_w_{0};
     Uint32 ui_texture_h_{0};
 
+    // SDF pipeline for rounded rects + shadows
+    SDL_GPUShader *ui_sdf_frag_{nullptr};
+    SDL_GPUGraphicsPipeline *ui_sdf_pipeline_{nullptr};
+
     // Wavetable texture for sin/cos lookup in shaders.
     // 512 samples × 2 bytes = 1 KB of GPU memory.
     // Used by desktop wallpaper shader for ~25-40% faster sin/cos evaluations.
@@ -446,6 +465,10 @@ class SDLRenderer {
     // Pending inline pipeline source (SubmitPipelineSource → Render deferred path)
     std::string pending_pipeline_source_;
     bool pending_pipeline_dirty_{false};
+
+    /// Extra float uniforms forwarded to pad[0..2] of FragmentUniform each frame.
+    /// Written by setWeatherUniform(); read by Render() on the render thread.
+    float extra_uniform_[3] = {0.f, 0.f, 0.f};
 
     SDL_GPUGraphicsPipeline *
     /**

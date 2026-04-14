@@ -76,8 +76,9 @@ void TextRenderer::shutdown() {
     }
 
 #ifdef SDL_TTF_AVAILABLE
-    for (TTF_Font* fb : fallback_fonts_) {
-        if (font_) TTF_RemoveFallbackFont(font_, fb);
+    for (TTF_Font *fb : fallback_fonts_) {
+        if (font_)
+            TTF_RemoveFallbackFont(font_, fb);
         TTF_CloseFont(fb);
     }
     fallback_fonts_.clear();
@@ -188,7 +189,7 @@ bool TextRenderer::openFont(const std::string &path, float pt) {
     // Clear fallback fonts — they were chained to the old primary.
     // The caller (loadFont / loadFirstAvailable) is responsible for
     // re-adding fallbacks after a primary font reload if desired.
-    for (TTF_Font* fb : fallback_fonts_) {
+    for (TTF_Font *fb : fallback_fonts_) {
         TTF_CloseFont(fb);
     }
     fallback_fonts_.clear();
@@ -199,16 +200,16 @@ bool TextRenderer::openFont(const std::string &path, float pt) {
 }
 #endif
 
-bool TextRenderer::addFallbackFont(const std::string& path, float pt_size) {
+bool TextRenderer::addFallbackFont(const std::string &path, float pt_size) {
 #ifdef SDL_TTF_AVAILABLE
     if (!font_) {
         std::cerr << "[TextRenderer] addFallbackFont: primary font not loaded yet\n";
         return false;
     }
-    TTF_Font* fb = TTF_OpenFont(path.c_str(), pt_size > 0.f ? pt_size : default_size_);
+    TTF_Font *fb = TTF_OpenFont(path.c_str(), pt_size > 0.f ? pt_size : default_size_);
     if (!fb) {
-        std::cerr << "[TextRenderer] addFallbackFont: cannot open '"
-                  << path << "': " << SDL_GetError() << "\n";
+        std::cerr << "[TextRenderer] addFallbackFont: cannot open '" << path
+                  << "': " << SDL_GetError() << "\n";
         return false;
     }
     if (!TTF_AddFallbackFont(font_, fb)) {
@@ -217,11 +218,12 @@ bool TextRenderer::addFallbackFont(const std::string& path, float pt_size) {
         return false;
     }
     fallback_fonts_.push_back(fb);
-    std::cout << "[TextRenderer] fallback font: "
-              << std::filesystem::path(path).filename().string() << "\n";
+    std::cout << "[TextRenderer] fallback font: " << std::filesystem::path(path).filename().string()
+              << "\n";
     return true;
 #else
-    (void)path; (void)pt_size;
+    (void)path;
+    (void)pt_size;
     return false;
 #endif
 }

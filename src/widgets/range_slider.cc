@@ -4,12 +4,13 @@
 
 #include "range_slider.h"
 
+#include "../core/parse.h"
+
 #include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <any>
 #include <cassert>
-#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -81,8 +82,8 @@ static std::optional<float> parseFloat(std::string_view sv) noexcept {
     if (sv.empty())
         return std::nullopt;
     float v{};
-    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), v);
-    return (ec == std::errc{}) ? std::optional<float>{v} : std::nullopt;
+    const auto [ptr, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+    return ok ? std::optional<float>{v} : std::nullopt;
 }
 
 // Apply (clamp + snap) a new raw value, notify bindings, mark dirty.

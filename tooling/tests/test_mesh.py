@@ -10,6 +10,11 @@ Topics
   TestOsakaPreset           — Osaka-specific assertions
   TestKyotoPreset           — Kyoto/Kinkaku-ji-specific assertions
   TestCappadociaPreset      — Cappadocia/Göreme preset (organic non-rectangular geometry)
+  TestNaplesPreset          — Naples / Centro Storico preset
+  TestMexicoPopoPreset      — Popocatépetl volcano preset
+  TestTokyoFujihamaPreset   — Mt. Fuji / Kawaguchiko terrain preset
+  TestQuitoPichinchaPreset  — Pichincha volcano preset
+  TestVolcanoOptions        — --volcano / --volcano-height / --volcano-radius CLI flags
   TestPresetRegistry        — consistency of CITY_PRESETS / _PRESET_ORDER / _PRESET_REGIONS
   TestSplitBbox             — split_bbox tiling geometry correctness
   TestParseBbox             — _parse_bbox valid and invalid inputs
@@ -1030,6 +1035,301 @@ class TestPresetsCLI:
         result = runner.invoke(cmd_mesh, ["generate"])
         # Should exit non-zero — either missing-option or missing-dep error
         assert result.exit_code != 0
+
+    def test_presets_output_contains_naples(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["presets"])
+        assert "naples" in result.output.lower(), (
+            f"'naples' not found in presets output: {result.output[:300]}"
+        )
+
+    def test_presets_output_contains_mexico_popo(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["presets"])
+        assert "mexico-popo" in result.output, (
+            f"'mexico-popo' not found in presets output: {result.output[:300]}"
+        )
+
+    def test_presets_output_contains_tokyo_fujihama(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["presets"])
+        assert "tokyo-fujihama" in result.output, (
+            f"'tokyo-fujihama' not found in presets output: {result.output[:300]}"
+        )
+
+    def test_presets_output_contains_quito_pichincha(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["presets"])
+        assert "quito-pichincha" in result.output, (
+            f"'quito-pichincha' not found in presets output: {result.output[:300]}"
+        )
+
+
+# ── TestNaplesPreset ──────────────────────────────────────────────────────────
+
+class TestNaplesPreset:
+    """Naples Centro Storico preset assertions."""
+
+    def test_naples_exists(self) -> None:
+        assert "naples" in CITY_PRESETS
+
+    def test_naples_is_city_preset(self) -> None:
+        assert isinstance(CITY_PRESETS["naples"], CityPreset)
+
+    def test_naples_label_contains_naples(self) -> None:
+        assert "Naples" in CITY_PRESETS["naples"].label
+
+    def test_naples_bbox_north_gt_south(self) -> None:
+        n, s, _e, _w = CITY_PRESETS["naples"].bbox
+        assert n > s
+
+    def test_naples_bbox_east_gt_west(self) -> None:
+        _n, _s, e, w = CITY_PRESETS["naples"].bbox
+        assert e > w
+
+    def test_naples_latitude_range(self) -> None:
+        """Naples is around 40.8° N."""
+        n, s, _e, _w = CITY_PRESETS["naples"].bbox
+        assert 40.7 < s < n < 41.0, f"Naples latitudes look wrong: {s}–{n}"
+
+    def test_naples_longitude_range(self) -> None:
+        """Naples is around 14.25° E."""
+        _n, _s, e, w = CITY_PRESETS["naples"].bbox
+        assert 14.0 < w < e < 14.5, f"Naples longitudes look wrong: {w}–{e}"
+
+    def test_naples_in_preset_order(self) -> None:
+        assert "naples" in _PRESET_ORDER
+
+    def test_naples_in_italy_region(self) -> None:
+        italy_keys: list[str] = []
+        for label, keys in _PRESET_REGIONS:
+            if label == "Italy":
+                italy_keys = keys
+                break
+        assert "naples" in italy_keys, \
+            f"'naples' not in Italy region group; got {italy_keys}"
+
+    def test_naples_height_reasonable(self) -> None:
+        """Naples historic centre has 4–6 storey buildings; expect 10–25 m."""
+        h = CITY_PRESETS["naples"].building_height
+        assert 10.0 <= h <= 25.0, f"Unexpected fallback height for naples: {h}"
+
+    def test_naples_notes_mention_spaccanapoli(self) -> None:
+        notes = CITY_PRESETS["naples"].notes.lower()
+        assert "spaccanapoli" in notes or "plebiscito" in notes, (
+            f"Naples notes don't mention key landmarks: {notes!r}"
+        )
+
+
+# ── TestMexicoPopoPreset ──────────────────────────────────────────────────────
+
+class TestMexicoPopoPreset:
+    """Popocatépetl volcano preset assertions."""
+
+    def test_mexico_popo_exists(self) -> None:
+        assert "mexico-popo" in CITY_PRESETS
+
+    def test_mexico_popo_is_city_preset(self) -> None:
+        assert isinstance(CITY_PRESETS["mexico-popo"], CityPreset)
+
+    def test_mexico_popo_label_mentions_volcano(self) -> None:
+        label = CITY_PRESETS["mexico-popo"].label.lower()
+        assert "popocatépetl" in label or "stratovolcano" in label or "volcano" in label
+
+    def test_mexico_popo_bbox_north_gt_south(self) -> None:
+        n, s, _e, _w = CITY_PRESETS["mexico-popo"].bbox
+        assert n > s
+
+    def test_mexico_popo_bbox_east_gt_west(self) -> None:
+        _n, _s, e, w = CITY_PRESETS["mexico-popo"].bbox
+        assert e > w
+
+    def test_mexico_popo_latitude_range(self) -> None:
+        """Popocatépetl is around 19° N."""
+        n, s, _e, _w = CITY_PRESETS["mexico-popo"].bbox
+        assert 18.5 < s < n < 19.5, f"Popo latitudes look wrong: {s}–{n}"
+
+    def test_mexico_popo_longitude_range(self) -> None:
+        """Popocatépetl is around 98.6° W (negative)."""
+        _n, _s, e, w = CITY_PRESETS["mexico-popo"].bbox
+        assert -99.5 < w < e < -98.0, f"Popo longitudes look wrong: {w}–{e}"
+
+    def test_mexico_popo_in_preset_order(self) -> None:
+        assert "mexico-popo" in _PRESET_ORDER
+
+    def test_mexico_popo_in_mexico_region(self) -> None:
+        mexico_keys: list[str] = []
+        for label, keys in _PRESET_REGIONS:
+            if label == "Mexico":
+                mexico_keys = keys
+                break
+        assert "mexico-popo" in mexico_keys, \
+            f"'mexico-popo' not in Mexico region; got {mexico_keys}"
+
+    def test_mexico_popo_notes_suggest_volcano_flag(self) -> None:
+        notes = CITY_PRESETS["mexico-popo"].notes.lower()
+        assert "--volcano" in notes or "volcano" in notes, (
+            f"mexico-popo notes should mention --volcano flag: {notes!r}"
+        )
+
+
+# ── TestTokyoFujihamaPreset ───────────────────────────────────────────────────
+
+class TestTokyoFujihamaPreset:
+    """Mt. Fuji / Kawaguchiko terrain preset assertions."""
+
+    def test_tokyo_fujihama_exists(self) -> None:
+        assert "tokyo-fujihama" in CITY_PRESETS
+
+    def test_tokyo_fujihama_is_city_preset(self) -> None:
+        assert isinstance(CITY_PRESETS["tokyo-fujihama"], CityPreset)
+
+    def test_tokyo_fujihama_label_mentions_fuji(self) -> None:
+        label = CITY_PRESETS["tokyo-fujihama"].label
+        assert "Fuji" in label or "fuji" in label.lower()
+
+    def test_tokyo_fujihama_bbox_north_gt_south(self) -> None:
+        n, s, _e, _w = CITY_PRESETS["tokyo-fujihama"].bbox
+        assert n > s
+
+    def test_tokyo_fujihama_bbox_east_gt_west(self) -> None:
+        _n, _s, e, w = CITY_PRESETS["tokyo-fujihama"].bbox
+        assert e > w
+
+    def test_tokyo_fujihama_latitude_range(self) -> None:
+        """Mt. Fuji is around 35.36° N."""
+        n, s, _e, _w = CITY_PRESETS["tokyo-fujihama"].bbox
+        assert 35.0 < s < n < 36.0, f"Fujihama latitudes look wrong: {s}–{n}"
+
+    def test_tokyo_fujihama_longitude_range(self) -> None:
+        """Mt. Fuji is around 138.73° E."""
+        _n, _s, e, w = CITY_PRESETS["tokyo-fujihama"].bbox
+        assert 138.0 < w < e < 139.5, f"Fujihama longitudes look wrong: {w}–{e}"
+
+    def test_tokyo_fujihama_in_preset_order(self) -> None:
+        assert "tokyo-fujihama" in _PRESET_ORDER
+
+    def test_tokyo_fujihama_in_japan_region(self) -> None:
+        japan_keys: list[str] = []
+        for label, keys in _PRESET_REGIONS:
+            if label == "Japan":
+                japan_keys = keys
+                break
+        assert "tokyo-fujihama" in japan_keys, \
+            f"'tokyo-fujihama' not in Japan region; got {japan_keys}"
+
+    def test_tokyo_fujihama_notes_suggest_volcano_flag(self) -> None:
+        notes = CITY_PRESETS["tokyo-fujihama"].notes.lower()
+        assert "--volcano" in notes or "volcano" in notes
+
+
+# ── TestQuitoPichinchaPreset ──────────────────────────────────────────────────
+
+class TestQuitoPichinchaPreset:
+    """Pichincha volcano preset assertions."""
+
+    def test_quito_pichincha_exists(self) -> None:
+        assert "quito-pichincha" in CITY_PRESETS
+
+    def test_quito_pichincha_is_city_preset(self) -> None:
+        assert isinstance(CITY_PRESETS["quito-pichincha"], CityPreset)
+
+    def test_quito_pichincha_label_mentions_pichincha(self) -> None:
+        assert "Pichincha" in CITY_PRESETS["quito-pichincha"].label
+
+    def test_quito_pichincha_bbox_north_gt_south(self) -> None:
+        n, s, _e, _w = CITY_PRESETS["quito-pichincha"].bbox
+        assert n > s
+
+    def test_quito_pichincha_bbox_east_gt_west(self) -> None:
+        _n, _s, e, w = CITY_PRESETS["quito-pichincha"].bbox
+        assert e > w
+
+    def test_quito_pichincha_latitude_range(self) -> None:
+        """Pichincha is just south of the equator, around 0.17° S."""
+        n, s, _e, _w = CITY_PRESETS["quito-pichincha"].bbox
+        assert -1.0 < s < n < 0.5, f"Pichincha latitudes look wrong: {s}–{n}"
+
+    def test_quito_pichincha_longitude_range(self) -> None:
+        """Pichincha is around 78.6° W (negative)."""
+        _n, _s, e, w = CITY_PRESETS["quito-pichincha"].bbox
+        assert -79.5 < w < e < -78.0, f"Pichincha longitudes look wrong: {w}–{e}"
+
+    def test_quito_pichincha_in_preset_order(self) -> None:
+        assert "quito-pichincha" in _PRESET_ORDER
+
+    def test_quito_pichincha_in_south_america_region(self) -> None:
+        sa_keys: list[str] = []
+        for label, keys in _PRESET_REGIONS:
+            if label == "South America":
+                sa_keys = keys
+                break
+        assert "quito-pichincha" in sa_keys, \
+            f"'quito-pichincha' not in South America region; got {sa_keys}"
+
+    def test_quito_pichincha_notes_suggest_volcano_flag(self) -> None:
+        notes = CITY_PRESETS["quito-pichincha"].notes.lower()
+        assert "--volcano" in notes or "volcano" in notes
+
+
+# ── TestVolcanoOptions ────────────────────────────────────────────────────────
+
+class TestVolcanoOptions:
+    """CLI flag tests for --volcano, --volcano-height, --volcano-radius,
+    --volcano-segments — verified without network access via CliRunner."""
+
+    def test_unknown_preset_still_rejected(self) -> None:
+        """Sanity-check: a bogus preset is still an error even with --volcano."""
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--preset", "nowhere", "--volcano"])
+        assert result.exit_code != 0
+        assert "nowhere" in result.output or "Unknown" in result.output
+
+    def test_volcano_flag_appears_in_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--help"])
+        assert "--volcano" in result.output
+
+    def test_volcano_height_flag_appears_in_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--help"])
+        assert "--volcano-height" in result.output
+
+    def test_volcano_radius_flag_appears_in_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--help"])
+        assert "--volcano-radius" in result.output
+
+    def test_volcano_segments_flag_appears_in_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--help"])
+        assert "--volcano-segments" in result.output
+
+    def test_mexico_popo_preset_recognised(self) -> None:
+        """--preset mexico-popo must not raise 'Unknown preset'."""
+        runner = CliRunner()
+        # Will fail at mesh-dep check, but must not fail at preset lookup
+        result = runner.invoke(cmd_mesh, ["generate", "--preset", "mexico-popo", "--volcano"])
+        assert "Unknown preset" not in result.output, result.output
+
+    def test_naples_preset_recognised(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cmd_mesh, ["generate", "--preset", "naples"])
+        assert "Unknown preset" not in result.output, result.output
+
+    def test_tokyo_fujihama_preset_recognised(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            cmd_mesh, ["generate", "--preset", "tokyo-fujihama", "--volcano"]
+        )
+        assert "Unknown preset" not in result.output, result.output
+
+    def test_quito_pichincha_preset_recognised(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            cmd_mesh, ["generate", "--preset", "quito-pichincha", "--volcano"]
+        )
+        assert "Unknown preset" not in result.output, result.output
 
 
 # ── TestGltfCityMeshes ────────────────────────────────────────────────────────
