@@ -69,6 +69,12 @@ public:
     /// Call after loadFirstAvailable() fails if a system fallback is desired.
     bool tryLoadSystemFont(float pt_size);
 
+    /// Chain an emoji / fallback font (e.g. TwemojiMozilla.ttf).
+    /// The fallback is tried by SDL3_ttf via TTF_AddFallbackFont() whenever a
+    /// glyph is absent from the primary font.  Must be called AFTER loadFont().
+    /// Returns false if the primary font is not yet loaded or the file can't be opened.
+    bool addFallbackFont(const std::string& path, float pt_size);
+
 
     /// Returns an invalid GlyphTexture{} if the renderer is not ready.
     /// `rtl` — when true, sets TTF_DIRECTION_RTL on the font before rendering
@@ -167,6 +173,7 @@ private:
 
 #ifdef SDL_TTF_AVAILABLE
     TTF_Font* font_ = nullptr;
+    std::vector<TTF_Font*> fallback_fonts_;  ///< owned; closed on shutdown / primary reload
 
     /// Closes the previous font before opening the new one.
     bool openFont(const std::string& path, float pt);

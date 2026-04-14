@@ -230,6 +230,11 @@ class SDLRenderer {
      */
     bool SetFontPath(const std::string &path, float pt_size = 17.f) noexcept;
 
+    /// Add an emoji / fallback font chained behind the primary via
+    /// TTF_AddFallbackFont().  Relative paths are resolved under GetDataBasePath().
+    /// Must be called after SetFontPath() (or after a successful loadAppFonts).
+    bool AddFallbackFontPath(const std::string& path, float pt_size) noexcept;
+
     /* 3D scene pre-pass hook
      * Called once per frame BEFORE the 2D UI pass, inside the same command
      * buffer that owns the swapchain acquire.

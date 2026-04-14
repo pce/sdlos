@@ -1,0 +1,248 @@
+/* =============================================================================
+   clima.css — Clima weather dashboard stylesheet
+   Loaded explicitly by clima.cc after jade parse.
+
+   Colour palette
+   ──────────────
+   The background colours on #clima-root and #clima-card are written directly
+   by clima.cc via setStyle("backgroundColor", …) each time the weather or
+   city changes.  The values below are the Sunny defaults that appear for one
+   frame before the first updateDisplay() call; treat them as documentation.
+
+   Sunny root bg:  #87BDDE   card bg:  #C2DEFF   text: #1a3a5c
+   Rainy root bg:  #2d4a5e   card bg:  #4a6a82   text: #daeaf5
+   Snowy root bg:  #AABFD4   card bg:  #D8E8F4   text: #2b4a6e
+   Hail  root bg:  #323240   card bg:  #4a4a5c   text: #c5cae9
+   Cloud root bg:  #6B7F8E   card bg:  #8C9EAD   text: #ecf0f1
+
+   Selector constraint
+   ───────────────────
+   sdlos CSS supports only:  .class   .class:hover   .class:active   #id   #id:hover
+   Compound selectors (.a.b), child selectors (a > b), and tag selectors are
+   silently ignored.  Active-state for toggle groups (cond-active / city-active)
+   is driven by clima.cc rewriting the "class" attribute directly on each node.
+   ============================================================================= */
+
+/* ── Window root ──────────────────────────────────────────────────────────── */
+/* background-color is overridden per-frame by clima.cc to match the weather. */
+
+.clima-root {
+    background-color: #87bdde;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+/* ── Header bar ───────────────────────────────────────────────────────────── */
+
+.clima-header {
+    background-color: #00000022;
+    padding: 10;
+    gap: 10;
+    align-items: center;
+    height: 44;
+}
+
+.clima-app-icon {
+    font-size: 22;
+    height: 24;
+}
+
+.clima-app-name {
+    font-size: 20;
+    font-weight: bold;
+    color: #ffffff;
+    height: 24;
+}
+
+.clima-clock {
+    font-size: 15;
+    color: #ffffffbb;
+    font-weight: bold;
+    height: 20;
+}
+
+/* ── Main weather card ────────────────────────────────────────────────────── */
+/* background-color is set by clima.cc; padding/gap/radius here are static.  */
+
+.clima-card {
+    background-color: #c2deff;
+    border-radius: 18;
+    padding: 28;
+    gap: 10;
+    margin: 16;
+    flex-grow: 1;
+}
+
+/* ── Large weather icon ───────────────────────────────────────────────────── */
+
+.clima-big-icon {
+    font-size: 72;
+    align-items: center;
+    padding: 4 0;
+    height: 84;
+}
+
+/* ── Temperature + condition row ──────────────────────────────────────────── */
+
+.clima-temp-row {
+    gap: 16;
+    align-items: center;
+    height: 72;
+}
+
+.clima-temp {
+    font-size: 56;
+    font-weight: bold;
+    color: #1a3a5c;
+    height: 64;
+}
+
+.clima-cond-col {
+    gap: 4;
+    flex-grow: 1;
+}
+
+.clima-condition-name {
+    font-size: 22;
+    font-weight: bold;
+    color: #1a3a5c;
+    height: 26;
+}
+
+.clima-city-label {
+    font-size: 14;
+    color: #2a5080;
+    height: 18;
+}
+
+/* ── Description text ─────────────────────────────────────────────────────── */
+
+.clima-desc {
+    font-size: 14;
+    color: #2a4a6a;
+    padding: 2 0;
+    height: 20;
+}
+
+/* ── Divider ──────────────────────────────────────────────────────────────── */
+
+.clima-divider {
+    height: 1;
+    background-color: #00000018;
+    margin: 4 0;
+}
+
+/* ── Stats row (feels-like / low-high / humidity) ─────────────────────────── */
+
+.clima-stats {
+    gap: 0;
+    height: 62;
+}
+
+.stat-box {
+    flex-grow: 1;
+    gap: 4;
+    padding: 8;
+    align-items: center;
+}
+
+.stat-label {
+    font-size: 10;
+    color: #4a6a8a;
+    font-weight: bold;
+    height: 14;
+}
+
+.stat-val {
+    font-size: 15;
+    font-weight: bold;
+    color: #1a3a5c;
+    height: 20;
+}
+
+/* ── Section labels ───────────────────────────────────────────────────────── */
+
+.section-label {
+    font-size: 10;
+    font-weight: bold;
+    color: #ffffffaa;
+    padding: 8 16 2 16;
+    height: 22;
+}
+
+/* ── Selector rows (condition + city) ────────────────────────────────────── */
+
+.selector-row {
+    padding: 4 12 12 12;
+    gap: 8;
+    flex-wrap: wrap;
+    height: 52;
+}
+
+/* ── Condition buttons ────────────────────────────────────────────────────── */
+
+.cond-btn {
+    height: 36;
+    padding: 0 14;
+    border-radius: 18;
+    font-size: 13;
+    color: #ffffffbb;
+    background-color: #00000022;
+}
+
+.cond-btn:hover {
+    background-color: #ffffff30;
+    color: #ffffff;
+}
+
+.cond-btn:active {
+    background-color: #ffffff44;
+    color: #ffffff;
+}
+
+/* Active condition — set by clima.cc via setStyle("class", "cond-btn cond-active") */
+
+.cond-active {
+    background-color: #ffffff55;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.cond-active:hover {
+    background-color: #ffffff66;
+}
+
+/* ── City buttons ─────────────────────────────────────────────────────────── */
+
+.city-btn {
+    height: 32;
+    padding: 0 12;
+    border-radius: 6;
+    font-size: 13;
+    color: #ffffffaa;
+    background-color: #00000018;
+}
+
+.city-btn:hover {
+    background-color: #ffffff28;
+    color: #ffffff;
+}
+
+.city-btn:active {
+    background-color: #ffffff38;
+    color: #ffffff;
+}
+
+/* Active city — set by clima.cc via setStyle("class", "city-btn city-active") */
+
+.city-active {
+    background-color: #ffffff44;
+    color: #ffffff;
+    font-weight: bold;
+    border-width: 2;
+    border-color: #ffffffcc;
+}
+
+.city-active:hover {
+    background-color: #ffffff55;
+}

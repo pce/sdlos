@@ -508,6 +508,22 @@ bool SDLRenderer::SetFontPath(const std::string &path, float pt_size) noexcept {
     return false;
 }
 
+bool SDLRenderer::AddFallbackFontPath(const std::string& path, float pt_size) noexcept {
+    if (!text_renderer_)
+        return false;
+
+    // Absolute paths are used as-is; relative ones are resolved under the data base path.
+    const std::string full =
+        (!path.empty() && path[0] == '/') ? path : data_base_path_ + path;
+
+    if (text_renderer_->addFallbackFont(full, pt_size)) {
+        std::cout << "[SDLRenderer] emoji font: " << full << "\n";
+        return true;
+    }
+    std::cerr << "[SDLRenderer] AddFallbackFontPath: failed to load '" << full << "'\n";
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // LoadPipeline — parse and cache a pipeline.pug render pipeline.
 //

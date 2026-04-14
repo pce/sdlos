@@ -191,30 +191,59 @@ static void resolveAssetPaths(pce::sdlos::RenderTree& tree,
     }
 }
 
-// Try to load a font from <jade_dir>/data/fonts/ — the per-app font dir.
-// Only apps that declare DATA_DIR in sdlos_jade_app() will have this.
-// Does NOT gate on isReady(): loadFont() is what makes the renderer ready.
-static void loadAppFonts(pce::sdlos::SDLRenderer& renderer,
-                          const fs::path&           jade_dir)
+// Load a font from the app's data/fonts/ directory.
+// The directory is <SDL_GetBasePath()>/data/fonts/ — i.e. the build-tree
+// location that sdlos_jade_app(DATA_DIR ...) copies fonts into at build time.
+static void loadAppFonts(pce::sdlos::SDLRenderer& renderer)
 {
     pce::sdlos::TextRenderer* tr = renderer.GetTextRenderer();
     if (!tr) return;
 
-    const fs::path fonts_dir = jade_dir / "data" / "fonts";
+    const std::string base = renderer.GetDataBasePath();
+    if (base.empty()) return;
+
+    const fs::path fonts_dir = fs::path(base) / "data" / "fonts";
     if (!fs::exists(fonts_dir)) return;
 
+    // First successful load wins.
     const fs::path candidates[] = {
+        fonts_dir / "Ubuntu-Regular.ttf",
+        fonts_dir / "UbuntuSans-Regular.ttf",
         fonts_dir / "InterVariable.ttf",
         fonts_dir / "Inter-Regular.ttf",
         fonts_dir / "Roboto-Regular.ttf",
         fonts_dir / "LiberationSans-Regular.ttf",
     };
 
+    bool loaded = false;
     for (const auto& p : candidates) {
         if (fs::exists(p)) {
             if (tr->loadFont(p.string(), 16.f)) {
                 sdlos_log("[jade_host] app font: " + p.filename().string());
-                return;
+                loaded = true;
+                break;
+            }
+        }
+    }
+
+    // Emoji fallback — TwemojiMozilla.ttf provides color emoji via COLR tables.
+    // SDL3_ttf's TTF_AddFallbackFont() chains it so any missing glyph (☀️ ❄️ …)
+    // falls through to Twemoji automatically.
+    if (loaded) {
+        // Try several common Twemoji file-name variants in priority order.
+        // The DATA_DIR copy preserves whatever name the file has on disk,
+        // so we probe all known spellings rather than hard-coding one.
+        const fs::path twemoji_candidates[] = {
+            fonts_dir / "TwemojiMozilla.ttf",          // canonical name
+            fonts_dir / "Twemoji.Mozilla.ttf",          // trimmed variant with dots
+            fonts_dir / "TwemojiMozilla.subset.ttf",    // pre-subsetted smaller build
+            fonts_dir / "twemoji.ttf",                  // lowercase fallback
+        };
+        for (const auto& twemoji : twemoji_candidates) {
+            if (fs::exists(twemoji)) {
+                if (tr->addFallbackFont(twemoji.string(), 16.f))
+                    sdlos_log("[jade_host] emoji font: " + twemoji.filename().string());
+                break;  // first successful load wins
             }
         }
     }
@@ -595,7 +624,7 @@ static bool loadScene(const std::string&       jade_path,
 
     // 5d. Load a font from the jade app's own data/fonts/ if present.
     //     Only apps that bundle a DATA_DIR will have this directory.
-    loadAppFonts(renderer, jade_dir);
+    loadAppFonts(renderer);
 
     scene.css_sheet = {};
     {
@@ -704,21 +733,28 @@ static bool loadScene(const std::string&       jade_path,
                       + std::to_string(scene.css_sheet.active_entries.size()) + " entries");
     }
 
-    // 8. _font / _font_size jade attributes — behaviour has the last word.
-    //    Declare a font in jade like a CSS hint:
-    //      app(_font="data/fonts/Inter-Regular.ttf" _font_size="16")
-    //    Or set it inside jade_app_init():
-    //      tree.node(root)->setStyle("_font", "data/fonts/MyFont.ttf");
+    // 8. _font / _font_size / _emoji_font jade attributes — behaviour has the last word.
+    //    Declare fonts directly on the root node, e.g.:
+    //      col#my-root(_font="data/fonts/Ubuntu-Regular.ttf"
+    //                  _font_size="16"
+    //                  _emoji_font="data/fonts/TwemojiMozilla.ttf")
+    //    _font       — primary typeface (relative to GetDataBasePath())
+    //    _font_size  — point size for both primary and emoji fonts
+    //    _emoji_font — emoji / fallback font chained via TTF_AddFallbackFont
     if (pce::sdlos::RenderNode* rn = scene.tree->node(scene.root)) {
-        const std::string fp{ rn->style("_font") };
-        if (!fp.empty()) {
-            float sz = 17.f;
-            const std::string sz_s{ rn->style("_font_size") };
-            if (!sz_s.empty()) {
-                try { sz = std::stof(sz_s); } catch (...) {}
-            }
-            renderer.SetFontPath(fp, sz);
+        float sz = 17.f;
+        const std::string sz_s{ rn->style("_font_size") };
+        if (!sz_s.empty()) {
+            try { sz = std::stof(sz_s); } catch (...) {}
         }
+
+        const std::string fp{ rn->style("_font") };
+        if (!fp.empty())
+            renderer.SetFontPath(fp, sz);
+
+        const std::string efp{ rn->style("_emoji_font") };
+        if (!efp.empty())
+            renderer.AddFallbackFontPath(efp, sz);
     }
 
     // 9. Host overlays always render on top of the app scene.

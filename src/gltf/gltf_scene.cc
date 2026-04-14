@@ -1095,6 +1095,59 @@ bool GltfScene::loadFile(
                         });
                 }
 
+                // ── Auto-centre + Z-up → Y-up fix for GIS / city meshes ──────────
+                // Meshes exported from GIS pipelines (osmnx + trimesh) carry two
+                // issues that make them invisible in the renderer:
+                //   1. Raw UTM coordinates: X ≈ 6e5, Y ≈ 5e6  (far from origin)
+                //   2. Z-up orientation: buildings extruded along Z; GLTF expects Y-up
+                // Detect via: AABB centre is far from origin (> 500 units in X or Y)
+                // AND the Z span is ≪ both horizontal spans (flat city skyline).
+                // When detected, centre all vertices and rotate:
+                //   new_x = old_x − cx            (easting, unchanged axis)
+                //   new_y = old_z − cz            (height  → GLTF "up" axis)
+                //   new_z = cy   − old_y          (northing → GLTF "depth", negated for RH)
+                // The rotation matrix has det = +1 (proper rotation), so face winding
+                // and normal handedness are preserved.
+                {
+                    const float cx  = (aabb_min[0] + aabb_max[0]) * 0.5f;
+                    const float cy  = (aabb_min[1] + aabb_max[1]) * 0.5f;
+                    const float cz  = (aabb_min[2] + aabb_max[2]) * 0.5f;
+                    const float spx = aabb_max[0] - aabb_min[0];
+                    const float spy = aabb_max[1] - aabb_min[1];
+                    const float spz = aabb_max[2] - aabb_min[2];
+
+                    // Condition A: centre is far from origin → raw UTM offsets
+                    const bool large_offset = std::abs(cx) > 500.f || std::abs(cy) > 500.f;
+                    // Condition B: Z span ≪ X and Y spans → city mesh in Z-up / UTM
+                    const bool flat_zup = (spx > 100.f) && (spy > 100.f) && (spz > 0.f)
+                                          && (spz < spx * 0.05f) && (spz < spy * 0.05f);
+
+                    if (large_offset && flat_zup) {
+                        for (GpuVertex &v : verts) {
+                            const float ox = v.px, oy = v.py, oz = v.pz;
+                            const float ony = v.ny, onz = v.nz;
+                            v.px = ox  - cx;
+                            v.py = oz  - cz;  // Z (height) → Y (GLTF up)
+                            v.pz = cy  - oy;  // Y (north)  → −Z (GLTF depth, RH)
+                            // Normals: same rotation (proper rotation, no scaling)
+                            v.ny = onz;
+                            v.nz = -ony;
+                        }
+                        // Recompute AABB in the new Y-up coordinate space
+                        const float ny_min = aabb_min[2] - cz;
+                        const float ny_max = aabb_max[2] - cz;
+                        const float nz_min = cy - aabb_max[1];
+                        const float nz_max = cy - aabb_min[1];
+                        aabb_min[0] -= cx;  aabb_max[0] -= cx;
+                        aabb_min[1] = ny_min; aabb_max[1] = ny_max;
+                        aabb_min[2] = nz_min; aabb_max[2] = nz_max;
+                        std::cerr << "[GltfScene] loadFile: UTM Z-up→Y-up applied"
+                                  << "  X:[" << aabb_min[0] << "," << aabb_max[0] << "]"
+                                  << "  Y:[" << aabb_min[1] << "," << aabb_max[1] << "]"
+                                  << "  Z:[" << aabb_min[2] << "," << aabb_max[2] << "]\n";
+                    }
+                }
+
                 // ── Copy indices ──────────────────────────────────────────
 
                 const fg::Accessor &idx_acc = asset.accessors[prim.indicesAccessor.value()];

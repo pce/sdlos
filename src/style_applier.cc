@@ -223,13 +223,50 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
     if (const auto f = toFloat(n.style("borderRadius")))
         n.visual_props.border_radius = (*f) * px_scale;
 
-    // padding shorthand — sets all four sides when present
-    if (const auto f = toFloat(n.style("padding"))) {
-        const float phys              = (*f) * px_scale;
-        n.visual_props.padding_left   = phys;
-        n.visual_props.padding_right  = phys;
-        n.visual_props.padding_top    = phys;
-        n.visual_props.padding_bottom = phys;
+    // padding shorthand — 1, 2, 3, or 4 space-separated values (CSS spec order).
+    //   1 value:   all four sides
+    //   2 values:  top+bottom, left+right
+    //   3 values:  top, left+right, bottom
+    //   4 values:  top, right, bottom, left
+    {
+        const auto pv = n.style("padding");
+        if (!pv.empty()) {
+            float vals[4]{-1.f, -1.f, -1.f, -1.f};
+            int   count = 0;
+            const char* p   = pv.data();
+            const char* end = p + pv.size();
+            while (p < end && count < 4) {
+                // skip whitespace
+                while (p < end && *p == ' ') ++p;
+                if (p >= end) break;
+                float v{};
+                const auto [next, ec] = std::from_chars(p, end, v);
+                if (ec != std::errc{}) break;
+                vals[count++] = v * px_scale;
+                p = next;
+            }
+            if (count == 1) {
+                n.visual_props.padding_top    = vals[0];
+                n.visual_props.padding_right  = vals[0];
+                n.visual_props.padding_bottom = vals[0];
+                n.visual_props.padding_left   = vals[0];
+            } else if (count == 2) {
+                n.visual_props.padding_top    = vals[0];
+                n.visual_props.padding_bottom = vals[0];
+                n.visual_props.padding_left   = vals[1];
+                n.visual_props.padding_right  = vals[1];
+            } else if (count == 3) {
+                n.visual_props.padding_top    = vals[0];
+                n.visual_props.padding_left   = vals[1];
+                n.visual_props.padding_right  = vals[1];
+                n.visual_props.padding_bottom = vals[2];
+            } else if (count >= 4) {
+                n.visual_props.padding_top    = vals[0];
+                n.visual_props.padding_right  = vals[1];
+                n.visual_props.padding_bottom = vals[2];
+                n.visual_props.padding_left   = vals[3];
+            }
+        }
     }
 
     // ── objectFit — how an img fills its bounding box ────────────────────────

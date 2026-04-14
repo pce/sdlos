@@ -1,0 +1,102 @@
+// =============================================================================
+// clima.jade — Clima weather dashboard
+//
+// A pure-2D weather card app with a 3D scene in the background.
+// the behavior (clima.cc) drives everything through EventBus subscriptions
+// and direct setStyle() calls.
+//
+// Node ID reference  (used by tree.findById() in clima.cc)
+//   clima-root        col that fills the window (background shifts with weather)
+//   clima-time        HH:MM clock label in the header (updated per-frame)
+//   clima-card        main weather card (background-color changes per condition)
+//   clima-icon        large weather emoji  (☀️  🌧️  ❄️  🌨️  ⛅)
+//   clima-temp        temperature string   "24°C"
+//   clima-condition   condition name       "Sunny"
+//   clima-city-name   "Mainz, DE"
+//   clima-desc        one-line description  "Clear skies, bright sunshine"
+//   clima-feels       feels-like temperature "22°C"
+//   clima-range       low/high range         "18° — 27°"
+//   clima-humidity    humidity percentage    "55%"
+//   cond-0 … cond-4   condition selector buttons (class toggled active in cc)
+//   city-0 … city-5   city selector buttons     (class toggled active in cc)
+//
+// EventBus topics fired by onclick handlers:
+//   clima:condition   data-value = "0"…"4"  (weather-type index)
+//   clima:city        data-value = "0"…"5"  (city index)
+//
+// Weather types
+//   0  Sunny    ☀️   colours from the Clima fragment shader (readme.adoc)
+//   1  Rainy    🌧️
+//   2  Snowy    ❄️
+//   3  Hail     🌨️
+//   4  Cloudy   ⛅
+//
+// Cities
+//   0  Mainz, DE    1  Hamburg, DE    2  Amsterdam, NL
+//   3  Kyoto, JP    4  Rome, IT       5  Paris, FR
+//
+
+col#clima-root.clima-root(flexGrow="1")
+
+  //  City 3D mesh (GPU pre-pass — renders behind all 2D content)
+  // src= is empty at startup; clima.cc sets it at runtime when a city
+  // with a mesh is selected, then calls GltfScene::attach().
+  // display="none" keeps it out of flex layout until a mesh is loaded.
+  scene3d#clima-city-scene(src="" mesh-id="city-mesh" display="none")
+
+  //  Header
+  row.clima-header
+    div.clima-app-icon 🌤
+    div.clima-app-name Clima
+    div(flexGrow="1")
+    div#clima-time.clima-clock 00:00
+
+  //  Main weather card
+  col#clima-card.clima-card
+
+    // Large weather icon
+    div#clima-icon.clima-big-icon ☀️
+
+    // Temperature + condition / city name (two-column row)
+    row.clima-temp-row
+      div#clima-temp.clima-temp 24°C
+      col.clima-cond-col
+        div#clima-condition.clima-condition-name Sunny
+        div#clima-city-name.clima-city-label Mainz, DE
+
+    // One-line weather description
+    div#clima-desc.clima-desc Clear skies, bright sunshine
+
+    // Thin divider
+    div.clima-divider
+
+    // Stats row: feels-like / low-high / humidity
+    row.clima-stats
+      col.stat-box
+        div.stat-label Feels like
+        div#clima-feels.stat-val 22°C
+      col.stat-box
+        div.stat-label Low / High
+        div#clima-range.stat-val 18° — 27°
+      col.stat-box
+        div.stat-label Humidity
+        div#clima-humidity.stat-val 55%
+
+  //  Condition selector
+  div.section-label CONDITIONS
+  row.selector-row
+    div#cond-0.cond-btn.cond-active(onclick="clima:condition" data-value="0") ☀️  Sunny
+    div#cond-1.cond-btn(onclick="clima:condition" data-value="1") 🌧  Rain
+    div#cond-2.cond-btn(onclick="clima:condition" data-value="2") ❄️  Snow
+    div#cond-3.cond-btn(onclick="clima:condition" data-value="3") 🌨  Hail
+    div#cond-4.cond-btn(onclick="clima:condition" data-value="4") ⛅  Cloud
+
+  //  City selector
+  div.section-label CITIES
+  row.selector-row
+    div#city-0.city-btn.city-active(onclick="clima:city" data-value="0") Mainz
+    div#city-1.city-btn(onclick="clima:city" data-value="1") Hamburg
+    div#city-2.city-btn(onclick="clima:city" data-value="2") Amsterdam
+    div#city-3.city-btn(onclick="clima:city" data-value="3") Kyoto
+    div#city-4.city-btn(onclick="clima:city" data-value="4") Rome
+    div#city-5.city-btn(onclick="clima:city" data-value="5") Paris
