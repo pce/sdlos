@@ -68,7 +68,7 @@ static std::pair<CompiledParams, CompiledPass> build_pass_params(const StyleMap 
             break;  // hard cap
 
         float val = 0.f;
-        pce::sdlos::parse_float(e.val.data(), e.val.data() + e.val.size(), val);
+        parse_float(e.val.data(), e.val.data() + e.val.size(), val);
         cp.set(slot, val);
 
         if (stub.slot_count < 16) {
@@ -612,7 +612,7 @@ void FrameGraph::add_class(
         cg.set_enabled(pd.id, pd.enabled);
         for (const auto &e : pd.params) {
             float f = 0.f;
-            pce::sdlos::parse_float(e.val.data(), e.val.data() + e.val.size(), f);
+            parse_float(e.val.data(), e.val.data() + e.val.size(), f);
             cg.patch(pd.id, e.key, f);
         }
     }
@@ -645,7 +645,7 @@ void FrameGraph::remove_class(
         cg.set_enabled(pd.id, pd.enabled);
         for (const auto &e : pd.params) {
             float f = 0.f;
-            pce::sdlos::parse_float(e.val.data(), e.val.data() + e.val.size(), f);
+            parse_float(e.val.data(), e.val.data() + e.val.size(), f);
             cg.patch(pd.id, e.key, f);
         }
     }
@@ -716,7 +716,7 @@ void FrameGraph::wire_bus(EventBus &bus, CompiledGraph &cg, css::StyleSheet &she
         const auto val_str = std::string_view(payload).substr(sep2 + 1);
 
         float val = 0.f;
-        pce::sdlos::parse_float(val_str.data(), val_str.data() + val_str.size(), val);
+        parse_float(val_str.data(), val_str.data() + val_str.size(), val);
         cg.patch(pass_id, key, val);
     });
 }

@@ -5,18 +5,31 @@
 #include "range_slider.h"
 
 #include "../core/parse.h"
-
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <any>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
-#include <memory>
 #include <optional>
-#include <string>
-#include <string_view>
+
+namespace pce::sdlos {
+
+struct AbsPos { float x, y; };
+
+inline AbsPos absolutePos(const RenderTree &tree, NodeHandle h) {
+    float ax = 0.f, ay = 0.f;
+    for (; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h = n->parent;
+    }
+    return {ax, ay};
+}
+
+} // namespace pce::sdlos
 
 namespace pce::sdlos::widgets {
 
@@ -82,7 +95,7 @@ static std::optional<float> parseFloat(std::string_view sv) noexcept {
     if (sv.empty())
         return std::nullopt;
     float v{};
-    const auto [ptr, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+    const auto [ptr, ok] = ::pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
     return ok ? std::optional<float>{v} : std::nullopt;
 }
 
@@ -140,7 +153,7 @@ static bool hitThumb(const RangeSliderState &s, float ax, float ay, float mx, fl
     return mx >= tx - tr && mx <= tx + tr && my >= cy - tr && my <= cy + tr;
 }
 
-// ── Shared draw + update installer ───────────────────────────────────────────
+// Shared draw + update installer
 //
 // Called by both makeRangeSlider() and the bindInputWidgets() walker so the
 // visual/event logic is never duplicated.
@@ -176,7 +189,7 @@ installSliderCallbacks(RenderTree &tree, NodeHandle h, std::shared_ptr<RangeSlid
             c.track_bg.b,
             c.track_bg.a);
 
-        // ── Filled portion (left of thumb) ───────────────────────────────────
+        // Filled portion (left of thumb)
         const float fill_w = s.fraction() * tw;
         if (fill_w > 0.5f) {
             ctx.drawRect(
@@ -349,7 +362,7 @@ void RangeSlider::setValue(float v) {
 /**
  * @brief Steps down
  *
- * @param multiplier  Red channel component [0, 1]
+ * @param multiplier  int
  */
 void RangeSlider::stepDown(int multiplier) {
     RangeSliderState *s = getState();
@@ -362,7 +375,7 @@ void RangeSlider::stepDown(int multiplier) {
 /**
  * @brief Steps up
  *
- * @param multiplier  Red channel component [0, 1]
+ * @param multiplier  int
  */
 void RangeSlider::stepUp(int multiplier) {
     RangeSliderState *s = getState();
@@ -543,7 +556,7 @@ namespace {
 
 /// Recursive walker used by bindInputWidgets.
 ///  - bindInputWidgets — auto-spawn sliders from jade  input[type=range]  nodes
-static void walkBindInputs(RenderTree &tree, NodeHandle root) {
+static void walkBindInput(RenderTree &tree, NodeHandle root) {
     if (!root.valid())
         return;
 
@@ -557,7 +570,7 @@ static void walkBindInputs(RenderTree &tree, NodeHandle root) {
         if (!cn)
             break;
         const NodeHandle next = cn->sibling;
-        walkBindInputs(tree, c);
+        walkBindInput(tree, c);
         c = next;
     }
 
@@ -614,14 +627,9 @@ static void walkBindInputs(RenderTree &tree, NodeHandle root) {
 
 }  // anonymous namespace
 
-/**
- * @brief Binds input widgets
- *
- * @param tree  Red channel component [0, 1]
- * @param root  Red channel component [0, 1]
- */
+
 void bindInputWidgets(RenderTree &tree, NodeHandle root) {
-    walkBindInputs(tree, root);
+    walkBindInput(tree, root);
 }
 
 }  // namespace pce::sdlos::widgets

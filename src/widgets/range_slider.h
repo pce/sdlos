@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/signal.h"
 #include "../render_tree.h"
 #include "widget.h"
 
@@ -155,12 +156,7 @@ struct RangeSlider : WidgetView<RangeSliderState> {
 [[nodiscard]]
 RangeSlider makeRangeSlider(RenderTree &tree, RangeSliderConfig cfg);
 
-/**
- * @brief Binds input widgets
- *
- * @param tree  Red channel component [0, 1]
- * @param root  Red channel component [0, 1]
- */
+
 void bindInputWidgets(RenderTree &tree, NodeHandle root);
 
 }  // namespace pce::sdlos::widgets

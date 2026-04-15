@@ -112,7 +112,7 @@ void sdlos_log(std::string_view msg)
 
 #ifdef SDLOS_APP_BEHAVIOR
 void jade_app_vfs_init(pce::vfs::Vfs& vfs);
-#  include SDLOS_APP_BEHAVIOR
+#include SDLOS_APP_BEHAVIOR
 #endif
 
 // Default implementation of the VFS hook, used if the behavior doesn't provide one.

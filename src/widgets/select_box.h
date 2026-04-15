@@ -1,24 +1,6 @@
 #pragma once
 
-// A dropdown option picker built on WidgetView<SelectBoxState>.
-//
-// Design notes:
-//   - (C++23) std::span<const SelectOption> in config — zero-alloc for static option
-//     arrays; options are copied into state once at makeSelectBox() time,
-//     - std::move_only_function for on_change: unique ownership of captures.
-//   - Dropdown drawn inline by the draw() callback (no extra tree nodes).
-//     The dropdown "overflows" the node bounds when open; it renders on top
-//     of siblings that appear earlier in tree order.  Append the SelectBox
-//     last among siblings when overlap matters.
-//   - Self-closing in jade, value is the binding:
-//       select_box(id="lang" value="en")
-//   - options are registered in jade_app_init or passed as a span:
-//       auto sel = makeSelectBox(tree, {
-//           .options  = kLangOptions,
-//           .value    = &lang_signal,
-//           .selected = "en",
-//       });
-
+#include "core/signal.h"
 #include "../render_tree.h"
 #include "widget.h"
 

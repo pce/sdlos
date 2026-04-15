@@ -10,10 +10,26 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
-#include <memory>
 #include <optional>
-#include <string>
-#include <string_view>
+
+namespace pce::sdlos {
+
+struct AbsPos { float x, y; };
+
+inline AbsPos absolutePos(const RenderTree &tree, NodeHandle h) {
+    float ax = 0.f, ay = 0.f;
+    for (; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h = n->parent;
+    }
+    return {ax, ay};
+}
+
+} // namespace pce::sdlos
 
 namespace pce::sdlos::widgets {
 namespace {
@@ -56,7 +72,7 @@ static std::optional<float> parseFloat(std::string_view sv) noexcept {
     if (sv.empty())
         return {};
     float v{};
-    auto [p, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+    auto [p, ok] = ::pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
     return ok ? std::optional<float>{v} : std::nullopt;
 }
 
@@ -224,7 +240,7 @@ installCallbacks(RenderTree &tree, NodeHandle h, std::shared_ptr<NumberDraggerSt
  * @return NumberDragger result
  */
 NumberDragger makeNumberDragger(RenderTree &tree, NumberDraggerConfig cfg) {
-    cfg.value          = snapClamp(cfg.value, cfg.min, cfg.max, cfg.step);
+    cfg.initial_value  = snapClamp(cfg.initial_value, cfg.min, cfg.max, cfg.step);
     const NodeHandle h = tree.alloc();
     RenderNode *n      = tree.node(h);
     assert(n);
@@ -233,7 +249,7 @@ NumberDragger makeNumberDragger(RenderTree &tree, NumberDraggerConfig cfg) {
     n->layout_kind = LayoutKind::None;
 
     auto st   = std::make_shared<NumberDraggerState>();
-    st->value = cfg.value;
+    st->value = cfg.initial_value;
     st->cfg   = std::move(cfg);
     n->state  = st;
 
@@ -479,14 +495,14 @@ static void walkBindDragNum(RenderTree &tree, NodeHandle root) {
         if (sv.empty())
             return {};
         float v{};
-        auto [p, ok] = pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
+        auto [p, ok] = ::pce::sdlos::parse_float(sv.data(), sv.data() + sv.size(), v);
         return ok ? std::optional<float>{v} : std::nullopt;
     };
 
     NumberDraggerConfig cfg;
     cfg.min        = pf(n->style("min")).value_or(cfg.min);
     cfg.max        = pf(n->style("max")).value_or(cfg.max);
-    cfg.value      = pf(n->style("value")).value_or(cfg.value);
+    cfg.initial_value      = pf(n->style("value")).value_or(cfg.initial_value);
     cfg.step       = pf(n->style("step")).value_or(cfg.step);
     cfg.drag_speed = pf(n->style("dragSpeed")).value_or(0.f);
     if (auto v = pf(n->style("width"))) {
@@ -500,10 +516,10 @@ static void walkBindDragNum(RenderTree &tree, NodeHandle root) {
     if (auto v = pf(n->style("fontSize")))
         cfg.font_size = *v;
 
-    cfg.value = snapClamp(cfg.value, cfg.min, cfg.max, cfg.step);
+    cfg.initial_value = snapClamp(cfg.initial_value, cfg.min, cfg.max, cfg.step);
 
     auto st   = std::make_shared<NumberDraggerState>();
-    st->value = cfg.value;
+    st->value = cfg.initial_value;
     st->cfg   = std::move(cfg);
     n->state  = st;
     installCallbacks(tree, root, std::move(st));

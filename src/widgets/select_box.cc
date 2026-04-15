@@ -9,6 +9,9 @@
 
 #include "select_box.h"
 
+#include "../render_tree.h"
+#include "../style_draw.h"
+
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -18,6 +21,25 @@
 #include <memory>
 #include <string>
 #include <string_view>
+
+namespace pce::sdlos {
+
+struct AbsPos { float x, y; };
+
+inline AbsPos absolutePos(const RenderTree &tree, NodeHandle h) {
+    float ax = 0.f, ay = 0.f;
+    for (; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h = n->parent;
+    }
+    return {ax, ay};
+}
+
+} // namespace pce::sdlos
 
 namespace pce::sdlos::widgets {
 

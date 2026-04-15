@@ -10,13 +10,12 @@
 //   bindDrawCallbacks(tree, root);
 //
 // Responsibilities
-// ────────────────
-// draw()   — reads backgroundColor → drawRect, text+color+fontSize → drawText
+// draw()     reads backgroundColor → drawRect, text+color+fontSize → drawText
 //            (text is approximately centered in the node bounds).
 //            Coordinates are converted from layout-relative to absolute screen
 //            space by walking the parent chain.
 //
-// update() — marks dirty_render = true every frame.  Required because
+// update()   marks dirty_render = true every frame.  Required because
 //            SDL_GPU_LOADOP_CLEAR wipes the framebuffer on every render pass;
 //            nodes that don't re-emit draw commands each frame disappear.
 //            Composed on top of any existing update() (e.g. from bindNodeEvents).
@@ -28,8 +27,8 @@ namespace pce::sdlos {
 /**
  * @brief Binds draw callbacks
  *
- * @param tree  Red channel component [0, 1]
- * @param root  Red channel component [0, 1]
+ * @param tree  RenderTree
+ * @param root  NodeHandle of the subtree root to bind (e.g. the result of jade::parse)
  */
 void bindDrawCallbacks(RenderTree &tree, NodeHandle root);
 

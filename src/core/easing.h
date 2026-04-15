@@ -1,22 +1,9 @@
 #pragma once
 
-// easing.h — stateless constexpr easing functions.
-//
-// All functions map a normalised progress value t ∈ [0, 1] to an output
-// value that is also nominally in [0, 1], though spring() and bounce() may
-// briefly exceed 1 for overshoot / bounce effects.
-//
-// Optimization: Functions use fast math approximations (pow_fast, exp_fast,
-// sin_fast, cos_fast, sqrt_fast) for easing functions that would otherwise
-// call expensive standard library functions. These provide excellent accuracy
-// with ~2-3× speedup for animation-intensive workloads.
-//
-
-
-
 #include <cmath>
 #include <string_view>
 #include <vector>
+#include <type_traits>
 
 namespace pce::sdlos {
 struct Vec2 { float x, y; };

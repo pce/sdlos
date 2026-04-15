@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../render_tree.h"
+#include "core/signal.h"
+#include "render_tree.h"
 #include "widget.h"
 
 #include <SDL3/SDL.h>
@@ -104,7 +105,7 @@ struct TextFieldState {
     TextFieldConfig cfg;
 
     // set on first draw; used by handleEvent for pixel-accurate cursor placement
-    pce::sdlos::TextRenderer *text_renderer = nullptr;
+    TextRenderer *text_renderer = nullptr;
 
     // recomputed in update(); only meaningful in multiline mode
     float content_w = 0.f;

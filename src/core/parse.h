@@ -55,7 +55,7 @@ struct ParseFloatResult {
     bool        ok;   ///< True when at least one digit was consumed
 };
 
-// ── Pointer-pair overload ─────────────────────────────────────────────────────
+// Pointer-pair overload
 // Parse a float from the range [first, last).
 // On success sets `value` and returns {end_of_number, true}.
 // On failure leaves `value` unchanged and returns {first, false}.

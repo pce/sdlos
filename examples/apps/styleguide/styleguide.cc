@@ -57,6 +57,7 @@ extern void sdlos_log(std::string_view msg);
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <type_traits> // Added to resolve libc++ header issues
 #include <vector>
 
 
@@ -788,7 +789,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
                     pce::sdlos::easing::linear       // constant speed (no ease)
                 );
 
-                if (pce::sdlos::RenderNode* cn = tree.node(crystal_h)) {
+                if (RenderNode* cn = tree.node(crystal_h)) {
                     cn->setStyle("onclick",    "hotspot:select");
                     cn->setStyle("data-value", "sg-crystal");
                     cn->setStyle("data-info",
@@ -829,7 +830,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     // 6. Load first page into #page-container
     loadPage(0);
 
-    //7. Show nav bar on startup (auto-hides after k_nav_hide_time)
+    // 7. Show nav bar on startup (auto-hides after k_nav_hide_time)
     showNav();
     initNavIcons();
     updatePlayBtn();
@@ -993,7 +994,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
              g_crystal_state->rotation_z.transition(
                  current_rot + 360.f,         // one extra revolution from current position
                  2000.f,                      // faster: 2 seconds instead of 4
-                 pce::sdlos::easing::easeOut  // smooth deceleration at the end
+                 pce::sdlos::easing::linear
              );
              sdlos_log("[styleguide] crystal boost spin triggered");
          }
@@ -1001,13 +1002,13 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
          // The info node lives in the dynamically-loaded scene3d.jade page.
          // It is only present in the tree when page 3 is active; the
          // findById will silently return invalid on other pages — no harm.
-         const pce::sdlos::NodeHandle info_h =
+         const NodeHandle info_h =
              g_tree->findById(g_root, "sg-hotspot-info");
          if (!info_h.valid()) return;
 
          // Resolve the data-info string from the clicked proxy node.
          std::string info = "No info available.";
-         const pce::sdlos::NodeHandle clicked =
+         const NodeHandle clicked =
              g_tree->findById(g_root, payload);
          if (clicked.valid()) {
              const auto sv =
@@ -1015,7 +1016,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
              if (!sv.empty()) info = std::string(sv);
          }
 
-         if (pce::sdlos::RenderNode* n = g_tree->node(info_h)) {
+         if (RenderNode* n = g_tree->node(info_h)) {
              n->setStyle("text",  info);
              n->setStyle("color", "#c4b5fd");
              n->dirty_render = true;

@@ -171,7 +171,7 @@ float GltfScene::parseFloat(std::string_view s, float fallback) noexcept {
     if (s.empty())
         return fallback;
     float value = fallback;
-    pce::sdlos::parse_float(s.data(), s.data() + s.size(), value);
+    parse_float(s.data(), s.data() + s.size(), value);
     return value;
 }
 
@@ -460,7 +460,7 @@ void GltfScene::applyCSS(RenderTree &tree) noexcept {
  * @return true on success, false on failure
  */
 bool GltfScene::applyMapCSS(RenderTree &tree, NodeHandle root, const std::string &path) noexcept {
-    auto css = pce::sdlos::css::load(path);
+    auto css = css::load(path);
     if (css.empty()) {
         std::cerr << "[GltfScene] applyMapCSS: no rules loaded from " << path << "\n";
         return false;

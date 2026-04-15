@@ -1,3 +1,6 @@
+#include <type_traits>
+#include <cmath>
+
 #include "render_tree.h"
 
 #include "image_cache.h"

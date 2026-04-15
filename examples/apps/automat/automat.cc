@@ -278,7 +278,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     {
         const fs::path scene_css_path = fs::path(base_path) / "scene.css";
         if (fs::exists(scene_css_path)) {
-            g_scene_css = pce::sdlos::css::load(scene_css_path.string());
+            g_scene_css = ::pce::sdlos::css::load(scene_css_path.string());
             if (!g_scene_css.empty()) {
                 g_scene_css.applyTo(tree, root);
                 g_scene_css.buildHover(tree, root);
@@ -295,7 +295,7 @@ void jade_app_init(pce::sdlos::RenderTree&               tree,
     {
         const fs::path ui_css_path = fs::path(base_path) / "box.css";
         if (fs::exists(ui_css_path)) {
-            g_ui_css = pce::sdlos::css::load(ui_css_path.string());
+            g_ui_css = ::pce::sdlos::css::load(ui_css_path.string());
             if (!g_ui_css.empty()) {
                 g_ui_css.applyTo(tree, root);
                 g_ui_css.buildHover(tree, root);   // required for :hover rules on buttons

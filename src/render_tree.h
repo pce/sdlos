@@ -1,8 +1,10 @@
 #pragma once
 
+
 #include "core/frame_arena.h"
 #include "core/slot_map.h"
 #include "core/small_flat_map.h"
+#include "core/rgba.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
@@ -161,6 +163,11 @@ struct VisualProps {
 //
 /// TODO SoC: RenderTree GodObject Resolution
 /// TODO atm Populated by style_draw.cc from _shader_param0/1/2, _shader_focusX/Y attrs.
+/// RGBA colour value used by RenderContext::drawRoundedRect.
+/// Defined here (not in style_draw.cc) so render_tree.cc can access members.
+
+#include "core/animated.h"
+
 struct NodeShaderParams {
     float u_width;   // node width  in physical pixels
     float u_height;  // node height in physical pixels
@@ -235,765 +242,147 @@ struct RenderContext {
      * @param text  UTF-8 text content
      * @param x     Horizontal coordinate in logical pixels
      * @param y     Vertical coordinate in logical pixels
-     * @param size  Capacity or number of elements
+     * @param size  Font size in points
      * @param r     Red channel component [0, 1]
      * @param g     Green channel component [0, 1]
      * @param b     Blue channel component [0, 1]
      * @param a     Alpha channel component [0, 1]
-     * @param rtl   Red channel component [0, 1]
+     * @param rtl   Enable right-to-left HarfBuzz text shaping; pass
+     *              `vp.direction == VisualProps::Direction::RTL` (default: false)
      */
-    void drawText(
-        std::string_view text,
-        float x,
-        float y,
-        float size = 16.f,
-        float r    = 1.f,
-        float g    = 1.f,
-        float b    = 1.f,
-        float a    = 1.f,
-        bool rtl   = false);
+    void drawText(std::string_view text, float x, float y, float size, float r, float g, float b, float a = 1.f, bool rtl = false);
 
-    /**
-     * @brief Draws rect outline
-     *
-     * @param x          Horizontal coordinate in logical pixels
-     * @param y          Vertical coordinate in logical pixels
-     * @param w          Width in logical pixels
-     * @param h          Opaque resource handle
-     * @param thickness  Upper bound
-     * @param r          Red channel component [0, 1]
-     * @param g          Green channel component [0, 1]
-     * @param b          Blue channel component [0, 1]
-     * @param a          Alpha channel component [0, 1]
-     */
-    void drawRectOutline(
-        float x,
-        float y,
-        float w,
-        float h,
-        float thickness,
-        float r,
-        float g,
-        float b,
-        float a = 1.f);
-
-    // Draw a GPU-resident image from `src` path using the ImageCache.
-    // Missing / failed paths produce no draw call (silent no-op after the
-    // first load attempt, which logs the error and caches the failure).
-    //
-    // `opacity`: multiplied into the image's own alpha channel.
-    /**
-     * @brief Draws image
-     *
-     * @param src      Source operand or data
-     * @param x        Horizontal coordinate in logical pixels
-     * @param y        Vertical coordinate in logical pixels
-     * @param w        Width in logical pixels
-     * @param h        Opaque resource handle
-     * @param opacity  Iterator position
-     * @param fit      Iterator position
-     */
-    void drawImage(
-        std::string_view src,
-        float x,
-        float y,
-        float w,
-        float h,
-        float opacity              = 1.f,
-        VisualProps::ObjectFit fit = VisualProps::ObjectFit::Fill);
-
-    // Draw an image through a user-supplied fragment shader loaded from
-    // data/shaders/{platform}/{shader_name}.frag.{ext}.
-    // NodeShaderParams is pushed to the fragment's buffer(0); the image
-    // texture is bound to sampler(0) — same as drawImage.
-    // Falls back to drawImage() when the shader pipeline is unavailable.
-    /**
-     * @brief Draws image with shader
-     *
-     * @param src            Source operand or data
-     * @param shader_name    Human-readable name or identifier string
-     * @param x              Horizontal coordinate in logical pixels
-     * @param y              Vertical coordinate in logical pixels
-     * @param w              Width in logical pixels
-     * @param h              Opaque resource handle
-     * @param opacity        Iterator position
-     * @param fit            Iterator position
-     * @param shader_params  Opaque resource handle
-     */
-    void drawImageWithShader(
-        std::string_view src,
-        std::string_view shader_name,
-        float x,
-        float y,
-        float w,
-        float h,
-        float opacity,
-        VisualProps::ObjectFit fit,
-        const struct NodeShaderParams &shader_params);
-
-    /// Draw the current webcam/video frame (no shader).
-    void drawVideo(float x, float y, float w, float h, float opacity = 1.f);
-
-    /// Draw the current webcam/video frame through a named node shader.
-    /// Falls back to drawVideo() when the shader pipeline is unavailable.
-    void drawVideoWithShader(
-        std::string_view shader_name,
-        float x,
-        float y,
-        float w,
-        float h,
-        float opacity,
-        const struct NodeShaderParams &shader_params);
-
-    /**
-     * @brief Pipeline
-     *
-     * @param name  Human-readable name or identifier string
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    [[nodiscard]]
+    void drawImage(std::string_view src, float x, float y, float w, float h, float opacity, VisualProps::ObjectFit fit);
+    void drawImageWithShader(std::string_view src, std::string_view shader_name, float x, float y, float w, float h, float opacity, VisualProps::ObjectFit fit, const struct NodeShaderParams &shader_params);
+    void drawVideo(float x, float y, float w, float h, float opacity);
+    void drawVideoWithShader(std::string_view shader_name, float x, float y, float w, float h, float opacity, const struct NodeShaderParams &shader_params);
+    void drawRoundedRect(float x, float y, float w, float h, float radius, float bw, const struct RGBAf &fill, const struct RGBAf &border);
+    void drawRectOutline(float x, float y, float w, float h, float thickness, float r, float g, float b, float a);
     SDL_GPUGraphicsPipeline *pipeline(std::string_view name);
-
-    /**
-     * @brief Draws rounded rect with optional shadow
-     *
-     * @param x       Horizontal coordinate in physical pixels
-     * @param y       Vertical coordinate in physical pixels
-     * @param w       Width in physical pixels
-     * @param h       Height in physical pixels
-     * @param radius  Corner radius in pixels
-     * @param bw      Border width in pixels
-     * @param fill    Fill color
-     * @param border  Border color
-     */
-    void drawRoundedRect(
-        float x,
-        float y,
-        float w,
-        float h,
-        float radius,
-        float bw,
-        const struct RGBAf &fill,
-        const struct RGBAf &border);
 };
 
-[[nodiscard]]
-std::
-    expected<SDL_GPUShader *, std::string>
-
-    /**
-     * @brief Loads shader
-     *
-     * @param device               SDL3 GPU device handle
-     * @param backend              Blue channel component [0, 1]
-     * @param name                 Human-readable name or identifier string
-     * @param stage                String tag used for lookup or categorisation
-     * @param num_samplers         Numeric count
-     * @param num_uniform_buffers  Contiguous memory buffer
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    loadShader(
-        SDL_GPUDevice *device,
-        GPUBackend backend,
-        std::string_view name,
-        SDL_GPUShaderStage stage,
-        uint32_t num_samplers        = 0,
-        uint32_t num_uniform_buffers = 1);
-
-// StyleMap  —  flat string→string property bag attached to each RenderNode.
-//
-// Populated by the JadeLite / XML parsers after parsing.
-// The StyleApplier reads it and writes typed values into layout_kind,
-// layout_props, x/y/w/h.  The draw callback may also read it directly
-// (e.g. "backgroundColor", "fontSize").
-//
-// Implemented as a vector of pairs:
-//   - O(N) linear scan, but N is always tiny (< 20 entries per node).
-//   - Empty vector = zero heap allocation — three pointer words on the stack.
-//   - C++-constructed nodes (widgets, overlays) carry zero overhead.
-
-using StyleMap = std::vector<std::pair<std::string, std::string>>;
-
 struct RenderNode {
-    // LCRS links
+    NodeHandle handle  = k_null_handle;
     NodeHandle parent  = k_null_handle;
-    NodeHandle child   = k_null_handle;
+    NodeHandle child   = k_null_handle;  // standard LCRS (left-child, right-sibling) tree
     NodeHandle sibling = k_null_handle;
-
-    // Geometry — pixel space, parent-relative
-    float x{}, y{}, w{}, h{};
-
-    // Opacity multiplier [0, 1].  Applied to every draw call for this node
-    // (background, border, text, image alpha).  Does NOT cascade to children
-    // automatically — set per-node or use a parent draw wrapper.
-    //
-    // CSS:        `opacity: 0.5`            → parsed by StyleApplier
-    // Animated:   `n->opacity = anim.current()`  — set directly from update()
-    // Default:    1.0 (fully opaque)
-    float opacity = 1.f;
-
-    bool dirty_layout : 1 = true;
-    bool dirty_render : 1 = true;
-    bool hidden       : 1 = false;  // display:none — skip layout & render
 
     LayoutKind layout_kind = LayoutKind::None;
     LayoutProps layout_props;
     VisualProps visual_props;
 
+    // x, y, w, h: physical pixels (resolved by RenderTree::update)
+    float x = 0.f;
+    float y = 0.f;
+    float w = 0.f;
+    float h = 0.f;
+
+    bool hidden = false;
+
+    // Per-node alpha multiplier applied to all draw calls on this node.
+    // Set by StyleApplier::apply() from the `opacity` CSS attribute.
+    // Range [0, 1]; 1 = fully opaque (default), 0 = fully transparent.
+    float opacity = 1.f;
+
+    // Type-erased state container for UI widgets.
+    std::any state;
+
+    // style_attrs — raw Jade attributes (e.g. "class", "id", "gap")
+    core::small_flat_map<std::string, std::string, 8> style_attrs;
+
+    // transient state; move to RenderContext?
+    bool dirty_render = true;  ///< repaint this node only
+    bool dirty_layout = true;  ///< redo layout for this node's subtree
+
     std::function<void(RenderContext &)> draw;
-    std::function<void()> update;
+    std::function<void(RenderContext &)> after_draw;  ///< Post-children hook
+    std::function<void()> update;                     ///< Behavior tick
 
-    // after_draw — called once after ALL children of this node have been
-    // rendered.  Used to restore GPU state set in draw() that should only
-    // apply to the subtree (e.g. scissor rect for overflow:hidden, stencil
-    // pop for mask effects).  Leave null when not needed.
-    std::function<void(RenderContext &)> after_draw;
-
-    std::any state;  // widget-local; access via std::any_cast<State>(n->state)
-
-    // Parsed styles
-    //
-    // Set by the JadeLite / XML parser; empty on all C++-constructed nodes.
-    // Common keys: "tag", "id", "class", "text",
-    //              "width", "height", "x", "y",
-    //              "flexDirection", "flexGrow", "flexShrink", "flexBasis",
-    //              "gap", "backgroundColor", "color", "fontSize".
-    StyleMap styles;
-
-    [[nodiscard]]
-    std::string_view style(std::string_view key) const noexcept {
-        for (const auto &[k, v] : styles)
-            if (k == key)
-                return v;
-        return {};
-    }
-
-    // Insert or overwrite a style entry.
     /**
-     * @brief Sets style
+     * @brief Sets Style attribute — replaces existing value if key matches.
      *
-     * @param key    Lookup key
+     * @param key    Human-readable name or identifier string
      * @param value  Operand value
      */
-    void setStyle(std::string_view key, std::string value) {
-        for (auto &[k, v] : styles)
+    void setStyle(std::string_view key, std::string_view value) {
+        for (auto &[k, v] : style_attrs) {
             if (k == key) {
-                v = std::move(value);
+                v = value;
                 return;
             }
-        styles.emplace_back(std::string(key), std::move(value));
+        }
+        style_attrs.insert({std::string(key), std::string(value)});
     }
 
     /**
-     * @brief Tests for the presence of style
+     * @brief Has style
      *
-     * @param key  Lookup key
+     * @param key  Human-readable name or identifier string
      *
      * @return true on success, false on failure
      */
-    [[nodiscard]]
     bool hasStyle(std::string_view key) const noexcept {
-        for (const auto &[k, v] : styles)
+        for (const auto &[k, v] : style_attrs) {
             if (k == key)
                 return true;
+        }
         return false;
     }
+
+    // Convenience property accessors. (O(n) but n is small ~4-10)
+    std::string_view style(std::string_view key) const noexcept {
+        for (const auto &[k, v] : style_attrs) {
+            if (k == key)
+                return v;
+        }
+        return "";
+    }
 };
 
-/// Signal<T>  —  reactive value cell.
-//
-// set() stores the value and synchronously notifies observers.
-// RenderTree::bind() wires a Signal to markDirty() on a node.
-// observe() uses C++23 deducing-this — one template, works on lvalue/rvalue.
-//
-
-template <typename T>
-class Signal {
-  public:
-    /**
-     * @brief Signals <t>
-     *
-     * @param initial  Iterator position
-     */
-    explicit Signal(T initial = T{})
-        : value_(std::move(initial)) {}
-
-    /**
-     * @brief Signals <t>
-     *
-     * @param param0  Red channel component [0, 1]
-     */
-    Signal(const Signal &)            = delete;
-    Signal &operator=(const Signal &) = delete;
-    /**
-     * @brief Signals <t>
-     *
-     * @param param0  Red channel component [0, 1]
-     */
-    Signal(Signal &&)            = default;
-    Signal &operator=(Signal &&) = default;
-
-    /**
-     * @brief Returns
-     *
-     * @return Reference to the result
-     */
-    [[nodiscard]]
-    const T &get() const noexcept {
-        return value_;
-    }
-    [[nodiscard]]
-    operator const T &() const noexcept {
-        return value_;
-    }
-
-    /**
-     * @brief Sets
-     *
-     * @param v  T value
-     */
-    void set(T v) {
-        value_ = std::move(v);
-        for (auto &obs : observers_)
-            obs(value_);
-    }
-
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Observe
-     *
-     * @return Reference to the result
-     */
-    template <typename Self>
-    auto &observe(this Self &&self, std::function<void(const T &)> fn) {
-        self.observers_.push_back(std::move(fn));
-        return self;
-    }
-
-    /**
-     * @brief Observer count
-     *
-     * @return Integer result; negative values indicate an error code
-     *
-     * @warning Signed/unsigned comparison — Signed/unsigned comparison — potential
-     *          undefined behaviour on overflow; cast explicitly
-     */
-    [[nodiscard]]
-    std::size_t observerCount() const noexcept {
-        return observers_.size();
-    }
-
-  private:
-    T value_;
-    std::vector<std::function<void(const T &)>> observers_;
-};
-
-/// RenderTree owns all nodes; drives the frame lifecycle.
 class RenderTree {
   public:
-    /// arena_size — initial frame arena capacity in bytes (default 1 MiB).
-    explicit RenderTree(std::size_t arena_size = 1u << 20);
-    /**
-     * @brief ~render tree
-     *
-     * @warning Signed/unsigned comparison — Signed/unsigned comparison — potential
-     *          undefined behaviour on overflow; cast explicitly
-     */
-    ~RenderTree() = default;
+    explicit RenderTree(std::size_t arena_size = 1024 * 1024);
 
-    /**
-     * @brief Renders tree
-     *
-     * @param param0  Red channel component [0, 1]
-     */
-    RenderTree(const RenderTree &)            = delete;
-    RenderTree &operator=(const RenderTree &) = delete;
-
-    /**
-     * @brief Alloc
-     *
-     * @return Handle to the node, or k_null_handle on failure
-     */
-    [[nodiscard]]
     NodeHandle alloc();
-
-    /// Recursively frees the node and its entire subtree.
     void free(NodeHandle handle);
 
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    /**
-     * @brief Node
-     *
-     * @param handle  Opaque resource handle
-     *
-     * @return Pointer to the result, or nullptr on failure
-     */
-    [[nodiscard]]
+    core::frame_arena &arena() noexcept { return arena_; }
+    const core::frame_arena &arena() const noexcept { return arena_; }
+
     RenderNode *node(NodeHandle handle);
-    [[nodiscard]]
     const RenderNode *node(NodeHandle handle) const;
 
-    /**
-     * @brief Appends child
-     *
-     * @param parent  Red channel component [0, 1]
-     * @param child   Upper bound
-     */
+    std::size_t nodeCount() const noexcept { return nodes_.size(); }
+
     void appendChild(NodeHandle parent, NodeHandle child);
-    /**
-     * @brief Appends children
-     *
-     * @param parent    Red channel component [0, 1]
-     * @param children  Upper bound
-     */
     void appendChildren(NodeHandle parent, std::span<const NodeHandle> children);
-    /**
-     * @brief Detaches
-     *
-     * @param child  Upper bound
-     */
     void detach(NodeHandle child);
 
-    /**
-     * @brief Mark dirty
-     *
-     * @param handle  Opaque resource handle
-     */
     void markDirty(NodeHandle handle);
-    /**
-     * @brief Mark layout dirty
-     *
-     * @param handle  Opaque resource handle
-     */
     void markLayoutDirty(NodeHandle handle);
 
-    /**
-     * @brief Binds = Signal must outlive this RenderTree.
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    /**
-     * @brief Binds
-     */
-    template <typename T>
-    void bind(Signal<T> &signal, NodeHandle handle) {
-        signal.observe([this, handle](const T &) { markDirty(handle); });
-    }
-
-    /**
-     * @brief Begins frame
-     */
-    void beginFrame();  // reset frame_arena
-    /**
-     * @brief Updates
-     *
-     * @param root  Red channel component [0, 1]
-     */
-    void update(NodeHandle root = k_null_handle);  // layout cascade + update()
-    /**
-     * @brief Renders
-     *
-     * @param root  Red channel component [0, 1]
-     * @param ctx   Execution or rendering context
-     */
-    void render(NodeHandle root, RenderContext &ctx);  // draw() on dirty nodes
-
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    /**
-     * @brief Sets root
-     *
-     * @param h  Opaque resource handle
-     */
-    [[nodiscard]]
-    NodeHandle root() const noexcept {
-        return root_;
-    }
-    void setRoot(NodeHandle h) noexcept { root_ = h; }
-
-    /// DFS walk from 'start'; returns the first node whose style("id") == id.
-    /// Returns k_null_handle if not found.
-    [[nodiscard]]
-    NodeHandle findById(NodeHandle start, std::string_view id) const;
-
-    /// DFS walk from 'start'; returns every node whose space-separated
-    /// style("class") list contains the given token.
-    [[nodiscard]]
-    std::vector<NodeHandle> findByClass(NodeHandle start, std::string_view cls) const;
-
-    /// Returns true if any node in the subtree rooted at `start` has
-    /// dirty_render == true.  O(N) walk; only called once per frame.
-    [[nodiscard]]
     bool anyDirty(NodeHandle start) const noexcept;
-
-    /// Set dirty_render = true on every node in the subtree rooted at `start`.
-    /// Called before a full repaint so that nodes which did NOT mark themselves
-    /// dirty still re-emit their draw commands into the freshly-cleared UI
-    /// texture.
     void forceAllDirty(NodeHandle start) noexcept;
 
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Arena
-     *
-     * @return Reference to the result
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
+    NodeHandle findById(NodeHandle start, std::string_view id) const;
+    std::vector<NodeHandle> findByClass(NodeHandle start, std::string_view cls) const;
 
-    [[nodiscard]]
-    core::frame_arena &arena() noexcept {
-        return arena_;
-    }
-    /**
-     * @brief Node count
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]]
-    std::size_t nodeCount() const noexcept {
-        return nodes_.size();
-    }
-    /**
-     * @brief Capacity
-     *
-     * @return Integer result; negative values indicate an error code
-     */
-    [[nodiscard]]
-    std::size_t capacity() const noexcept {
-        return nodes_.capacity();
-    }
-
-  private:
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
-    /**
-     * @brief Traverse
-     */
     template <std::invocable<NodeHandle, RenderNode &> Fn>
     void traverse(NodeHandle start, Fn &&fn);
 
-    /**
-     * @brief Resolves layout
-     *
-     * @param h  Opaque resource handle
-     * @param n  RenderNode & value
-     */
+    void beginFrame();
+    void update(NodeHandle root = k_null_handle);
+    void render(NodeHandle root, RenderContext &ctx);
+
+    void setRoot(NodeHandle root) { root_ = root; }
+    NodeHandle root() const noexcept { return root_; }
+
+  private:
     void resolveLayout(NodeHandle h, RenderNode &n);
 
     core::slot_map<RenderNode> nodes_;
     core::frame_arena arena_;
     NodeHandle root_ = k_null_handle;
 };
-
-/// Walks the parent chain from `handle` up to the root, accumulating
-/// parent-relative x/y into an absolute screen-space position.
-/// This is the canonical way for draw() callbacks to find their screen origin
-/// when ctx.offset_x/y is not yet available (e.g. in legacy callbacks).
-[[nodiscard]]
-inline std::pair<float, float> absolutePos(const RenderTree &tree, NodeHandle handle) noexcept {
-    float ax = 0.f, ay = 0.f;
-    for (NodeHandle h = handle; h.valid();) {
-        const RenderNode *n = tree.node(h);
-        if (!n)
-            break;
-        ax += n->x;
-        ay += n->y;
-        h   = n->parent;
-    }
-    return {ax, ay};
-}
 
 }  // namespace pce::sdlos

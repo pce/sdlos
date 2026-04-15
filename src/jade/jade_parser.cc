@@ -59,7 +59,9 @@ NodeHandle parse(std::string_view source, RenderTree &tree) {
             return;
         RenderNode *n = tree.node(current);
         if (n)
-            pce::sdlos::StyleApplier::apply(*n);
+            if (!n->style_attrs.empty()) {
+                StyleApplier::apply(*n);
+            }
         tree.appendChild(parent_stack.back(), current);
         last    = current;
         current = k_null_handle;

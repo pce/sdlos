@@ -251,9 +251,9 @@ bool   g_dragging       = false;
 // Animated camera.
 // While !finished() the per-frame update reads .current(); once settled
 // the gentle auto-rotation resumes by advancing g_anim_yaw each frame.
-pce::sdlos::Animated<float> g_anim_yaw;
-pce::sdlos::Animated<float> g_anim_pitch;
-pce::sdlos::Animated<float> g_anim_dist;
+::pce::sdlos::Animated<float> g_anim_yaw;
+::pce::sdlos::Animated<float> g_anim_pitch;
+::pce::sdlos::Animated<float> g_anim_dist;
 
 // Live viewport size — updated every frame from the Scene3DHook.
 // Seeded from SDLOS_WIN_W/H so the very first tick() and perspective()

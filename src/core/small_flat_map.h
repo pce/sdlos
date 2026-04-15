@@ -28,6 +28,8 @@ class small_flat_map {
 
     auto begin_ptr() { return data_ptr(); }
     auto end_ptr() { return data_ptr() + sz; }
+    auto begin_ptr() const { return data_ptr(); }
+    auto end_ptr() const { return data_ptr() + sz; }
 
     auto lower_bound(const K& key) {
         return std::lower_bound(begin_ptr(), end_ptr(), key,
@@ -37,12 +39,16 @@ class small_flat_map {
     }
 
 public:
-    using iterator = value_type*;
+    using iterator       = value_type*;
+    using const_iterator = const value_type*;
 
-    iterator begin() { return begin_ptr(); }
-    iterator end() { return end_ptr(); }
+    iterator       begin()       { return begin_ptr(); }
+    iterator       end()         { return end_ptr(); }
+    const_iterator begin() const { return begin_ptr(); }
+    const_iterator end()   const { return end_ptr(); }
 
-    size_t size() const { return sz; }
+    size_t size()  const { return sz; }
+    bool   empty() const { return sz == 0; }
 
     std::pair<iterator, bool> insert(value_type v) {
         auto it = lower_bound(v.first);

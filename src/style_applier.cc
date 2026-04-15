@@ -18,7 +18,7 @@ static std::optional<float> toFloat(std::string_view s) noexcept {
     if (s.empty())
         return std::nullopt;
     float v{};
-    const auto [ptr, ok] = pce::sdlos::parse_float(s.data(), s.data() + s.size(), v);
+    const auto [ptr, ok] = parse_float(s.data(), s.data() + s.size(), v);
     return ok ? std::optional<float>{v} : std::nullopt;
 }
 
@@ -54,7 +54,7 @@ static LayoutKind layoutKindForTag(std::string_view tag) noexcept {
  * @param px_scale  Uniform scale factor
  */
 void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
-    if (n.styles.empty())
+    if (n.style_attrs.empty())
         return;
 
     // Tag → default LayoutKind like block or inline is treated as None
@@ -242,7 +242,7 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
                 if (p >= end)
                     break;
                 float v{};
-                const auto [next, ok] = pce::sdlos::parse_float(p, end, v);
+                const auto [next, ok] = parse_float(p, end, v);
                 if (!ok)
                     break;
                 vals[count++] = v * px_scale;
@@ -360,8 +360,8 @@ void StyleApplier::apply(RenderNode &n, float px_scale) noexcept {
  * @return true if successful, false otherwise.
  */
 bool swapJadeModule(
-    pce::sdlos::RenderTree &tree,
-    pce::sdlos::NodeHandle parent_h,
+    RenderTree &tree,
+    NodeHandle parent_h,
     const std::string &jade_path) {
     if (!parent_h.valid())
         return false;
@@ -376,7 +376,7 @@ bool swapJadeModule(
 
     // 2. Parse into a temporary subtree
     // Note: jade::parse usually returns a virtual root containing the parsed elements
-    pce::sdlos::NodeHandle new_content_root = pce::sdlos::jade::parse(source, tree);
+    NodeHandle new_content_root = jade::parse(source, tree);
     if (!new_content_root.valid())
         return false;
 

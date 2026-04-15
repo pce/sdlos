@@ -13,11 +13,29 @@ namespace pce::sdlos {
 
 namespace {
 
-// ── Color ─────────────────────────────────────────────────────────────────────
+struct AbsPos { float x, y; };
 
-struct RGBAf {
-    float r = 0.f, g = 0.f, b = 0.f, a = 1.f;
-};
+/**
+ * @brief Absolute pos
+ *
+ * @param tree  Red channel component [0, 1]
+ * @param h     Opaque resource handle
+ *
+ * @return struct result
+ */
+inline AbsPos absolutePos(const RenderTree &tree, NodeHandle h) {
+    float ax = 0.f, ay = 0.f;
+    for (; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h = n->parent;
+    }
+    return {ax, ay};
+}
+
 
 [[nodiscard]]
 static bool parseHexColor(std::string_view s, RGBAf &out) noexcept {
@@ -72,11 +90,13 @@ static bool parseHexColor(std::string_view s, RGBAf &out) noexcept {
     return false;
 }
 
-// ── Numeric ───────────────────────────────────────────────────────────────────
 
 [[nodiscard]]
 static float toFloat(std::string_view s) noexcept {
-    return pce::sdlos::parse_float(s, 0.f);
+    if (s.empty()) return 0.f;
+    float val;
+    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), val);
+    return (ec == std::errc{}) ? val : 0.f;
 }
 
 // Count UTF-8 code points (not bytes) — used for rough text width estimation.
@@ -213,7 +233,7 @@ void bindDrawCallbacks(RenderTree &tree, NodeHandle root) {
                     const auto shdr = self->style("_shader");
                     if (hasShader && !shdr.empty()) {
                         // Build NodeShaderParams from _shader_* style attrs.
-                        pce::sdlos::NodeShaderParams sp{};
+                        NodeShaderParams sp{};
                         sp.u_width  = self->w;
                         sp.u_height = self->h;
                         {
@@ -260,7 +280,7 @@ void bindDrawCallbacks(RenderTree &tree, NodeHandle root) {
             if (hasVideo) {
                 const auto shdr = self->style("_shader");
                 if (hasVideoShader && !shdr.empty()) {
-                    pce::sdlos::NodeShaderParams sp{};
+                    NodeShaderParams sp{};
                     sp.u_width  = self->w;
                     sp.u_height = self->h;
                     {

@@ -1,5 +1,4 @@
 
-#;examples/apps/*/*.cmake
 build/
 deps/
 .DS_Store

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/signal.h"
 #include "../render_tree.h"
 #include "widget.h"
 
@@ -14,7 +15,7 @@ namespace pce::sdlos::widgets {
 struct NumberDraggerConfig {
     float min        = -1e9f;
     float max        = 1e9f;
-    float value      = 0.f;
+    float initial_value = 0.f;
     float step       = 1.f;  // snap + key increment; 0 = continuous
     float drag_speed = 0.f;  // px→value; 0 = auto from range/step
 
@@ -32,6 +33,7 @@ struct NumberDraggerConfig {
     Color border_edit  = Color::systemBlue();
 
     Signal<float> *value_signal = nullptr;
+    float *value_ptr            = nullptr;  // legacy raw-pointer binding
     std::function<void(float)> on_change;
     std::function<void(float)> on_commit;  // fired only on edit-mode Enter/commit
 };
@@ -54,7 +56,10 @@ struct NumberDraggerState {
     float pre_edit_val     = 0.f;
 
     NumberDraggerConfig cfg;
-    pce::sdlos::TextRenderer *text_renderer = nullptr;
+
+    TextRenderer *text_renderer = nullptr;
+
+    bool drag_active = false;
 
     /**
      * @brief Effective drag speed
@@ -138,14 +143,15 @@ struct NumberDragger : WidgetView<NumberDraggerState> {
 [[nodiscard]]
 NumberDragger makeNumberDragger(RenderTree &tree, NumberDraggerConfig cfg);
 
-// Upgrade every  input[type=dragnum]  node in the subtree into a live
-// NumberDragger. Call after bindDrawCallbacks() + bindNodeEvents().
-// Reads: min max value step width height fontSize dragSpeed
 /**
  * @brief Binds drag num widgets
  *
- * @param tree  Red channel component [0, 1]
- * @param root  Red channel component [0, 1]
+ * Upgrade every  input[type=dragnum]  node in the subtree into a live
+ * NumberDragger. Call after bindDrawCallbacks() + bindNodeEvents().
+ * Reads: min max value step width height fontSize dragSpeed
+ *
+ * @param tree  RenderTree
+ * @param root  NodeHandle
  */
 void bindDragNumWidgets(RenderTree &tree, NodeHandle root);
 

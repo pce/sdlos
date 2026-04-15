@@ -1,7 +1,11 @@
 #include "css_loader.h"
 
-#include "style_applier.h"
+#include "core/parse.h"
+#include "render_tree.h"
+#include "style_draw.h"
 
+#include <algorithm>
+#include <iostream>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -10,7 +14,24 @@
 #include <unordered_set>
 #include <vector>
 
-namespace pce::sdlos::css {
+namespace pce::sdlos {
+
+struct AbsPos { float x, y; };
+
+inline AbsPos absolutePos(const RenderTree &tree, NodeHandle h) {
+    float ax = 0.f, ay = 0.f;
+    for (; h.valid();) {
+        const RenderNode *n = tree.node(h);
+        if (!n)
+            break;
+        ax += n->x;
+        ay += n->y;
+        h = n->parent;
+    }
+    return {ax, ay};
+};
+
+namespace css {
 
 namespace {
 
@@ -612,4 +633,6 @@ void StyleSheet::activateNode(RenderTree &tree, NodeHandle clicked, float px_sca
     }
 }
 
-}  // namespace pce::sdlos::css
+}  // namespace css
+
+}  // namespace pce::sdlos
