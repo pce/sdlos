@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include "core/animated.h"
 #include "core/frame_arena.h"
 #include "core/slot_map.h"
 #include "core/small_flat_map.h"
@@ -166,7 +167,7 @@ struct VisualProps {
 /// RGBA colour value used by RenderContext::drawRoundedRect.
 /// Defined here (not in style_draw.cc) so render_tree.cc can access members.
 
-#include "core/animated.h"
+
 
 struct NodeShaderParams {
     float u_width;   // node width  in physical pixels
